@@ -1,0 +1,7 @@
+build/
+build-release/
+.cache/
+*.o
+*.out
+*.s
+*.S

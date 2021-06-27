@@ -1,0 +1,7 @@
+Make stack slots regular instructions
+Make stack slots have pointer type
+Add global variables with pointer type
+
+Resources:
+SysV ABI: https://c9x.me/compile/doc/abi.html
+SSA book: http://ssabook.gforge.inria.fr/latest/book.pdf

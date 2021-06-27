@@ -226,6 +226,21 @@ struct Allocator {
         return str;
     }
 
+    String vsprintf(const char *fmt, va_list args)
+    {
+        String str;
+
+        str.len = vsnprintf(NULL, 0, fmt, args);
+
+        str.ptr = (char *)this->alloc_bytes(str.len + 1);
+
+        vsnprintf(str.ptr, str.len + 1, fmt, args);
+
+        str.ptr[str.len] = '\0';
+
+        return str;
+    }
+
     const char *null_terminate(const String &str)
     {
         char *result = (char *)this->alloc_bytes(str.len + 1);

@@ -9,6 +9,8 @@ add_subdirectory(ace)
 add_executable(
 	compiler
 	src/main.cpp
+	src/compiler.cpp
+	src/parser.cpp
 )
 target_link_libraries(compiler PRIVATE ace)
 

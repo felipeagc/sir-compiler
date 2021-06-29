@@ -230,7 +230,10 @@ struct Allocator {
     {
         String str;
 
-        str.len = vsnprintf(NULL, 0, fmt, args);
+        va_list args_copy;
+        va_copy(args_copy, args);
+        str.len = vsnprintf(NULL, 0, fmt, args_copy);
+        va_end(args_copy);
 
         str.ptr = (char *)this->alloc_bytes(str.len + 1);
 

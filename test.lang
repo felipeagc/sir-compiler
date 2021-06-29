@@ -1,0 +1,5 @@
+main :: () {
+	puts("hello\n");
+}
+
+puts :: extern (_: *u8);

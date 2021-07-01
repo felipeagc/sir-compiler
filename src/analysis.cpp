@@ -118,7 +118,16 @@ void analyze_file(Compiler *compiler, File *file)
     AnalyzerState state = {};
     state.file = file;
 
+    // Register top level symbols
+    for (DeclRef decl_ref : file->top_level_decls) {
+        file->scope->add(compiler, decl_ref);
+    }
+
     for (DeclRef decl_ref : state.file->top_level_decls) {
         analyze_decl(compiler, &state, decl_ref);
+    }
+
+    if (compiler->errors.len > 0) {
+        compiler->halt_compilation();
     }
 }

@@ -988,10 +988,6 @@ parse_top_level_decl(Compiler *compiler, TokenizerState *state, File *file)
         break;
     }
     }
-
-    DeclRef decl_ref = {(uint32_t)compiler->decls.len};
-    compiler->decls.push_back({});
-    Decl *decl = &compiler->decls[decl_ref.id];
 }
 
 void parse_file(Compiler *compiler, File *file)

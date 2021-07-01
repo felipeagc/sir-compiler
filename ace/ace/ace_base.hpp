@@ -108,19 +108,19 @@ struct String {
         this->len = len;
     }
 
-    char &operator[](size_t index)
+    char &operator[](size_t index) const
     {
         ACE_ASSERT(index < this->len);
         return this->ptr[index];
     }
 
-    bool operator==(const String &other)
+    bool operator==(const String &other) const
     {
         if (this->len != other.len) return false;
         return (memcmp(this->ptr, other.ptr, this->len) == 0);
     }
 
-    bool operator!=(const String &other)
+    bool operator!=(const String &other) const
     {
         if (this->len != other.len) return true;
         return (memcmp(this->ptr, other.ptr, this->len) != 0);

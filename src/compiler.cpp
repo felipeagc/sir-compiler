@@ -2,6 +2,35 @@
 
 #include <stdio.h>
 
+Scope *Scope::create(Compiler *compiler, File *file, Scope *parent)
+{
+    Scope *scope = compiler->arena->alloc<Scope>();
+    *scope = {};
+
+    scope->file = file;
+    scope->parent = parent;
+    scope->decl_refs = ace::StringMap<DeclRef>::create(compiler->arena, 32);
+
+    return scope;
+}
+
+void Scope::add(Compiler *compiler, DeclRef decl_ref)
+{
+    ace::String name = compiler->decls[decl_ref.id].name;
+    if (name != "_") {
+        if (this->decl_refs.get(name)) {
+            const Location &loc = compiler->decls[decl_ref.id].loc;
+            compiler->add_error(
+                loc,
+                "duplicate declaration of: '%.*s'",
+                (int)name.len,
+                name.ptr);
+        } else {
+            this->decl_refs.set(name, decl_ref);
+        }
+    }
+}
+
 Compiler Compiler::create()
 {
     ace::ArenaAllocator *arena = ace::ArenaAllocator::create(
@@ -159,10 +188,12 @@ void Compiler::compile(ace::String path)
         *file = {
             .path = path,
             .text = ace::String{file_content.ptr, file_content.len},
+            .scope = Scope::create(this, file),
             .top_level_decls = ace::Array<DeclRef>::create(this->arena),
         };
 
         parse_file(this, file);
+        analyze_file(this, file);
     } catch (...) {
         if (this->errors.len == 0) {
             fprintf(

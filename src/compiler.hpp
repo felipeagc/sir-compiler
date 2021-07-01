@@ -2,6 +2,9 @@
 
 #include <ace_base.hpp>
 
+struct Compiler;
+struct File;
+
 struct DeclRef {
     uint32_t id;
 };
@@ -18,10 +21,20 @@ struct TypeRef {
     uint32_t id;
 };
 
+struct Scope {
+    File *file;
+    Scope *parent;
+    ace::StringMap<DeclRef> decl_refs;
+
+    static Scope *create(Compiler *compiler, File *file, Scope *parent = nullptr);
+    void add(Compiler *compiler, DeclRef decl_ref);
+};
+
 struct File {
     ace::String path;
     ace::String text;
 
+    Scope *scope;
     ace::Array<DeclRef> top_level_decls;
 };
 
@@ -143,11 +156,6 @@ struct Token {
 
 enum BuiltinFunction {
 
-};
-
-struct Scope {
-    Scope *parent;
-    ace::StringMap<DeclRef> decls;
 };
 
 enum TypeKind {

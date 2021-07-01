@@ -1,7 +1,15 @@
-Make stack slots regular instructions
-Make stack slots have pointer type
-Add global variables with pointer type
+Frontend:
+- Implement frontend type cache
+- Analyze function declarations
+
+Backend:
+- Make stack slots regular instructions
+- Make stack slots have pointer type
+- Add global variables with pointer type
+
+Misc:
+- Implement hashmap growth
 
 Resources:
-SysV ABI: https://c9x.me/compile/doc/abi.html
-SSA book: http://ssabook.gforge.inria.fr/latest/book.pdf
+- SysV ABI: https://c9x.me/compile/doc/abi.html
+- SSA book: http://ssabook.gforge.inria.fr/latest/book.pdf

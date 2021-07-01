@@ -1,5 +1,5 @@
-main :: () {
-	puts("hello\n");
+func main(argc: i32, argv: **u8) {
+
 }
 
-puts :: extern (_: *u8);
+func extern puts(_: *u8);

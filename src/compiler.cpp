@@ -41,6 +41,24 @@ Compiler Compiler::create()
     exprs.reserve(expected_expr_count);
     exprs.push_back({}); // 0th expr
 
+    keyword_map.set("extern", TokenKind_Extern);
+    keyword_map.set("inline", TokenKind_Inline);
+    keyword_map.set("func", TokenKind_Func);
+    keyword_map.set("macro", TokenKind_Macro);
+    keyword_map.set("null", TokenKind_Null);
+    keyword_map.set("void", TokenKind_Void);
+    keyword_map.set("bool", TokenKind_Bool);
+    keyword_map.set("u8", TokenKind_U8);
+    keyword_map.set("u16", TokenKind_U16);
+    keyword_map.set("u32", TokenKind_U32);
+    keyword_map.set("u64", TokenKind_U64);
+    keyword_map.set("i8", TokenKind_I8);
+    keyword_map.set("i16", TokenKind_I16);
+    keyword_map.set("i32", TokenKind_I32);
+    keyword_map.set("i64", TokenKind_I64);
+    keyword_map.set("f32", TokenKind_F32);
+    keyword_map.set("f64", TokenKind_F64);
+
     Compiler compiler = {
         .arena = arena,
         .keyword_map = keyword_map,

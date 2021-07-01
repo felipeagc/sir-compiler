@@ -102,9 +102,23 @@ enum TokenKind {
     TokenKind_Const,
     TokenKind_Extern,
     TokenKind_Inline,
+    TokenKind_Func,
     TokenKind_Macro,
     TokenKind_Struct,
     TokenKind_Union,
+    TokenKind_Void,
+    TokenKind_Bool,
+    TokenKind_Null,
+    TokenKind_U8,
+    TokenKind_U16,
+    TokenKind_U32,
+    TokenKind_U64,
+    TokenKind_I8,
+    TokenKind_I16,
+    TokenKind_I32,
+    TokenKind_I64,
+    TokenKind_F32,
+    TokenKind_F64,
     TokenKind_Identifier,
     TokenKind_BuiltinIdentifier,
     TokenKind_StringLiteral,
@@ -169,10 +183,22 @@ struct Type {
     };
 };
 
+enum FunctionFlags {
+    FunctionFlags_Inline = 1 << 0,
+    FunctionFlags_Extern = 1 << 1,
+};
+
 enum ExprKind {
     ExprKind_Identifier,
     ExprKind_StringLiteral,
+    ExprKind_Function,
     ExprKind_FunctionCall,
+    ExprKind_NullPointer,
+    ExprKind_PointerType,
+    ExprKind_VoidType,
+    ExprKind_BoolType,
+    ExprKind_IntType,
+    ExprKind_FloatType,
 };
 
 struct Expr {
@@ -186,9 +212,24 @@ struct Expr {
             ace::String str;
         } str_literal;
         struct {
+            uint32_t flags;
+            ace::Array<ExprRef> return_type_expr_refs;
+            ace::Array<DeclRef> param_decl_refs;
+        } func;
+        struct {
             ExprRef func_expr_ref;
             ace::Array<ExprRef> param_refs;
         } func_call;
+        struct {
+            ExprRef sub_expr_ref;
+        } ptr_type;
+        struct {
+            uint32_t bits;
+            bool is_signed;
+        } int_type;
+        struct {
+            uint32_t bits;
+        } float_type;
     };
 };
 
@@ -205,7 +246,6 @@ struct Stmt {
 };
 
 enum DeclKind {
-    DeclKind_ExternFunction,
     DeclKind_Function,
     DeclKind_FunctionParameter,
     DeclKind_LocalVarDecl,
@@ -213,19 +253,17 @@ enum DeclKind {
     DeclKind_ConstDecl,
 };
 
+
 struct Decl {
     DeclKind kind;
     Location loc;
     ace::String name;
     union {
         struct {
-            ExprRef return_type_expr;
-            ace::Array<DeclRef> params_decls;
+            uint32_t flags;
+            ace::Array<ExprRef> return_type_expr_refs;
+            ace::Array<DeclRef> param_decl_refs;
         } func;
-        struct {
-            ExprRef return_type_expr;
-            ace::Array<DeclRef> params_decls;
-        } extern_func;
         struct {
             ExprRef type_expr;
         } func_param;

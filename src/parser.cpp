@@ -69,8 +69,22 @@ const char *token_kind_to_string(TokenKind kind)
     case TokenKind_Global: return "global";
     case TokenKind_Inline: return "inline";
     case TokenKind_Macro: return "macro";
+    case TokenKind_Func: return "func";
     case TokenKind_Struct: return "struct";
     case TokenKind_Union: return "union";
+    case TokenKind_Void: return "void";
+    case TokenKind_Bool: return "bool";
+    case TokenKind_Null: return "null";
+    case TokenKind_U8: return "u8";
+    case TokenKind_U16: return "u16";
+    case TokenKind_U32: return "u32";
+    case TokenKind_U64: return "u64";
+    case TokenKind_I8: return "i8";
+    case TokenKind_I16: return "i16";
+    case TokenKind_I32: return "i32";
+    case TokenKind_I64: return "i64";
+    case TokenKind_F32: return "f32";
+    case TokenKind_F64: return "f64";
     case TokenKind_Identifier: return "<identifier>";
     case TokenKind_BuiltinIdentifier: return "<builtin identifier>";
     case TokenKind_StringLiteral: return "<string literal>";
@@ -134,7 +148,7 @@ struct TokenizerState {
 
     Token consume_token(Compiler *compiler, TokenKind token_kind)
     {
-        Allocator *allocator =compiler->arena;
+        Allocator *allocator = compiler->arena;
 
         Token token = {};
         *this = this->next_token(compiler, &token);
@@ -178,7 +192,7 @@ struct TokenizerState {
         token->loc.file = state.file;
 
         if (state.length_left() <= 0) {
-            token->kind = TokenKind_Unknown;
+            token->kind = TokenKind_EOF;
             return state;
         }
 
@@ -580,48 +594,217 @@ struct TokenizerState {
     }
 };
 
-static Expr parse_type_expr(Compiler *compiler, TokenizerState *state) {
+static Expr parse_expr(Compiler *compiler, TokenizerState *state);
+
+static Expr parse_primary_expr(Compiler *compiler, TokenizerState *state)
+{
+    Expr expr = {};
+
+    Token next_token = {};
+    state->next_token(compiler, &next_token);
+
+    switch (next_token.kind) {
+    case TokenKind_Identifier: {
+        Token ident_token =
+            state->consume_token(compiler, TokenKind_Identifier);
+        expr.kind = ExprKind_Identifier;
+        expr.loc = ident_token.loc;
+        expr.ident.str = ident_token.str;
+        break;
+    }
+    case TokenKind_Mul: {
+        Token asterisk_token = state->consume_token(compiler, TokenKind_Mul);
+
+        Expr sub_expr = parse_expr(compiler, state);
+        ExprRef sub_expr_ref = {(uint32_t)compiler->exprs.len};
+        compiler->exprs.push_back(sub_expr);
+
+        expr.kind = ExprKind_PointerType;
+        expr.loc = asterisk_token.loc;
+        expr.ptr_type.sub_expr_ref = sub_expr_ref;
+        break;
+    }
+    case TokenKind_Void: {
+        *state = state->next_token(compiler, &next_token);
+
+        expr.kind = ExprKind_VoidType;
+        expr.loc = next_token.loc;
+        break;
+    }
+    case TokenKind_Bool: {
+        *state = state->next_token(compiler, &next_token);
+
+        expr.kind = ExprKind_BoolType;
+        expr.loc = next_token.loc;
+        break;
+    }
+    case TokenKind_Null: {
+        *state = state->next_token(compiler, &next_token);
+
+        expr.kind = ExprKind_NullPointer;
+        expr.loc = next_token.loc;
+        break;
+    }
+    case TokenKind_U8:
+    case TokenKind_U16:
+    case TokenKind_U32:
+    case TokenKind_U64: {
+        *state = state->next_token(compiler, &next_token);
+
+        expr.kind = ExprKind_IntType;
+        expr.loc = next_token.loc;
+        expr.int_type.is_signed = false;
+
+        switch (next_token.kind) {
+        case TokenKind_U8: expr.int_type.bits = 8; break;
+        case TokenKind_U16: expr.int_type.bits = 16; break;
+        case TokenKind_U32: expr.int_type.bits = 32; break;
+        case TokenKind_U64: expr.int_type.bits = 64; break;
+        default: ACE_ASSERT(0);
+        }
+
+        break;
+    }
+    case TokenKind_I8:
+    case TokenKind_I16:
+    case TokenKind_I32:
+    case TokenKind_I64: {
+        *state = state->next_token(compiler, &next_token);
+
+        expr.kind = ExprKind_IntType;
+        expr.loc = next_token.loc;
+        expr.int_type.is_signed = true;
+
+        switch (next_token.kind) {
+        case TokenKind_I8: expr.int_type.bits = 8; break;
+        case TokenKind_I16: expr.int_type.bits = 16; break;
+        case TokenKind_I32: expr.int_type.bits = 32; break;
+        case TokenKind_I64: expr.int_type.bits = 64; break;
+        default: ACE_ASSERT(0);
+        }
+
+        break;
+    }
+    case TokenKind_F32:
+    case TokenKind_F64: {
+        *state = state->next_token(compiler, &next_token);
+
+        expr.kind = ExprKind_FloatType;
+        expr.loc = next_token.loc;
+
+        switch (next_token.kind) {
+        case TokenKind_F32: expr.float_type.bits = 32; break;
+        case TokenKind_F64: expr.float_type.bits = 64; break;
+        default: ACE_ASSERT(0);
+        }
+
+        break;
+    }
+    default: {
+        compiler->add_error(
+            next_token.loc,
+            "unexpected token: '%s', expecting primary expression",
+            token_kind_to_string(next_token.kind));
+        compiler->halt_compilation();
+        break;
+    }
+    }
+
+    return expr;
+}
+
+static Expr parse_type_expr(Compiler *compiler, TokenizerState *state)
+{
     Expr expr = {};
 
     return expr;
 }
 
-static Expr parse_function_expr(Compiler *compiler, TokenizerState *state) {
+static Expr parse_function_expr(Compiler *compiler, TokenizerState *state)
+{
     Expr expr = {};
 
-    bool is_inline = false;
-    bool is_extern = false;
-
     Token next_token = {};
-    state->next_token(compiler, &next_token);
 
     expr.loc = next_token.loc;
+    expr.func = {};
 
+    expr.func.param_decl_refs = ace::Array<DeclRef>::create(compiler->arena);
+    expr.func.return_type_expr_refs =
+        ace::Array<ExprRef>::create(compiler->arena);
+
+    state->next_token(compiler, &next_token);
     switch (next_token.kind) {
-    case TokenKind_Extern: {
-        state->consume_token(compiler, TokenKind_Extern);
-        is_extern = true;
-        break;
-    }
     case TokenKind_Inline: {
         state->consume_token(compiler, TokenKind_Inline);
-        is_inline = true;
+        expr.func.flags |= FunctionFlags_Inline;
         break;
     }
-    default: break;
+    default: {
+        compiler->add_error(
+            next_token.loc,
+            "unexpected token: '%s', expecting function literal",
+            token_kind_to_string(next_token.kind));
+        compiler->halt_compilation();
+        break;
+    }
     }
 
     state->consume_token(compiler, TokenKind_LParen);
 
-    // TODO: parse parameter declarations
-    
+    // Parse params:
+
+    state->next_token(compiler, &next_token);
+    while (next_token.kind == TokenKind_Identifier) {
+        Token ident_token =
+            state->consume_token(compiler, TokenKind_Identifier);
+        state->consume_token(compiler, TokenKind_Colon);
+
+        Expr type_expr = parse_expr(compiler, state);
+        ExprRef type_expr_ref = {(uint32_t)compiler->exprs.len};
+        compiler->exprs.push_back(type_expr);
+
+        Decl param_decl = {};
+        param_decl.kind = DeclKind_FunctionParameter;
+        param_decl.loc = ident_token.loc;
+        param_decl.func_param.type_expr = type_expr_ref;
+
+        DeclRef param_decl_ref = {(uint32_t)compiler->decls.len};
+        compiler->decls.push_back(param_decl);
+
+        expr.func.param_decl_refs.push_back(param_decl_ref);
+
+        state->next_token(compiler, &next_token);
+        if (next_token.kind == TokenKind_Comma) {
+            *state = state->next_token(compiler, &next_token);
+        } else {
+            break;
+        }
+
+        state->next_token(compiler, &next_token);
+    }
+
     state->consume_token(compiler, TokenKind_RParen);
 
     state->next_token(compiler, &next_token);
     if (next_token.kind == TokenKind_Arrow) {
         state->consume_token(compiler, TokenKind_Arrow);
 
-        // TODO: parse return types
+        while (1) {
+            Expr return_type_expr = parse_expr(compiler, state);
+            ExprRef return_type_expr_ref = {(uint32_t)compiler->exprs.len};
+            compiler->exprs.push_back(return_type_expr);
+
+            expr.func.return_type_expr_refs.push_back(return_type_expr_ref);
+
+            state->next_token(compiler, &next_token);
+            if (next_token.kind == TokenKind_Comma) {
+                state->consume_token(compiler, TokenKind_Comma);
+                continue;
+            } else {
+                break;
+            }
+        }
     }
 
     state->next_token(compiler, &next_token);
@@ -639,44 +822,114 @@ static Expr parse_function_expr(Compiler *compiler, TokenizerState *state) {
     return expr;
 }
 
-static void parse_top_level_decl(Compiler *compiler, TokenizerState *state)
+static Expr parse_expr(Compiler *compiler, TokenizerState *state)
+{
+    return parse_primary_expr(compiler, state);
+}
+
+static void parse_top_level_decl(Compiler *compiler,  TokenizerState *state, File *file)
 {
     Token next_token = {};
     state->next_token(compiler, &next_token);
     switch (next_token.kind) {
-    case TokenKind_Identifier: {
-        state->consume_token(compiler, TokenKind_Identifier);
+    case TokenKind_Func: {
+        Token func_token = state->consume_token(compiler, TokenKind_Func);
 
-        state->consume_token(compiler, TokenKind_ColonColon);
+        Decl func_decl = {};
+        func_decl.loc = func_token.loc;
+        func_decl.func = {};
 
-        Expr expr = {};
+        func_decl.func.param_decl_refs = ace::Array<DeclRef>::create(compiler->arena);
+        func_decl.func.return_type_expr_refs = ace::Array<ExprRef>::create(compiler->arena);
 
         state->next_token(compiler, &next_token);
         switch (next_token.kind) {
-        case TokenKind_Extern:
-        case TokenKind_Inline:
-        case TokenKind_LParen: {
-            expr = parse_function_expr(compiler, state);
+        case TokenKind_Extern: {
+            state->consume_token(compiler, TokenKind_Extern);
+            func_decl.func.flags |= FunctionFlags_Extern;
             break;
         }
-
-        case TokenKind_Struct: {
-            expr = parse_type_expr(compiler, state);
+        case TokenKind_Inline: {
+            state->consume_token(compiler, TokenKind_Inline);
+            func_decl.func.flags |= FunctionFlags_Inline;
             break;
         }
-
-        default: {
-            compiler->add_error(
-                next_token.loc,
-                "unexpected token: '%s', expecting function or type declaration",
-                token_kind_to_string(next_token.kind));
-            compiler->halt_compilation();
-            break;
-        }
+        default: break;
         }
 
-        ExprRef expr_ref = {(uint32_t)compiler->exprs.len};
-        compiler->exprs.push_back(expr);
+        Token ident_token = state->consume_token(compiler, TokenKind_Identifier);
+        func_decl.name = ident_token.str;
+
+        state->consume_token(compiler, TokenKind_LParen);
+
+        // Parse params:
+
+        state->next_token(compiler, &next_token);
+        while (next_token.kind == TokenKind_Identifier) {
+            Token ident_token =
+                state->consume_token(compiler, TokenKind_Identifier);
+            state->consume_token(compiler, TokenKind_Colon);
+
+            Expr type_expr = parse_expr(compiler, state);
+            ExprRef type_expr_ref = {(uint32_t)compiler->exprs.len};
+            compiler->exprs.push_back(type_expr);
+
+            Decl param_decl = {};
+            param_decl.kind = DeclKind_FunctionParameter;
+            param_decl.loc = ident_token.loc;
+            param_decl.func_param.type_expr = type_expr_ref;
+
+            DeclRef param_decl_ref = {(uint32_t)compiler->decls.len};
+            compiler->decls.push_back(param_decl);
+
+            func_decl.func.param_decl_refs.push_back(param_decl_ref);
+
+            state->next_token(compiler, &next_token);
+            if (next_token.kind == TokenKind_Comma) {
+                *state = state->next_token(compiler, &next_token);
+            } else {
+                break;
+            }
+
+            state->next_token(compiler, &next_token);
+        }
+
+        state->consume_token(compiler, TokenKind_RParen);
+
+        state->next_token(compiler, &next_token);
+        if (next_token.kind == TokenKind_Arrow) {
+            state->consume_token(compiler, TokenKind_Arrow);
+
+            while (1) {
+                Expr return_type_expr = parse_expr(compiler, state);
+                ExprRef return_type_expr_ref = {(uint32_t)compiler->exprs.len};
+                compiler->exprs.push_back(return_type_expr);
+
+                func_decl.func.return_type_expr_refs.push_back(return_type_expr_ref);
+
+                state->next_token(compiler, &next_token);
+                if (next_token.kind == TokenKind_Comma) {
+                    state->consume_token(compiler, TokenKind_Comma);
+                    continue;
+                } else {
+                    break;
+                }
+            }
+        }
+
+        if (func_decl.func.flags & FunctionFlags_Extern) {
+            state->consume_token(compiler, TokenKind_Semicolon);
+        } else {
+            state->consume_token(compiler, TokenKind_LCurly);
+
+            // TODO: parse function body
+
+            state->consume_token(compiler, TokenKind_RCurly);
+        }
+
+        DeclRef func_decl_ref = {(uint32_t)compiler->decls.len};
+        compiler->decls.push_back(func_decl);
+        file->top_level_decls.push_back(func_decl_ref);
 
         break;
     }
@@ -716,6 +969,6 @@ void parse_file(Compiler *compiler, File *file)
             break;
         }
 
-        parse_top_level_decl(compiler, &state);
+        parse_top_level_decl(compiler, &state, file);
     }
 }

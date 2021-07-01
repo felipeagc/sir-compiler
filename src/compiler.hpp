@@ -26,7 +26,8 @@ struct Scope {
     Scope *parent;
     ace::StringMap<DeclRef> decl_refs;
 
-    static Scope *create(Compiler *compiler, File *file, Scope *parent = nullptr);
+    static Scope *
+    create(Compiler *compiler, File *file, Scope *parent = nullptr);
     void add(Compiler *compiler, DeclRef decl_ref);
 };
 
@@ -162,16 +163,19 @@ enum TypeKind {
     TypeKind_Void,
     TypeKind_Bool,
     TypeKind_UntypedInt,
+    TypeKind_UntypedFloat,
     TypeKind_Int,
     TypeKind_Float,
     TypeKind_Struct,
     TypeKind_Tuple,
+    TypeKind_Pointer,
     TypeKind_Array,
     TypeKind_Slice,
 };
 
 struct Type {
     TypeKind kind;
+    ace::String str;
     union {
         struct {
             uint32_t bits;
@@ -185,12 +189,23 @@ struct Type {
             ace::Array<ace::String> field_names;
         } struct_;
         struct {
-
+            ace::Array<TypeRef> field_types;
+        } tuple;
+        struct {
+            TypeRef sub_type;
+        } pointer;
+        struct {
+            TypeRef sub_type;
+            uint64_t size;
         } array;
         struct {
-
+            TypeRef sub_type;
         } slice;
     };
+
+    ace::String to_string(Compiler *compiler);
+    uint32_t align_of(Compiler *compiler);
+    uint32_t size_of(Compiler *compiler);
 };
 
 enum FunctionFlags {
@@ -317,6 +332,8 @@ struct Compiler {
 
     static Compiler create();
     void destroy();
+
+    TypeRef get_cached_type(Type *type);
 
     ACE_PRINTF_FORMATTING(3, 4)
     void add_error(const Location &loc, const char *fmt, ...);

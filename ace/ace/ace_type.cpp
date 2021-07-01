@@ -15,7 +15,7 @@ String Type::to_string(Module *module)
         break;
     }
     case TypeKind_Bool: {
-        this->str = "@void";
+        this->str = "@bool";
         break;
     }
     case TypeKind_Pointer: {

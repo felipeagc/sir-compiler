@@ -204,3 +204,140 @@ void Compiler::compile(ace::String path)
         exit(1);
     }
 }
+
+TypeRef Compiler::get_cached_type(Type *type)
+{
+    ace::String type_string = type->to_string(this);
+    TypeRef existing_type_ref = {0};
+    if (this->type_map.get(type_string, &existing_type_ref)) {
+        return existing_type_ref;
+    }
+
+    TypeRef type_ref = {(uint32_t)this->types.len};
+    this->types.push_back(*type);
+    this->type_map.set(type_string, type_ref);
+    return type_ref;
+}
+
+ace::String Type::to_string(Compiler *compiler)
+{
+    if (this->str.len > 0) {
+        return this->str;
+    }
+
+    switch (this->kind) {
+    case TypeKind_Void: {
+        this->str = "@void";
+        break;
+    }
+    case TypeKind_Bool: {
+        this->str = "@bool";
+        break;
+    }
+    case TypeKind_UntypedInt: {
+        this->str = "@untyped_int";
+        break;
+    }
+    case TypeKind_UntypedFloat: {
+        this->str = "@untyped_float";
+        break;
+    }
+    case TypeKind_Int: {
+        if (this->int_.is_signed) {
+            this->str = compiler->arena->sprintf("@int(%u)", this->int_.bits);
+        } else {
+            this->str = compiler->arena->sprintf("@uint(%u)", this->int_.bits);
+        }
+        break;
+    }
+    case TypeKind_Float: {
+        this->str = compiler->arena->sprintf("@float(%u)", this->float_.bits);
+        break;
+    }
+    case TypeKind_Pointer: {
+        ace::String sub_str =
+            compiler->types[this->pointer.sub_type.id].to_string(compiler);
+        this->str = compiler->arena->sprintf(
+            "@ptr(%.*s)", (int)sub_str.len, sub_str.ptr);
+        break;
+    }
+    case TypeKind_Array: {
+        ace::String sub_str =
+            compiler->types[this->array.sub_type.id].to_string(compiler);
+        this->str = compiler->arena->sprintf(
+            "@arr(%.*s, %lu)", (int)sub_str.len, sub_str.ptr, this->array.size);
+        break;
+    }
+    case TypeKind_Slice: {
+        ace::String sub_str =
+            compiler->types[this->slice.sub_type.id].to_string(compiler);
+        this->str = compiler->arena->sprintf(
+            "@slice(%.*s)", (int)sub_str.len, sub_str.ptr);
+        break;
+    }
+    case TypeKind_Tuple: {
+        ace::StringBuilder sb =
+            ace::StringBuilder::create(ace::MallocAllocator::get_instance());
+
+        sb.append("@tuple(");
+
+        for (size_t i = 0; i < this->tuple.field_types.len; ++i) {
+            auto field_type_ref = this->tuple.field_types[i];
+            Type *field_type = &compiler->types[field_type_ref.id];
+            if (i > 0) {
+                sb.append(", ");
+            }
+            ace::String field_str = field_type->to_string(compiler);
+            sb.append(field_str);
+        }
+
+        sb.append(")");
+
+        this->str = sb.build(compiler->arena);
+
+        sb.destroy();
+        break;
+    }
+    case TypeKind_Struct: {
+        ace::StringBuilder sb =
+            ace::StringBuilder::create(ace::MallocAllocator::get_instance());
+
+        sb.append("@struct(");
+
+        for (size_t i = 0; i < this->struct_.field_types.len; ++i) {
+            auto field_type_ref = this->struct_.field_types[i];
+            auto field_name = this->struct_.field_names[i];
+            Type *field_type = &compiler->types[field_type_ref.id];
+
+            if (i > 0) {
+                sb.append(",");
+            }
+
+            sb.append(field_name);
+            sb.append(":");
+
+            ace::String field_str = field_type->to_string(compiler);
+            sb.append(field_str);
+        }
+
+        sb.append(")");
+
+        this->str = sb.build(compiler->arena);
+
+        sb.destroy();
+        break;
+    }
+    }
+
+    return str;
+}
+
+uint32_t Type::align_of(Compiler *compiler)
+{
+    return 0;
+}
+
+uint32_t Type::size_of(Compiler *compiler)
+{
+    return 0;
+}

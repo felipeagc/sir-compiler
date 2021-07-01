@@ -74,6 +74,8 @@ const char *token_kind_to_string(TokenKind kind)
     case TokenKind_Union: return "union";
     case TokenKind_Void: return "void";
     case TokenKind_Bool: return "bool";
+    case TokenKind_True: return "true";
+    case TokenKind_False: return "false";
     case TokenKind_Null: return "null";
     case TokenKind_U8: return "u8";
     case TokenKind_U16: return "u16";
@@ -612,6 +614,52 @@ static Expr parse_primary_expr(Compiler *compiler, TokenizerState *state)
         expr.ident.str = ident_token.str;
         break;
     }
+    case TokenKind_StringLiteral: {
+        Token str_token =
+            state->consume_token(compiler, TokenKind_StringLiteral);
+        expr.kind = ExprKind_StringLiteral;
+        expr.loc = str_token.loc;
+        expr.str_literal.str = str_token.str;
+        break;
+    }
+    case TokenKind_IntLiteral: {
+        Token int_token = state->consume_token(compiler, TokenKind_IntLiteral);
+        expr.kind = ExprKind_IntLiteral;
+        expr.loc = int_token.loc;
+        expr.int_literal.i64 = int_token.int_;
+        break;
+    }
+    case TokenKind_FloatLiteral: {
+        Token float_token =
+            state->consume_token(compiler, TokenKind_FloatLiteral);
+        expr.kind = ExprKind_FloatLiteral;
+        expr.loc = float_token.loc;
+        expr.float_literal.f64 = float_token.float_;
+        break;
+    }
+    case TokenKind_True: {
+        *state = state->next_token(compiler, &next_token);
+
+        expr.kind = ExprKind_BoolLiteral;
+        expr.loc = next_token.loc;
+        expr.bool_literal.bool_ = true;
+        break;
+    }
+    case TokenKind_False: {
+        *state = state->next_token(compiler, &next_token);
+
+        expr.kind = ExprKind_BoolLiteral;
+        expr.loc = next_token.loc;
+        expr.bool_literal.bool_ = false;
+        break;
+    }
+    case TokenKind_Null: {
+        *state = state->next_token(compiler, &next_token);
+
+        expr.kind = ExprKind_NullPointer;
+        expr.loc = next_token.loc;
+        break;
+    }
     case TokenKind_Mul: {
         Token asterisk_token = state->consume_token(compiler, TokenKind_Mul);
 
@@ -635,13 +683,6 @@ static Expr parse_primary_expr(Compiler *compiler, TokenizerState *state)
         *state = state->next_token(compiler, &next_token);
 
         expr.kind = ExprKind_BoolType;
-        expr.loc = next_token.loc;
-        break;
-    }
-    case TokenKind_Null: {
-        *state = state->next_token(compiler, &next_token);
-
-        expr.kind = ExprKind_NullPointer;
         expr.loc = next_token.loc;
         break;
     }
@@ -827,7 +868,8 @@ static Expr parse_expr(Compiler *compiler, TokenizerState *state)
     return parse_primary_expr(compiler, state);
 }
 
-static void parse_top_level_decl(Compiler *compiler,  TokenizerState *state, File *file)
+static void
+parse_top_level_decl(Compiler *compiler, TokenizerState *state, File *file)
 {
     Token next_token = {};
     state->next_token(compiler, &next_token);
@@ -839,8 +881,10 @@ static void parse_top_level_decl(Compiler *compiler,  TokenizerState *state, Fil
         func_decl.loc = func_token.loc;
         func_decl.func = {};
 
-        func_decl.func.param_decl_refs = ace::Array<DeclRef>::create(compiler->arena);
-        func_decl.func.return_type_expr_refs = ace::Array<ExprRef>::create(compiler->arena);
+        func_decl.func.param_decl_refs =
+            ace::Array<DeclRef>::create(compiler->arena);
+        func_decl.func.return_type_expr_refs =
+            ace::Array<ExprRef>::create(compiler->arena);
 
         state->next_token(compiler, &next_token);
         switch (next_token.kind) {
@@ -857,7 +901,8 @@ static void parse_top_level_decl(Compiler *compiler,  TokenizerState *state, Fil
         default: break;
         }
 
-        Token ident_token = state->consume_token(compiler, TokenKind_Identifier);
+        Token ident_token =
+            state->consume_token(compiler, TokenKind_Identifier);
         func_decl.name = ident_token.str;
 
         state->consume_token(compiler, TokenKind_LParen);
@@ -905,7 +950,8 @@ static void parse_top_level_decl(Compiler *compiler,  TokenizerState *state, Fil
                 ExprRef return_type_expr_ref = {(uint32_t)compiler->exprs.len};
                 compiler->exprs.push_back(return_type_expr);
 
-                func_decl.func.return_type_expr_refs.push_back(return_type_expr_ref);
+                func_decl.func.return_type_expr_refs.push_back(
+                    return_type_expr_ref);
 
                 state->next_token(compiler, &next_token);
                 if (next_token.kind == TokenKind_Comma) {

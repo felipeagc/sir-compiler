@@ -46,6 +46,8 @@ Compiler Compiler::create()
     keyword_map.set("func", TokenKind_Func);
     keyword_map.set("macro", TokenKind_Macro);
     keyword_map.set("null", TokenKind_Null);
+    keyword_map.set("true", TokenKind_True);
+    keyword_map.set("false", TokenKind_False);
     keyword_map.set("void", TokenKind_Void);
     keyword_map.set("bool", TokenKind_Bool);
     keyword_map.set("u8", TokenKind_U8);

@@ -11,6 +11,7 @@ add_executable(
 	src/main.cpp
 	src/compiler.cpp
 	src/parser.cpp
+	src/analysis.cpp
 )
 target_link_libraries(compiler PRIVATE ace)
 

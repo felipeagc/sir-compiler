@@ -108,6 +108,8 @@ enum TokenKind {
     TokenKind_Union,
     TokenKind_Void,
     TokenKind_Bool,
+    TokenKind_True,
+    TokenKind_False,
     TokenKind_Null,
     TokenKind_U8,
     TokenKind_U16,
@@ -191,6 +193,9 @@ enum FunctionFlags {
 enum ExprKind {
     ExprKind_Identifier,
     ExprKind_StringLiteral,
+    ExprKind_IntLiteral,
+    ExprKind_FloatLiteral,
+    ExprKind_BoolLiteral,
     ExprKind_Function,
     ExprKind_FunctionCall,
     ExprKind_NullPointer,
@@ -211,6 +216,15 @@ struct Expr {
         struct {
             ace::String str;
         } str_literal;
+        struct {
+            int64_t i64;
+        } int_literal;
+        struct {
+            double f64;
+        } float_literal;
+        struct {
+            bool bool_;
+        } bool_literal;
         struct {
             uint32_t flags;
             ace::Array<ExprRef> return_type_expr_refs;
@@ -252,7 +266,6 @@ enum DeclKind {
     DeclKind_GlobalVarDecl,
     DeclKind_ConstDecl,
 };
-
 
 struct Decl {
     DeclKind kind;
@@ -306,3 +319,4 @@ struct Compiler {
 };
 
 void parse_file(Compiler *compiler, File *file);
+void analyze_file(Compiler *compiler, File *file);

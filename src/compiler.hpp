@@ -9,10 +9,6 @@ struct DeclRef {
     uint32_t id;
 };
 
-struct StmtRef {
-    uint32_t id;
-};
-
 struct ExprRef {
     uint32_t id;
 };
@@ -116,11 +112,11 @@ enum TokenKind {
     TokenKind_Const,
     TokenKind_Extern,
     TokenKind_Inline,
-    TokenKind_Func,
+    TokenKind_Def,
     TokenKind_Macro,
     TokenKind_Struct,
     TokenKind_Union,
-    TokenKind_Void,
+    TokenKind_Unit,
     TokenKind_Bool,
     TokenKind_True,
     TokenKind_False,
@@ -160,7 +156,7 @@ enum BuiltinFunction {
 };
 
 enum TypeKind {
-    TypeKind_Void,
+    TypeKind_Unit,
     TypeKind_Bool,
     TypeKind_UntypedInt,
     TypeKind_UntypedFloat,
@@ -219,14 +215,16 @@ enum ExprKind {
     ExprKind_IntLiteral,
     ExprKind_FloatLiteral,
     ExprKind_BoolLiteral,
+    ExprKind_UnitLiteral,
     ExprKind_Function,
     ExprKind_FunctionCall,
-    ExprKind_NullPointer,
+    ExprKind_NullLiteral,
     ExprKind_PointerType,
-    ExprKind_VoidType,
+    ExprKind_UnitType,
     ExprKind_BoolType,
     ExprKind_IntType,
     ExprKind_FloatType,
+    ExprKind_Block,
 };
 
 struct Expr {
@@ -252,6 +250,7 @@ struct Expr {
             uint32_t flags;
             ace::Array<ExprRef> return_type_expr_refs;
             ace::Array<DeclRef> param_decl_refs;
+            ExprRef body_expr_ref;
         } func;
         struct {
             ExprRef func_expr_ref;
@@ -267,18 +266,9 @@ struct Expr {
         struct {
             uint32_t bits;
         } float_type;
-    };
-};
-
-enum StmtKind {
-    StmtKind_Expr,
-};
-
-struct Stmt {
-    StmtKind kind;
-    Location loc;
-    union {
-        ExprRef expr_ref;
+        struct {
+            ace::Array<ExprRef> expr_refs;
+        } block;
     };
 };
 
@@ -299,6 +289,7 @@ struct Decl {
             uint32_t flags;
             ace::Array<ExprRef> return_type_expr_refs;
             ace::Array<DeclRef> param_decl_refs;
+            ExprRef body_expr_ref;
         } func;
         struct {
             ExprRef type_expr;
@@ -327,7 +318,6 @@ struct Compiler {
     ace::StringMap<TypeRef> type_map;
     ace::Array<Type> types;
     ace::Array<Decl> decls;
-    ace::Array<Stmt> stmts;
     ace::Array<Expr> exprs;
 
     static Compiler create();

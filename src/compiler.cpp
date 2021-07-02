@@ -60,11 +60,6 @@ Compiler Compiler::create()
     decls.reserve(expected_decl_count);
     decls.push_back({}); // 0th decl
 
-    ace::Array<Stmt> stmts =
-        ace::Array<Stmt>::create(ace::MallocAllocator::get_instance());
-    stmts.reserve(expected_stmt_count);
-    stmts.push_back({}); // 0th stmt
-
     ace::Array<Expr> exprs =
         ace::Array<Expr>::create(ace::MallocAllocator::get_instance());
     exprs.reserve(expected_expr_count);
@@ -72,12 +67,12 @@ Compiler Compiler::create()
 
     keyword_map.set("extern", TokenKind_Extern);
     keyword_map.set("inline", TokenKind_Inline);
-    keyword_map.set("func", TokenKind_Func);
+    keyword_map.set("def", TokenKind_Def);
     keyword_map.set("macro", TokenKind_Macro);
     keyword_map.set("null", TokenKind_Null);
     keyword_map.set("true", TokenKind_True);
     keyword_map.set("false", TokenKind_False);
-    keyword_map.set("void", TokenKind_Void);
+    keyword_map.set("unit", TokenKind_Unit);
     keyword_map.set("bool", TokenKind_Bool);
     keyword_map.set("u8", TokenKind_U8);
     keyword_map.set("u16", TokenKind_U16);
@@ -99,7 +94,6 @@ Compiler Compiler::create()
         .type_map = type_map,
         .types = types,
         .decls = decls,
-        .stmts = stmts,
         .exprs = exprs,
     };
 
@@ -109,7 +103,6 @@ Compiler Compiler::create()
 void Compiler::destroy()
 {
     this->exprs.destroy();
-    this->stmts.destroy();
     this->decls.destroy();
     this->type_map.destroy();
     this->types.destroy();
@@ -226,8 +219,8 @@ ace::String Type::to_string(Compiler *compiler)
     }
 
     switch (this->kind) {
-    case TypeKind_Void: {
-        this->str = "@void";
+    case TypeKind_Unit: {
+        this->str = "@unit";
         break;
     }
     case TypeKind_Bool: {

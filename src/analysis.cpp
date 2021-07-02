@@ -12,7 +12,7 @@ void analyze_expr(
 {
     Expr expr = compiler->exprs[expr_ref.id];
     switch (expr.kind) {
-    case ExprKind_VoidType: {
+    case ExprKind_UnitType: {
         compiler->add_error(expr.loc, "unimplemented");
         break;
     }
@@ -48,7 +48,11 @@ void analyze_expr(
         compiler->add_error(expr.loc, "unimplemented");
         break;
     }
-    case ExprKind_NullPointer: {
+    case ExprKind_NullLiteral: {
+        compiler->add_error(expr.loc, "unimplemented");
+        break;
+    }
+    case ExprKind_UnitLiteral: {
         compiler->add_error(expr.loc, "unimplemented");
         break;
     }
@@ -67,20 +71,6 @@ void analyze_expr(
     }
 
     compiler->exprs[expr_ref.id] = expr;
-}
-
-void analyze_stmt(Compiler *compiler, AnalyzerState *state, StmtRef stmt_ref)
-{
-    Stmt stmt = compiler->stmts[stmt_ref.id];
-
-    switch (stmt.kind) {
-    case StmtKind_Expr: {
-        analyze_expr(compiler, state, stmt.expr_ref);
-        break;
-    }
-    }
-
-    compiler->stmts[stmt_ref.id] = stmt;
 }
 
 void analyze_decl(Compiler *compiler, AnalyzerState *state, DeclRef decl_ref)

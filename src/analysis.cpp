@@ -4,14 +4,23 @@ struct AnalyzerState {
     File *file;
 };
 
-void analyze_expr(
+static void analyze_stmt(Compiler *compiler, AnalyzerState *state, StmtRef stmt_ref);
+static void analyze_decl(Compiler *compiler, AnalyzerState *state, DeclRef decl_ref);
+
+static void analyze_expr(
     Compiler *compiler,
     AnalyzerState *state,
     ExprRef expr_ref,
     TypeRef expected_type = {0})
 {
+    ACE_ASSERT(expr_ref.id > 0);
     Expr expr = compiler->exprs[expr_ref.id];
+
     switch (expr.kind) {
+    case ExprKind_Unknown: {
+        ACE_ASSERT(0);
+        break;
+    }
     case ExprKind_UnitType: {
         compiler->add_error(expr.loc, "unimplemented");
         break;
@@ -68,22 +77,78 @@ void analyze_expr(
         compiler->add_error(expr.loc, "unimplemented");
         break;
     }
+    case ExprKind_Block: {
+        for (StmtRef stmt_ref : expr.block.stmt_refs) {
+            analyze_stmt(compiler, state, stmt_ref);
+        }
+        break;
+    }
+    case ExprKind_If: {
+        compiler->add_error(expr.loc, "unimplemented");
+        break;
+    }
     }
 
     compiler->exprs[expr_ref.id] = expr;
 }
 
-void analyze_decl(Compiler *compiler, AnalyzerState *state, DeclRef decl_ref)
+static void analyze_stmt(Compiler *compiler, AnalyzerState *state, StmtRef stmt_ref)
 {
+    ACE_ASSERT(stmt_ref.id > 0);
+    Stmt stmt = compiler->stmts[stmt_ref.id];
+    
+    switch (stmt.kind) {
+    case StmtKind_Unknown: {
+        ACE_ASSERT(0);
+        break;
+    }
+    case StmtKind_Block: {
+        compiler->add_error(stmt.loc, "unimplemented");
+        break;
+    }
+    case StmtKind_Expr: {
+        analyze_expr(compiler, state, stmt.expr.expr_ref);
+        break;
+    }
+    case StmtKind_Return: {
+        compiler->add_error(stmt.loc, "unimplemented");
+        break;
+    }
+    case StmtKind_If: {
+        compiler->add_error(stmt.loc, "unimplemented");
+        break;
+    }
+    case StmtKind_While: {
+        compiler->add_error(stmt.loc, "unimplemented");
+        break;
+    }
+    }
+
+    compiler->stmts[stmt_ref.id] = stmt;
+}
+
+static void analyze_decl(Compiler *compiler, AnalyzerState *state, DeclRef decl_ref)
+{
+    ACE_ASSERT(decl_ref.id > 0);
     Decl decl = compiler->decls[decl_ref.id];
 
     switch (decl.kind) {
+    case DeclKind_Unknown: {
+        ACE_ASSERT(0);
+        break;
+    }
     case DeclKind_ConstDecl: {
         compiler->add_error(decl.loc, "const decl unimplemented");
         break;
     }
     case DeclKind_Function: {
-        compiler->add_error(decl.loc, "function decl unimplemented");
+        for (DeclRef param_decl_ref : decl.func.param_decl_refs) {
+            analyze_decl(compiler, state, param_decl_ref);
+        }
+
+        if (decl.func.body_expr_ref.id > 0) {
+            analyze_expr(compiler, state, decl.func.body_expr_ref);
+        }
         break;
     }
     case DeclKind_FunctionParameter: {

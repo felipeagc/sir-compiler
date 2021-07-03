@@ -2,9 +2,13 @@
 
 using namespace ace;
 
-static bool expr_needs_semi(ExprKind kind)
+static bool expr_needs_semi(const Expr *expr)
 {
-    switch (kind) {
+    switch (expr->kind) {
+    case ExprKind_Unknown: {
+        ACE_ASSERT(0);
+        break;
+    }
     case ExprKind_BoolLiteral:
     case ExprKind_BoolType:
     case ExprKind_FloatLiteral:
@@ -17,7 +21,8 @@ static bool expr_needs_semi(ExprKind kind)
     case ExprKind_UnitLiteral:
     case ExprKind_UnitType:
     case ExprKind_PointerType:
-    case ExprKind_StringLiteral: return true;
+    case ExprKind_StringLiteral:
+    case ExprKind_If: return true;
     case ExprKind_Block:
     case ExprKind_Function: return false;
     }
@@ -94,6 +99,12 @@ const char *token_kind_to_string(TokenKind kind)
     case TokenKind_Def: return "def";
     case TokenKind_Struct: return "struct";
     case TokenKind_Union: return "union";
+    case TokenKind_If: return "if";
+    case TokenKind_Else: return "else";
+    case TokenKind_While: return "while";
+    case TokenKind_Break: return "break";
+    case TokenKind_Continue: return "continue";
+    case TokenKind_Return: return "return";
     case TokenKind_Unit: return "unit";
     case TokenKind_Bool: return "bool";
     case TokenKind_True: return "true";
@@ -619,6 +630,7 @@ struct TokenizerState {
 };
 
 static Expr parse_expr(Compiler *compiler, TokenizerState *state);
+static Stmt parse_stmt(Compiler *compiler, TokenizerState *state);
 
 static Expr parse_primary_expr(Compiler *compiler, TokenizerState *state)
 {
@@ -700,8 +712,7 @@ static Expr parse_primary_expr(Compiler *compiler, TokenizerState *state)
         Token asterisk_token = state->consume_token(compiler, TokenKind_Mul);
 
         Expr sub_expr = parse_expr(compiler, state);
-        ExprRef sub_expr_ref = {(uint32_t)compiler->exprs.len};
-        compiler->exprs.push_back(sub_expr);
+        ExprRef sub_expr_ref = compiler->add_expr(sub_expr);
 
         expr.kind = ExprKind_PointerType;
         expr.loc = asterisk_token.loc;
@@ -795,6 +806,7 @@ static Expr parse_function_expr(Compiler *compiler, TokenizerState *state)
     Expr expr = {};
 
     Token next_token = {};
+    state->next_token(compiler, &next_token);
 
     expr.loc = next_token.loc;
     expr.func = {};
@@ -803,7 +815,6 @@ static Expr parse_function_expr(Compiler *compiler, TokenizerState *state)
     expr.func.return_type_expr_refs =
         ace::Array<ExprRef>::create(compiler->arena);
 
-    state->next_token(compiler, &next_token);
     switch (next_token.kind) {
     case TokenKind_Inline: {
         state->consume_token(compiler, TokenKind_Inline);
@@ -831,16 +842,14 @@ static Expr parse_function_expr(Compiler *compiler, TokenizerState *state)
         state->consume_token(compiler, TokenKind_Colon);
 
         Expr type_expr = parse_expr(compiler, state);
-        ExprRef type_expr_ref = {(uint32_t)compiler->exprs.len};
-        compiler->exprs.push_back(type_expr);
+        ExprRef type_expr_ref = compiler->add_expr(type_expr);
 
         Decl param_decl = {};
         param_decl.kind = DeclKind_FunctionParameter;
         param_decl.loc = ident_token.loc;
         param_decl.func_param.type_expr = type_expr_ref;
 
-        DeclRef param_decl_ref = {(uint32_t)compiler->decls.len};
-        compiler->decls.push_back(param_decl);
+        DeclRef param_decl_ref = compiler->add_decl(param_decl);
 
         expr.func.param_decl_refs.push_back(param_decl_ref);
 
@@ -862,8 +871,7 @@ static Expr parse_function_expr(Compiler *compiler, TokenizerState *state)
 
         while (1) {
             Expr return_type_expr = parse_expr(compiler, state);
-            ExprRef return_type_expr_ref = {(uint32_t)compiler->exprs.len};
-            compiler->exprs.push_back(return_type_expr);
+            ExprRef return_type_expr_ref = compiler->add_expr(return_type_expr);
 
             expr.func.return_type_expr_refs.push_back(return_type_expr_ref);
 
@@ -880,8 +888,7 @@ static Expr parse_function_expr(Compiler *compiler, TokenizerState *state)
     state->consume_token(compiler, TokenKind_Arrow);
 
     Expr body_expr = parse_expr(compiler, state);
-    ExprRef body_expr_ref = {(uint32_t)compiler->exprs.len};
-    compiler->exprs.push_back(body_expr);
+    ExprRef body_expr_ref = compiler->add_expr(body_expr);
 
     expr.func.body_expr_ref = body_expr_ref;
 
@@ -898,20 +905,19 @@ static Expr parse_func_call_expr(Compiler *compiler, TokenizerState *state)
         state->consume_token(compiler, TokenKind_LParen);
 
         Expr func_expr = expr;
-        ExprRef func_expr_ref = {(uint32_t)compiler->exprs.len};
-        compiler->exprs.push_back(func_expr);
+        ExprRef func_expr_ref = compiler->add_expr(func_expr);
 
         expr = {};
-        expr.loc = func_expr .loc;
+        expr.loc = func_expr.loc;
         expr.kind = ExprKind_FunctionCall;
         expr.func_call.func_expr_ref = func_expr_ref;
-        expr.func_call.param_refs = ace::Array<ExprRef>::create(compiler->arena);
+        expr.func_call.param_refs =
+            ace::Array<ExprRef>::create(compiler->arena);
 
         state->next_token(compiler, &next_token);
         while (next_token.kind != TokenKind_RParen) {
             Expr param_expr = parse_expr(compiler, state);
-            ExprRef param_expr_ref = {(uint32_t)compiler->exprs.len};
-            compiler->exprs.push_back(param_expr);
+            ExprRef param_expr_ref = compiler->add_expr(param_expr);
 
             expr.func_call.param_refs.push_back(param_expr_ref);
 
@@ -942,31 +948,106 @@ static Expr parse_expr(Compiler *compiler, TokenizerState *state)
 
         expr.kind = ExprKind_Block;
         expr.loc = lcurly_token.loc;
-        expr.block.expr_refs = ace::Array<ExprRef>::create(compiler->arena);
+        expr.block.stmt_refs = ace::Array<StmtRef>::create(compiler->arena);
 
         state->next_token(compiler, &next_token);
         while (next_token.kind != TokenKind_RCurly) {
-            Expr sub_expr = parse_expr(compiler, state);
-            ExprRef sub_expr_ref = {(uint32_t)compiler->exprs.len};
-            compiler->exprs.push_back(sub_expr);
+            StmtRef sub_stmt_ref =
+                compiler->add_stmt(parse_stmt(compiler, state));
 
-            expr.block.expr_refs.push_back(sub_expr_ref);
+            expr.block.stmt_refs.push_back(sub_stmt_ref);
 
             state->next_token(compiler, &next_token);
-            if (next_token.kind != TokenKind_RCurly && expr_needs_semi(sub_expr.kind)) {
+        }
+
+        state->consume_token(compiler, TokenKind_RCurly);
+        break;
+    }
+    case TokenKind_If: {
+        Token if_token = state->consume_token(compiler, TokenKind_If);
+        expr.kind = ExprKind_If;
+        expr.loc = if_token.loc;
+        expr.if_ = {};
+
+        state->consume_token(compiler, TokenKind_LParen);
+
+        expr.if_.cond_expr_ref =
+            compiler->add_expr(parse_expr(compiler, state));
+
+        state->consume_token(compiler, TokenKind_RParen);
+
+        expr.if_.true_expr_ref =
+            compiler->add_expr(parse_expr(compiler, state));
+
+        state->next_token(compiler, &next_token);
+        if (next_token.kind == TokenKind_Else) {
+            state->consume_token(compiler, TokenKind_Else);
+
+            expr.if_.false_expr_ref =
+                compiler->add_expr(parse_expr(compiler, state));
+        }
+
+        break;
+    }
+    default: {
+        expr = parse_func_call_expr(compiler, state);
+        break;
+    }
+    }
+
+    ACE_ASSERT(expr.kind != ExprKind_Unknown);
+    return expr;
+}
+
+static Stmt parse_stmt(Compiler *compiler, TokenizerState *state)
+{
+    Stmt stmt = {};
+
+    Token next_token = {};
+    state->next_token(compiler, &next_token);
+
+    switch (next_token.kind) {
+    case TokenKind_If: {
+        Token if_token = state->consume_token(compiler, TokenKind_If);
+        stmt.kind = StmtKind_If;
+        stmt.loc = if_token.loc;
+        stmt.if_ = {};
+
+        state->consume_token(compiler, TokenKind_LParen);
+
+        stmt.if_.cond_expr_ref = compiler->add_expr(parse_expr(compiler, state));
+
+        state->consume_token(compiler, TokenKind_RParen);
+
+        stmt.if_.true_stmt_ref =
+            compiler->add_stmt(parse_stmt(compiler, state));
+
+        state->next_token(compiler, &next_token);
+        if (next_token.kind == TokenKind_Else) {
+            state->consume_token(compiler, TokenKind_Else);
+
+            stmt.if_.false_stmt_ref =
+                compiler->add_stmt(parse_stmt(compiler, state));
+        }
+        break;
+    }
+    case TokenKind_LCurly: {
+        Token lcurly_token = state->consume_token(compiler, TokenKind_LCurly);
+
+        stmt.kind = StmtKind_Block;
+        stmt.loc = lcurly_token.loc;
+        stmt.block.stmt_refs = ace::Array<StmtRef>::create(compiler->arena);
+
+        state->next_token(compiler, &next_token);
+        while (next_token.kind != TokenKind_RCurly) {
+            Stmt sub_stmt = parse_stmt(compiler, state);
+            StmtRef sub_stmt_ref = compiler->add_stmt(sub_stmt);
+
+            stmt.block.stmt_refs.push_back(sub_stmt_ref);
+
+            state->next_token(compiler, &next_token);
+            if (next_token.kind != TokenKind_RCurly) {
                 state->consume_token(compiler, TokenKind_Semicolon);
-
-                state->next_token(compiler, &next_token);
-                if (next_token.kind == TokenKind_RCurly) {
-                    Expr sub_expr = {};
-                    sub_expr.loc = next_token.loc;
-                    sub_expr.kind = ExprKind_UnitLiteral;
-
-                    ExprRef sub_expr_ref = {(uint32_t)compiler->exprs.len};
-                    compiler->exprs.push_back(sub_expr);
-
-                    expr.block.expr_refs.push_back(sub_expr_ref);
-                }
             }
 
             state->next_token(compiler, &next_token);
@@ -976,12 +1057,21 @@ static Expr parse_expr(Compiler *compiler, TokenizerState *state)
         break;
     }
     default: {
-        expr = parse_func_call_expr(compiler, state);
+        Expr expr = parse_expr(compiler, state);
+        ExprRef expr_ref = compiler->add_expr(expr);
+
+        stmt.kind = StmtKind_Expr;
+        stmt.loc = expr.loc;
+        stmt.expr.expr_ref = expr_ref;
+
+        state->consume_token(compiler, TokenKind_Semicolon);
+
         break;
     }
     }
 
-    return expr;
+    ACE_ASSERT(stmt.kind != StmtKind_Unknown);
+    return stmt;
 }
 
 static void
@@ -994,6 +1084,7 @@ parse_top_level_decl(Compiler *compiler, TokenizerState *state, File *file)
         Token func_token = state->consume_token(compiler, TokenKind_Def);
 
         Decl func_decl = {};
+        func_decl.kind = DeclKind_Function;
         func_decl.loc = func_token.loc;
         func_decl.func = {};
 
@@ -1032,16 +1123,14 @@ parse_top_level_decl(Compiler *compiler, TokenizerState *state, File *file)
             state->consume_token(compiler, TokenKind_Colon);
 
             Expr type_expr = parse_expr(compiler, state);
-            ExprRef type_expr_ref = {(uint32_t)compiler->exprs.len};
-            compiler->exprs.push_back(type_expr);
+            ExprRef type_expr_ref = compiler->add_expr(type_expr);
 
             Decl param_decl = {};
             param_decl.kind = DeclKind_FunctionParameter;
             param_decl.loc = ident_token.loc;
             param_decl.func_param.type_expr = type_expr_ref;
 
-            DeclRef param_decl_ref = {(uint32_t)compiler->decls.len};
-            compiler->decls.push_back(param_decl);
+            DeclRef param_decl_ref = compiler->add_decl(param_decl);
 
             func_decl.func.param_decl_refs.push_back(param_decl_ref);
 
@@ -1063,8 +1152,8 @@ parse_top_level_decl(Compiler *compiler, TokenizerState *state, File *file)
 
             while (1) {
                 Expr return_type_expr = parse_expr(compiler, state);
-                ExprRef return_type_expr_ref = {(uint32_t)compiler->exprs.len};
-                compiler->exprs.push_back(return_type_expr);
+                ExprRef return_type_expr_ref =
+                    compiler->add_expr(return_type_expr);
 
                 func_decl.func.return_type_expr_refs.push_back(
                     return_type_expr_ref);
@@ -1085,18 +1174,16 @@ parse_top_level_decl(Compiler *compiler, TokenizerState *state, File *file)
             state->consume_token(compiler, TokenKind_Equal);
 
             Expr body_expr = parse_expr(compiler, state);
-            ExprRef body_expr_ref = {(uint32_t)compiler->exprs.len};
-            compiler->exprs.push_back(body_expr);
+            ExprRef body_expr_ref = compiler->add_expr(body_expr);
 
-            if (expr_needs_semi(body_expr.kind)) {
+            if (expr_needs_semi(&body_expr)) {
                 state->consume_token(compiler, TokenKind_Semicolon);
             }
 
             func_decl.func.body_expr_ref = body_expr_ref;
         }
 
-        DeclRef func_decl_ref = {(uint32_t)compiler->decls.len};
-        compiler->decls.push_back(func_decl);
+        DeclRef func_decl_ref = compiler->add_decl(func_decl);
         file->top_level_decls.push_back(func_decl_ref);
 
         break;

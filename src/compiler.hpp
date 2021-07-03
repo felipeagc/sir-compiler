@@ -9,6 +9,10 @@ struct DeclRef {
     uint32_t id;
 };
 
+struct StmtRef {
+    uint32_t id;
+};
+
 struct ExprRef {
     uint32_t id;
 };
@@ -116,6 +120,12 @@ enum TokenKind {
     TokenKind_Macro,
     TokenKind_Struct,
     TokenKind_Union,
+    TokenKind_If,
+    TokenKind_Else,
+    TokenKind_While,
+    TokenKind_Break,
+    TokenKind_Continue,
+    TokenKind_Return,
     TokenKind_Unit,
     TokenKind_Bool,
     TokenKind_True,
@@ -156,6 +166,7 @@ enum BuiltinFunction {
 };
 
 enum TypeKind {
+    TypeKind_Unknown = 0,
     TypeKind_Unit,
     TypeKind_Bool,
     TypeKind_UntypedInt,
@@ -210,6 +221,7 @@ enum FunctionFlags {
 };
 
 enum ExprKind {
+    ExprKind_Unknown = 0,
     ExprKind_Identifier,
     ExprKind_StringLiteral,
     ExprKind_IntLiteral,
@@ -225,6 +237,7 @@ enum ExprKind {
     ExprKind_IntType,
     ExprKind_FloatType,
     ExprKind_Block,
+    ExprKind_If,
 };
 
 struct Expr {
@@ -267,12 +280,48 @@ struct Expr {
             uint32_t bits;
         } float_type;
         struct {
-            ace::Array<ExprRef> expr_refs;
+            ace::Array<StmtRef> stmt_refs;
         } block;
+        struct {
+            ExprRef cond_expr_ref;
+            ExprRef true_expr_ref;
+            ExprRef false_expr_ref;
+        } if_;
+    };
+};
+
+enum StmtKind {
+    StmtKind_Unknown = 0,
+    StmtKind_Block,
+    StmtKind_Expr,
+    StmtKind_If,
+    StmtKind_While,
+    StmtKind_Return,
+};
+
+struct Stmt {
+    StmtKind kind;
+    Location loc;
+    union {
+        struct {
+            ace::Array<StmtRef> stmt_refs;
+        } block;
+        struct {
+            ExprRef expr_ref;
+        } expr;
+        struct {
+            ExprRef returned_expr_ref;
+        } return_;
+        struct {
+            ExprRef cond_expr_ref;
+            StmtRef true_stmt_ref;
+            StmtRef false_stmt_ref;
+        } if_;
     };
 };
 
 enum DeclKind {
+    DeclKind_Unknown = 0,
     DeclKind_Function,
     DeclKind_FunctionParameter,
     DeclKind_LocalVarDecl,
@@ -318,6 +367,7 @@ struct Compiler {
     ace::StringMap<TypeRef> type_map;
     ace::Array<Type> types;
     ace::Array<Decl> decls;
+    ace::Array<Stmt> stmts;
     ace::Array<Expr> exprs;
 
     static Compiler create();
@@ -329,6 +379,51 @@ struct Compiler {
     void add_error(const Location &loc, const char *fmt, ...);
     void halt_compilation();
     void print_errors();
+
+    ACE_INLINE
+    ExprRef add_expr(const Expr &expr)
+    {
+        ACE_ASSERT(expr.kind != ExprKind_Unknown);
+        ExprRef ref = {(uint32_t)this->exprs.len};
+        this->exprs.push_back(expr);
+        return ref;
+    }
+
+    ACE_INLINE
+    StmtRef add_stmt(const Stmt &stmt)
+    {
+        ACE_ASSERT(stmt.kind != StmtKind_Unknown);
+        StmtRef ref = {(uint32_t)this->stmts.len};
+        this->stmts.push_back(stmt);
+        return ref;
+    }
+
+    ACE_INLINE
+    DeclRef add_decl(const Decl &decl)
+    {
+        ACE_ASSERT(decl.kind != DeclKind_Unknown);
+        DeclRef ref = {(uint32_t)this->decls.len};
+        this->decls.push_back(decl);
+        return ref;
+    }
+
+    ACE_INLINE
+    Expr *get_expr(ExprRef ref)
+    {
+        return &this->exprs[ref.id];
+    }
+
+    ACE_INLINE
+    Stmt *get_stmt(StmtRef ref)
+    {
+        return &this->stmts[ref.id];
+    }
+
+    ACE_INLINE
+    Decl *get_decl(DeclRef ref)
+    {
+        return &this->decls[ref.id];
+    }
 
     void compile(ace::String path);
 };

@@ -60,6 +60,11 @@ Compiler Compiler::create()
     decls.reserve(expected_decl_count);
     decls.push_back({}); // 0th decl
 
+    ace::Array<Stmt> stmts=
+        ace::Array<Stmt>::create(ace::MallocAllocator::get_instance());
+    stmts.reserve(expected_stmt_count);
+    stmts.push_back({}); // 0th decl
+
     ace::Array<Expr> exprs =
         ace::Array<Expr>::create(ace::MallocAllocator::get_instance());
     exprs.reserve(expected_expr_count);
@@ -72,6 +77,12 @@ Compiler Compiler::create()
     keyword_map.set("null", TokenKind_Null);
     keyword_map.set("true", TokenKind_True);
     keyword_map.set("false", TokenKind_False);
+    keyword_map.set("if", TokenKind_If);
+    keyword_map.set("else", TokenKind_Else);
+    keyword_map.set("while", TokenKind_While);
+    keyword_map.set("break", TokenKind_Break);
+    keyword_map.set("continue", TokenKind_Continue);
+    keyword_map.set("return", TokenKind_Return);
     keyword_map.set("unit", TokenKind_Unit);
     keyword_map.set("bool", TokenKind_Bool);
     keyword_map.set("u8", TokenKind_U8);
@@ -94,6 +105,7 @@ Compiler Compiler::create()
         .type_map = type_map,
         .types = types,
         .decls = decls,
+        .stmts = stmts,
         .exprs = exprs,
     };
 
@@ -103,6 +115,7 @@ Compiler Compiler::create()
 void Compiler::destroy()
 {
     this->exprs.destroy();
+    this->stmts.destroy();
     this->decls.destroy();
     this->type_map.destroy();
     this->types.destroy();
@@ -134,16 +147,28 @@ void Compiler::halt_compilation()
 
 void Compiler::print_errors()
 {
+    ACE_ASSERT(this->errors.len > 0);
+
     for (Error &err : this->errors) {
-        fprintf(
-            stderr,
-            "error: %.*s:%u:%u: %.*s\n",
-            (int)err.loc.file->path.len,
-            err.loc.file->path.ptr,
-            err.loc.line,
-            err.loc.col,
-            (int)err.message.len,
-            err.message.ptr);
+        if (err.loc.file) {
+            fprintf(
+                stderr,
+                "error: %.*s:%u:%u: %.*s\n",
+                (int)err.loc.file->path.len,
+                err.loc.file->path.ptr,
+                err.loc.line,
+                err.loc.col,
+                (int)err.message.len,
+                err.message.ptr);
+        } else {
+            fprintf(
+                stderr,
+                "error: (unknown file):%u:%u: %.*s\n",
+                err.loc.line,
+                err.loc.col,
+                (int)err.message.len,
+                err.message.ptr);
+        }
     }
 }
 

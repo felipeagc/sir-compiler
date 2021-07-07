@@ -147,6 +147,10 @@ static void analyze_decl(Compiler *compiler, AnalyzerState *state, DeclRef decl_
             analyze_decl(compiler, state, param_decl_ref);
         }
 
+        for (StmtRef stmt_ref: decl.func.body_stmts) {
+            analyze_stmt(compiler, state, stmt_ref);
+        }
+
         break;
     }
     case DeclKind_FunctionParameter: {

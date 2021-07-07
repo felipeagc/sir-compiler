@@ -168,6 +168,7 @@ enum BuiltinFunction {
 enum TypeKind {
     TypeKind_Unknown = 0,
     TypeKind_Void,
+    TypeKind_Type,
     TypeKind_Bool,
     TypeKind_UntypedInt,
     TypeKind_UntypedFloat,
@@ -192,11 +193,11 @@ struct Type {
             uint32_t bits;
         } float_;
         struct {
-            ace::Array<TypeRef> field_types;
-            ace::Array<ace::String> field_names;
+            ace::Slice<TypeRef> field_types;
+            ace::Slice<ace::String> field_names;
         } struct_;
         struct {
-            ace::Array<TypeRef> field_types;
+            ace::Slice<TypeRef> field_types;
         } tuple;
         struct {
             TypeRef sub_type;
@@ -400,10 +401,32 @@ struct Compiler {
     ace::Array<Stmt> stmts;
     ace::Array<Expr> exprs;
 
+    TypeRef void_type;
+    TypeRef type_type;
+    TypeRef bool_type;
+    TypeRef untyped_int_type;
+    TypeRef untyped_float_type;
+    TypeRef u8_type;
+    TypeRef u16_type;
+    TypeRef u32_type;
+    TypeRef u64_type;
+    TypeRef i8_type;
+    TypeRef i16_type;
+    TypeRef i32_type;
+    TypeRef i64_type;
+    TypeRef f32_type;
+    TypeRef f64_type;
+
     static Compiler create();
     void destroy();
 
-    TypeRef get_cached_type(Type *type);
+    TypeRef get_cached_type(Type &type);
+    TypeRef create_pointer_type(TypeRef sub);
+    TypeRef create_struct_type(
+        ace::Slice<TypeRef> fields, ace::Slice<ace::String> field_names);
+    TypeRef create_tuple_type(ace::Slice<TypeRef> fields);
+    TypeRef create_array_type(TypeRef sub, size_t size);
+    TypeRef create_slice_type(TypeRef sub);
 
     ACE_PRINTF_FORMATTING(3, 4)
     void add_error(const Location &loc, const char *fmt, ...);

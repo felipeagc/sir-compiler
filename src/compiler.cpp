@@ -60,7 +60,7 @@ Compiler Compiler::create()
     decls.reserve(expected_decl_count);
     decls.push_back({}); // 0th decl
 
-    ace::Array<Stmt> stmts=
+    ace::Array<Stmt> stmts =
         ace::Array<Stmt>::create(ace::MallocAllocator::get_instance());
     stmts.reserve(expected_stmt_count);
     stmts.push_back({}); // 0th decl
@@ -107,7 +107,131 @@ Compiler Compiler::create()
         .decls = decls,
         .stmts = stmts,
         .exprs = exprs,
+
+        .void_type = {0},
+        .type_type = {0},
+        .bool_type = {0},
+        .untyped_int_type = {0},
+        .untyped_float_type = {0},
+        .u8_type = {0},
+        .u16_type = {0},
+        .u32_type = {0},
+        .u64_type = {0},
+        .i8_type = {0},
+        .i16_type = {0},
+        .i32_type = {0},
+        .i64_type = {0},
+        .f32_type = {0},
+        .f64_type = {0},
     };
+
+    {
+        Type type = {};
+        type.kind = TypeKind_Void;
+        compiler.void_type = compiler.get_cached_type(type);
+    }
+
+    {
+        Type type = {};
+        type.kind = TypeKind_Bool;
+        compiler.bool_type = compiler.get_cached_type(type);
+    }
+
+    {
+        Type type = {};
+        type.kind = TypeKind_Type;
+        compiler.type_type = compiler.get_cached_type(type);
+    }
+
+    {
+        Type type = {};
+        type.kind = TypeKind_UntypedInt;
+        compiler.untyped_int_type = compiler.get_cached_type(type);
+    }
+
+    {
+        Type type = {};
+        type.kind = TypeKind_UntypedFloat;
+        compiler.untyped_float_type = compiler.get_cached_type(type);
+    }
+
+    {
+        Type type = {};
+        type.kind = TypeKind_Int;
+        type.int_.bits = 8;
+        type.int_.is_signed = false;
+        compiler.u8_type = compiler.get_cached_type(type);
+    }
+
+    {
+        Type type = {};
+        type.kind = TypeKind_Int;
+        type.int_.bits = 16;
+        type.int_.is_signed = false;
+        compiler.u16_type = compiler.get_cached_type(type);
+    }
+
+    {
+        Type type = {};
+        type.kind = TypeKind_Int;
+        type.int_.bits = 32;
+        type.int_.is_signed = false;
+        compiler.u32_type = compiler.get_cached_type(type);
+    }
+
+    {
+        Type type = {};
+        type.kind = TypeKind_Int;
+        type.int_.bits = 64;
+        type.int_.is_signed = false;
+        compiler.u64_type = compiler.get_cached_type(type);
+    }
+
+    {
+        Type type = {};
+        type.kind = TypeKind_Int;
+        type.int_.bits = 8;
+        type.int_.is_signed = true;
+        compiler.i8_type = compiler.get_cached_type(type);
+    }
+
+    {
+        Type type = {};
+        type.kind = TypeKind_Int;
+        type.int_.bits = 16;
+        type.int_.is_signed = true;
+        compiler.i16_type = compiler.get_cached_type(type);
+    }
+
+    {
+        Type type = {};
+        type.kind = TypeKind_Int;
+        type.int_.bits = 32;
+        type.int_.is_signed = true;
+        compiler.i32_type = compiler.get_cached_type(type);
+    }
+
+    {
+        Type type = {};
+        type.kind = TypeKind_Int;
+        type.int_.bits = 64;
+        type.int_.is_signed = true;
+        compiler.i64_type = compiler.get_cached_type(type);
+    }
+
+    {
+        Type type = {};
+        type.kind = TypeKind_Float;
+        type.float_.bits = 32;
+        compiler.f32_type = compiler.get_cached_type(type);
+    }
+
+    {
+        Type type = {};
+        type.kind = TypeKind_Float;
+        type.float_.bits = 64;
+        compiler.f64_type = compiler.get_cached_type(type);
+    }
 
     return compiler;
 }
@@ -223,18 +347,61 @@ void Compiler::compile(ace::String path)
     }
 }
 
-TypeRef Compiler::get_cached_type(Type *type)
+TypeRef Compiler::get_cached_type(Type &type)
 {
-    ace::String type_string = type->to_string(this);
+    ace::String type_string = type.to_string(this);
     TypeRef existing_type_ref = {0};
     if (this->type_map.get(type_string, &existing_type_ref)) {
         return existing_type_ref;
     }
 
     TypeRef type_ref = {(uint32_t)this->types.len};
-    this->types.push_back(*type);
+    this->types.push_back(type);
     this->type_map.set(type_string, type_ref);
     return type_ref;
+}
+
+TypeRef Compiler::create_pointer_type(TypeRef sub)
+{
+    Type type = {};
+    type.kind = TypeKind_Pointer;
+    type.pointer.sub_type = sub;
+    return this->get_cached_type(type);
+}
+
+TypeRef Compiler::create_struct_type(
+    ace::Slice<TypeRef> fields, ace::Slice<ace::String> field_names)
+{
+    Type type = {};
+    type.kind = TypeKind_Struct;
+    type.struct_.field_types = fields;
+    type.struct_.field_names = field_names;
+    return this->get_cached_type(type);
+}
+
+TypeRef Compiler::create_tuple_type(ace::Slice<TypeRef> fields)
+{
+    Type type = {};
+    type.kind = TypeKind_Tuple;
+    type.tuple.field_types = fields;
+    return this->get_cached_type(type);
+}
+
+TypeRef Compiler::create_array_type(TypeRef sub, size_t size)
+{
+    Type type = {};
+    type.kind = TypeKind_Array;
+    type.array.sub_type = sub;
+    type.array.size = size;
+    return this->get_cached_type(type);
+}
+
+TypeRef Compiler::create_slice_type(TypeRef sub)
+{
+    Type type = {};
+    type.kind = TypeKind_Slice;
+    type.slice.sub_type = sub;
+    return this->get_cached_type(type);
 }
 
 ace::String Type::to_string(Compiler *compiler)
@@ -247,6 +414,10 @@ ace::String Type::to_string(Compiler *compiler)
     case TypeKind_Unknown: ACE_ASSERT(0); break;
     case TypeKind_Void: {
         this->str = "@void";
+        break;
+    }
+    case TypeKind_Type: {
+        this->str = "@type";
         break;
     }
     case TypeKind_Bool: {

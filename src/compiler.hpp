@@ -236,6 +236,22 @@ struct Type {
     uint32_t size_of(Compiler *compiler);
 };
 
+struct InterpValue {
+    TypeRef type_ref;
+    union {
+        uint8_t u8;
+        uint16_t u16;
+        uint32_t u32;
+        uint64_t u64;
+        int8_t i8;
+        int16_t i16;
+        int32_t i32;
+        int64_t i64;
+        float f32;
+        double f64;
+    };
+};
+
 enum FunctionFlags {
     FunctionFlags_Inline = 1 << 0,
     FunctionFlags_Extern = 1 << 1,
@@ -286,6 +302,8 @@ enum ExprKind {
     ExprKind_BoolType,
     ExprKind_IntType,
     ExprKind_FloatType,
+    ExprKind_SliceType,
+    ExprKind_ArrayType,
     ExprKind_Unary,
     ExprKind_Binary,
 };
@@ -331,6 +349,13 @@ struct Expr {
         struct {
             uint32_t bits;
         } float_type;
+        struct {
+            ExprRef subtype_expr_ref;
+        } slice_type;
+        struct {
+            ExprRef subtype_expr_ref;
+            ExprRef size_expr_ref;
+        } array_type;
         struct {
             ExprRef left_ref;
             ExprRef right_ref;

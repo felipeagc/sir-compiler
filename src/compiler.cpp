@@ -69,7 +69,6 @@ Compiler Compiler::create()
     ace::Array<Type> types =
         ace::Array<Type>::create(ace::MallocAllocator::get_instance());
     types.reserve(expected_type_count);
-    types.push_back({}); // 0th type
 
     ace::Array<Decl> decls =
         ace::Array<Decl>::create(ace::MallocAllocator::get_instance());
@@ -140,6 +139,12 @@ Compiler Compiler::create()
         .f32_type = {0},
         .f64_type = {0},
     };
+
+    {
+        Type type = {};
+        type.kind = TypeKind_Unknown;
+        compiler.get_cached_type(type);
+    }
 
     {
         Type type = {};
@@ -437,7 +442,10 @@ ace::String Type::to_string(Compiler *compiler)
     }
 
     switch (this->kind) {
-    case TypeKind_Unknown: ACE_ASSERT(0); break;
+    case TypeKind_Unknown: {
+        this->str = "@unknown";
+        break;
+    }
     case TypeKind_Void: {
         this->str = "@void";
         break;

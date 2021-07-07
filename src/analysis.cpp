@@ -5,6 +5,30 @@ struct AnalyzerState {
     ace::Array<Scope *> scope_stack;
 };
 
+bool interp_expr(Compiler *compiler, ExprRef expr_ref, InterpValue *out_value)
+{
+    Expr expr = expr_ref.get(compiler);
+    switch (expr.kind) {
+    case ExprKind_IntLiteral: {
+        InterpValue value = {};
+        value.type_ref = compiler->untyped_int_type;
+        value.i64 = expr.int_literal.i64;
+        *out_value = value;
+        return true;
+    }
+    case ExprKind_FloatLiteral: {
+        InterpValue value = {};
+        value.type_ref = compiler->untyped_float_type;
+        value.f64 = expr.float_literal.f64;
+        *out_value = value;
+        return true;
+    }
+    default: break;
+    }
+
+    return false;
+}
+
 static void
 analyze_stmt(Compiler *compiler, AnalyzerState *state, StmtRef stmt_ref);
 static void
@@ -70,6 +94,52 @@ static void analyze_expr(
         if (sub_type.id) {
             expr.expr_type_ref = compiler->type_type;
             expr.as_type_ref = compiler->create_pointer_type(sub_type);
+        }
+        break;
+    }
+    case ExprKind_SliceType: {
+        analyze_expr(
+            compiler,
+            state,
+            expr.slice_type.subtype_expr_ref,
+            compiler->type_type);
+        TypeRef sub_type =
+            expr.slice_type.subtype_expr_ref.get(compiler).as_type_ref;
+        if (sub_type.id) {
+            expr.expr_type_ref = compiler->type_type;
+            expr.as_type_ref = compiler->create_slice_type(sub_type);
+        }
+        break;
+    }
+    case ExprKind_ArrayType: {
+        analyze_expr(
+            compiler,
+            state,
+            expr.array_type.subtype_expr_ref,
+            compiler->type_type);
+        analyze_expr(
+            compiler,
+            state,
+            expr.array_type.size_expr_ref,
+            compiler->untyped_int_type);
+
+        TypeRef sub_type =
+            expr.array_type.subtype_expr_ref.get(compiler).as_type_ref;
+        if (sub_type.id) {
+            InterpValue interp_value = {};
+            if (interp_expr(
+                    compiler, expr.array_type.size_expr_ref, &interp_value)) {
+                ACE_ASSERT(
+                    interp_value.type_ref.id == compiler->untyped_int_type.id);
+                expr.expr_type_ref = compiler->type_type;
+                expr.as_type_ref =
+                    compiler->create_array_type(sub_type, interp_value.i64);
+            } else {
+                compiler->add_error(
+                    expr.array_type.size_expr_ref.get(compiler).loc,
+                    "array size expression does not evaluate to a compile-time "
+                    "integer");
+            }
         }
         break;
     }

@@ -682,6 +682,32 @@ static Expr parse_primary_expr(Compiler *compiler, TokenizerState *state)
         expr.ptr_type.sub_expr_ref = sub_expr_ref;
         break;
     }
+    case TokenKind_LBracket: {
+        Token lbracket_token =
+            state->consume_token(compiler, TokenKind_LBracket);
+
+        state->next_token(compiler, &next_token);
+        if (next_token.kind != TokenKind_RBracket) {
+            Expr size_expr = parse_expr(compiler, state);
+            state->consume_token(compiler, TokenKind_RBracket);
+
+            Expr subtype_expr = parse_expr(compiler, state);
+
+            expr.kind = ExprKind_ArrayType;
+            expr.loc = lbracket_token.loc;
+            expr.array_type.size_expr_ref = compiler->add_expr(size_expr);
+            expr.array_type.subtype_expr_ref = compiler->add_expr(subtype_expr);
+        } else {
+            state->consume_token(compiler, TokenKind_RBracket);
+
+            Expr subtype_expr = parse_expr(compiler, state);
+
+            expr.kind = ExprKind_SliceType;
+            expr.loc = lbracket_token.loc;
+            expr.slice_type.subtype_expr_ref = compiler->add_expr(subtype_expr);
+        }
+        break;
+    }
     case TokenKind_Void: {
         *state = state->next_token(compiler, &next_token);
 

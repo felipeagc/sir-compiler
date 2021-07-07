@@ -272,6 +272,8 @@ enum ExprKind {
 
 struct Expr {
     ExprKind kind;
+    TypeRef expr_type_ref;
+    TypeRef as_type_ref;
     Location loc;
     union {
         struct {

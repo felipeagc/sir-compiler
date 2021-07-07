@@ -130,6 +130,7 @@ enum TokenKind {
     TokenKind_Global,
     TokenKind_Const,
     TokenKind_Extern,
+    TokenKind_Export,
     TokenKind_Inline,
     TokenKind_Def,
     TokenKind_Macro,
@@ -255,6 +256,7 @@ struct InterpValue {
 enum FunctionFlags {
     FunctionFlags_Inline = 1 << 0,
     FunctionFlags_Extern = 1 << 1,
+    FunctionFlags_Exported = 1 << 2,
 };
 
 enum UnaryOp {
@@ -535,6 +537,7 @@ struct Compiler {
 
 void parse_file(Compiler *compiler, File *file);
 void analyze_file(Compiler *compiler, File *file);
+void codegen_file(Compiler *compiler, File *file);
 
 inline Decl DeclRef::get(Compiler *compiler)
 {

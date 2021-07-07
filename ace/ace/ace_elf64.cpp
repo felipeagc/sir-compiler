@@ -536,6 +536,7 @@ void Elf64Builder::destroy()
         section.data.destroy();
     }
     this->sections.destroy();
+    this->symbols.destroy();
 }
 
 void Elf64Builder::add_to_section(SectionType type, Slice<uint8_t> data)

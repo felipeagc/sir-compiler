@@ -66,6 +66,7 @@ const char *token_kind_to_string(TokenKind kind)
 
     case TokenKind_Const: return "const";
     case TokenKind_Extern: return "extern";
+    case TokenKind_Export: return "export";
     case TokenKind_Global: return "global";
     case TokenKind_Inline: return "inline";
     case TokenKind_Macro: return "macro";
@@ -1203,6 +1204,11 @@ parse_top_level_decl(Compiler *compiler, TokenizerState *state, File *file)
         case TokenKind_Extern: {
             state->consume_token(compiler, TokenKind_Extern);
             func_decl.func.flags |= FunctionFlags_Extern;
+            break;
+        }
+        case TokenKind_Export: {
+            state->consume_token(compiler, TokenKind_Export);
+            func_decl.func.flags |= FunctionFlags_Exported;
             break;
         }
         case TokenKind_Inline: {

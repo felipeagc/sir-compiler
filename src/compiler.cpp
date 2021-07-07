@@ -86,6 +86,7 @@ Compiler Compiler::create()
     exprs.push_back({}); // 0th expr
 
     keyword_map.set("extern", TokenKind_Extern);
+    keyword_map.set("export", TokenKind_Export);
     keyword_map.set("inline", TokenKind_Inline);
     keyword_map.set("def", TokenKind_Def);
     keyword_map.set("macro", TokenKind_Macro);
@@ -357,6 +358,7 @@ void Compiler::compile(ace::String path)
 
         parse_file(this, file);
         analyze_file(this, file);
+        codegen_file(this, file);
     } catch (...) {
         if (this->errors.len == 0) {
             fprintf(

@@ -18,5 +18,6 @@ add_executable(
 	src/compiler.cpp
 	src/parser.cpp
 	src/analysis.cpp
+	src/codegen.cpp
 )
 target_link_libraries(compiler PRIVATE ace)

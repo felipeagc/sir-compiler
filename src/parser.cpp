@@ -1,4 +1,5 @@
 #include "compiler.hpp"
+#include <Tracy.hpp>
 
 using namespace ace;
 
@@ -173,6 +174,8 @@ struct TokenizerState {
 
     TokenizerState next_token(Compiler *compiler, Token *token) const
     {
+        ZoneScoped;
+
         Allocator *allocator = compiler->arena;
         TokenizerState state = *this;
 
@@ -606,6 +609,8 @@ static Stmt parse_stmt(Compiler *compiler, TokenizerState *state);
 
 static Expr parse_primary_expr(Compiler *compiler, TokenizerState *state)
 {
+    ZoneScoped;
+
     Expr expr = {};
 
     Token next_token = {};
@@ -793,6 +798,8 @@ static Expr parse_primary_expr(Compiler *compiler, TokenizerState *state)
 
 static Expr parse_func_expr(Compiler *compiler, TokenizerState *state)
 {
+    ZoneScoped;
+
     Expr expr = {};
 
     Token next_token = {};
@@ -897,6 +904,8 @@ static Expr parse_func_expr(Compiler *compiler, TokenizerState *state)
 
 static Expr parse_func_call_expr(Compiler *compiler, TokenizerState *state)
 {
+    ZoneScoped;
+
     Expr expr = parse_primary_expr(compiler, state);
 
     Token next_token = {};
@@ -950,6 +959,8 @@ struct BinaryOpSymbol {
 
 static Expr parse_binary_expr(Compiler *compiler, TokenizerState *state)
 {
+    ZoneScoped;
+
     Expr expr = parse_func_call_expr(compiler, state);
 
     Token next_token = {};
@@ -1099,11 +1110,15 @@ static Expr parse_binary_expr(Compiler *compiler, TokenizerState *state)
 
 static Expr parse_expr(Compiler *compiler, TokenizerState *state)
 {
+    ZoneScoped;
+
     return parse_binary_expr(compiler, state);
 }
 
 static Stmt parse_stmt(Compiler *compiler, TokenizerState *state)
 {
+    ZoneScoped;
+
     Stmt stmt = {};
 
     Token next_token = {};
@@ -1181,6 +1196,8 @@ static Stmt parse_stmt(Compiler *compiler, TokenizerState *state)
 static void
 parse_top_level_decl(Compiler *compiler, TokenizerState *state, File *file)
 {
+    ZoneScoped;
+
     Token next_token = {};
     state->next_token(compiler, &next_token);
     switch (next_token.kind) {
@@ -1316,6 +1333,8 @@ parse_top_level_decl(Compiler *compiler, TokenizerState *state, File *file)
 
 void parse_file(Compiler *compiler, File *file)
 {
+    ZoneScoped;
+
     file->top_level_decls.reserve(512);
 
     TokenizerState state = TokenizerState::create(file);

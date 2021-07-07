@@ -1,4 +1,5 @@
 #include "compiler.hpp"
+#include <Tracy.hpp>
 
 struct AnalyzerState {
     File *file;
@@ -40,7 +41,7 @@ static void analyze_expr(
     ExprRef expr_ref,
     TypeRef expected_type_ref = {0})
 {
-    (void)state;
+    ZoneScoped;
 
     ACE_ASSERT(expr_ref.id > 0);
     Expr expr = compiler->exprs[expr_ref.id];
@@ -279,6 +280,8 @@ static void analyze_expr(
 static void
 analyze_stmt(Compiler *compiler, AnalyzerState *state, StmtRef stmt_ref)
 {
+    ZoneScoped;
+
     ACE_ASSERT(stmt_ref.id > 0);
     Stmt stmt = compiler->stmts[stmt_ref.id];
 
@@ -315,6 +318,8 @@ analyze_stmt(Compiler *compiler, AnalyzerState *state, StmtRef stmt_ref)
 static void
 analyze_decl(Compiler *compiler, AnalyzerState *state, DeclRef decl_ref)
 {
+    ZoneScoped;
+
     ACE_ASSERT(decl_ref.id > 0);
     Decl decl = compiler->decls[decl_ref.id];
 
@@ -397,6 +402,8 @@ analyze_decl(Compiler *compiler, AnalyzerState *state, DeclRef decl_ref)
 
 void analyze_file(Compiler *compiler, File *file)
 {
+    ZoneScoped;
+
     AnalyzerState state = {};
     state.file = file;
     state.scope_stack = ace::Array<Scope *>::create(compiler->arena);

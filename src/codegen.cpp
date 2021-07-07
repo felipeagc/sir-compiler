@@ -1,4 +1,5 @@
 #include "compiler.hpp"
+#include <Tracy.hpp>
 
 #include <ace_ir.hpp>
 #include <ace_obj.hpp>
@@ -95,6 +96,8 @@ get_ir_type(Compiler *compiler, CodegenContext *ctx, TypeRef type_ref)
 static CodegenValue
 codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
 {
+    ZoneScoped;
+
     Expr expr = expr_ref.get(compiler);
     CodegenValue value = {};
 
@@ -224,6 +227,8 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
 static void
 codegen_stmt(Compiler *compiler, CodegenContext *ctx, StmtRef stmt_ref)
 {
+    ZoneScoped;
+
     Stmt stmt = stmt_ref.get(compiler);
     switch (stmt.kind) {
     case StmtKind_Unknown: ACE_ASSERT(0); break;
@@ -255,6 +260,8 @@ codegen_stmt(Compiler *compiler, CodegenContext *ctx, StmtRef stmt_ref)
 static void
 codegen_decl(Compiler *compiler, CodegenContext *ctx, DeclRef decl_ref)
 {
+    ZoneScoped;
+
     ace::Module *module = ctx->module;
     Decl decl = decl_ref.get(compiler);
     CodegenValue value = {};
@@ -326,6 +333,8 @@ codegen_decl(Compiler *compiler, CodegenContext *ctx, DeclRef decl_ref)
 
 void codegen_file(Compiler *compiler, File *file)
 {
+    ZoneScoped;
+
     CodegenContext ctx = {};
 
     ctx.file = file;

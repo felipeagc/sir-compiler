@@ -2,6 +2,7 @@
 
 struct AnalyzerState {
     File *file;
+    ace::Array<Scope *> scope_stack;
 };
 
 static void
@@ -65,8 +66,7 @@ static void analyze_expr(
     case ExprKind_PointerType: {
         analyze_expr(
             compiler, state, expr.ptr_type.sub_expr_ref, compiler->type_type);
-        TypeRef sub_type =
-            compiler->exprs[expr.ptr_type.sub_expr_ref.id].expr_type_ref;
+        TypeRef sub_type = expr.ptr_type.sub_expr_ref.get(compiler).as_type_ref;
         if (sub_type.id) {
             expr.expr_type_ref = compiler->type_type;
             expr.as_type_ref = compiler->create_pointer_type(sub_type);
@@ -79,8 +79,8 @@ static void analyze_expr(
     }
     case ExprKind_IntLiteral: {
         if (expected_type_ref.id &&
-            (compiler->types[expected_type_ref.id].kind == TypeKind_Int ||
-             compiler->types[expected_type_ref.id].kind == TypeKind_Float)) {
+            (expected_type_ref.get(compiler).kind == TypeKind_Int ||
+             expected_type_ref.get(compiler).kind == TypeKind_Float)) {
             expr.expr_type_ref = expected_type_ref;
         } else {
             expr.expr_type_ref = compiler->untyped_int_type;
@@ -89,7 +89,7 @@ static void analyze_expr(
     }
     case ExprKind_FloatLiteral: {
         if (expected_type_ref.id &&
-            compiler->types[expected_type_ref.id].kind == TypeKind_Float) {
+            expected_type_ref.get(compiler).kind == TypeKind_Float) {
             expr.expr_type_ref = expected_type_ref;
         } else {
             expr.expr_type_ref = compiler->untyped_float_type;
@@ -97,12 +97,19 @@ static void analyze_expr(
         break;
     }
     case ExprKind_StringLiteral: {
-        compiler->add_error(expr.loc, "unimplemented string literal");
+        expr.expr_type_ref = compiler->create_slice_type(compiler->u8_type);
+        if (expected_type_ref.id) {
+            Type expected_type = expected_type_ref.get(compiler);
+            if (expected_type.kind == TypeKind_Pointer &&
+                expected_type.pointer.sub_type.id == compiler->u8_type.id) {
+                expr.expr_type_ref = expected_type_ref;
+            }
+        }
         break;
     }
     case ExprKind_NullLiteral: {
         if (expected_type_ref.id &&
-            compiler->types[expected_type_ref.id].kind == TypeKind_Pointer) {
+            expected_type_ref.get(compiler).kind == TypeKind_Pointer) {
             expr.expr_type_ref = expected_type_ref;
         } else {
             expr.expr_type_ref =
@@ -115,7 +122,19 @@ static void analyze_expr(
         break;
     }
     case ExprKind_Identifier: {
-        compiler->add_error(expr.loc, "unimplemented identifier expr");
+        Scope *scope = *state->scope_stack.last();
+        DeclRef decl_ref = scope->lookup(expr.ident.str);
+        if (decl_ref.id) {
+            Decl decl = decl_ref.get(compiler);
+            expr.expr_type_ref = decl.decl_type_ref;
+            expr.as_type_ref = decl.as_type_ref;
+        } else {
+            compiler->add_error(
+                expr.loc,
+                "identifier '%.*s' does not refer to a symbol",
+                (int)expr.ident.str.len,
+                expr.ident.str.ptr);
+        }
         break;
     }
     case ExprKind_Function: {
@@ -123,7 +142,37 @@ static void analyze_expr(
         break;
     }
     case ExprKind_FunctionCall: {
-        compiler->add_error(expr.loc, "unimplemented function call");
+        analyze_expr(compiler, state, expr.func_call.func_expr_ref);
+
+        Expr func_expr = expr.func_call.func_expr_ref.get(compiler);
+        Type func_type = func_expr.expr_type_ref.get(compiler);
+        if (func_type.kind != TypeKind_Function) {
+            compiler->add_error(
+                func_expr.loc, "expected expression to have function type");
+            break;
+        }
+
+        if (func_type.func.param_types.len != expr.func_call.param_refs.len) {
+            compiler->add_error(
+                expr.loc,
+                "expected '%zu' parameters for function call, instead got "
+                "'%zu'",
+                func_type.func.param_types.len,
+                expr.func_call.param_refs.len);
+            break;
+        }
+
+        for (size_t i = 0; i < expr.func_call.param_refs.len; ++i) {
+            TypeRef param_expected_type = func_type.func.param_types[i];
+            analyze_expr(
+                compiler,
+                state,
+                expr.func_call.param_refs[i],
+                param_expected_type);
+        }
+
+        expr.expr_type_ref = func_type.func.return_type;
+
         break;
     }
     case ExprKind_Unary: {
@@ -136,9 +185,10 @@ static void analyze_expr(
     }
     }
 
-    if (expected_type_ref.id != expr.expr_type_ref.id) {
-        Type &expected_type = compiler->types[expected_type_ref.id];
-        Type &expr_type = compiler->types[expr.expr_type_ref.id];
+    if (expected_type_ref.id != 0 &&
+        expected_type_ref.id != expr.expr_type_ref.id) {
+        Type expected_type = expected_type_ref.get(compiler);
+        Type expr_type = expr.expr_type_ref.get(compiler);
 
         ace::String expected_type_str = expected_type.to_string(compiler);
         ace::String expr_type_str = expr_type.to_string(compiler);
@@ -207,9 +257,46 @@ analyze_decl(Compiler *compiler, AnalyzerState *state, DeclRef decl_ref)
         break;
     }
     case DeclKind_Function: {
-        for (DeclRef param_decl_ref : decl.func.param_decl_refs) {
-            analyze_decl(compiler, state, param_decl_ref);
+        decl.func.scope =
+            Scope::create(compiler, state->file, *state->scope_stack.last());
+
+        for (ExprRef return_type_expr_ref : decl.func.return_type_expr_refs) {
+            analyze_expr(
+                compiler, state, return_type_expr_ref, compiler->type_type);
         }
+
+        TypeRef return_type = {};
+        if (decl.func.return_type_expr_refs.len == 0) {
+            return_type = compiler->void_type;
+        } else if (decl.func.return_type_expr_refs.len == 1) {
+            return_type =
+                decl.func.return_type_expr_refs[0].get(compiler).as_type_ref;
+        } else {
+            ace::Slice<TypeRef> fields = compiler->arena->alloc<TypeRef>(
+                decl.func.return_type_expr_refs.len);
+
+            for (size_t i = 0; i < decl.func.return_type_expr_refs.len; ++i) {
+                fields[i] = decl.func.return_type_expr_refs[i]
+                                .get(compiler)
+                                .as_type_ref;
+            }
+
+            return_type = compiler->create_tuple_type(fields);
+        }
+
+        ace::Slice<TypeRef> param_types =
+            compiler->arena->alloc<TypeRef>(decl.func.param_decl_refs.len);
+
+        for (size_t i = 0; i < decl.func.param_decl_refs.len; ++i) {
+            DeclRef param_decl_ref = decl.func.param_decl_refs[i];
+            analyze_decl(compiler, state, param_decl_ref);
+            param_types[i] = param_decl_ref.get(compiler).decl_type_ref;
+
+            decl.func.scope->add(compiler, param_decl_ref);
+        }
+
+        decl.decl_type_ref =
+            compiler->create_func_type(return_type, param_types);
 
         for (StmtRef stmt_ref : decl.func.body_stmts) {
             analyze_stmt(compiler, state, stmt_ref);
@@ -220,6 +307,8 @@ analyze_decl(Compiler *compiler, AnalyzerState *state, DeclRef decl_ref)
     case DeclKind_FunctionParameter: {
         analyze_expr(
             compiler, state, decl.func_param.type_expr, compiler->type_type);
+        decl.decl_type_ref =
+            decl.func_param.type_expr.get(compiler).as_type_ref;
         break;
     }
     case DeclKind_LocalVarDecl: {
@@ -239,6 +328,9 @@ void analyze_file(Compiler *compiler, File *file)
 {
     AnalyzerState state = {};
     state.file = file;
+    state.scope_stack = ace::Array<Scope *>::create(compiler->arena);
+
+    state.scope_stack.push_back(file->scope);
 
     // Register top level symbols
     for (DeclRef decl_ref : file->top_level_decls) {
@@ -248,6 +340,10 @@ void analyze_file(Compiler *compiler, File *file)
     for (DeclRef decl_ref : state.file->top_level_decls) {
         analyze_decl(compiler, &state, decl_ref);
     }
+
+    state.scope_stack.pop();
+
+    ACE_ASSERT(state.scope_stack.len == 0);
 
     if (compiler->errors.len > 0) {
         compiler->halt_compilation();

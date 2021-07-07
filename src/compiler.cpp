@@ -18,7 +18,7 @@ void Scope::add(Compiler *compiler, DeclRef decl_ref)
 {
     ace::String name = compiler->decls[decl_ref.id].name;
     if (name != "_") {
-        if (this->decl_refs.get(name)) {
+        if (this->lookup(name).id != 0) {
             const Location &loc = compiler->decls[decl_ref.id].loc;
             compiler->add_error(
                 loc,
@@ -29,6 +29,22 @@ void Scope::add(Compiler *compiler, DeclRef decl_ref)
             this->decl_refs.set(name, decl_ref);
         }
     }
+}
+
+DeclRef Scope::lookup(const ace::String &name)
+{
+    if (name == "_") return {0};
+
+    DeclRef out_ref = {};
+    if (this->decl_refs.get(name, &out_ref)) {
+        return out_ref;
+    }
+
+    if (this->parent) {
+        return this->parent->lookup(name);
+    }
+
+    return {0};
 }
 
 Compiler Compiler::create()
@@ -404,6 +420,16 @@ TypeRef Compiler::create_slice_type(TypeRef sub)
     return this->get_cached_type(type);
 }
 
+TypeRef
+Compiler::create_func_type(TypeRef return_type, ace::Slice<TypeRef> param_types)
+{
+    Type type = {};
+    type.kind = TypeKind_Function;
+    type.func.return_type = return_type;
+    type.func.param_types = param_types;
+    return this->get_cached_type(type);
+}
+
 ace::String Type::to_string(Compiler *compiler)
 {
     if (this->str.len > 0) {
@@ -510,6 +536,39 @@ ace::String Type::to_string(Compiler *compiler)
             sb.append(field_str);
         }
 
+        sb.append(")");
+
+        this->str = sb.build(compiler->arena);
+
+        sb.destroy();
+        break;
+    }
+    case TypeKind_Function: {
+        ace::StringBuilder sb =
+            ace::StringBuilder::create(ace::MallocAllocator::get_instance());
+
+        sb.append("@func(");
+
+        Type *return_type = &compiler->types[this->func.return_type.id];
+        sb.append(return_type->to_string(compiler));
+
+        sb.append(",");
+
+        sb.append("(");
+
+        for (size_t i = 0; i < this->func.param_types.len; ++i) {
+            auto field_type_ref = this->func.param_types[i];
+            Type *field_type = &compiler->types[field_type_ref.id];
+
+            if (i > 0) {
+                sb.append(",");
+            }
+
+            ace::String field_str = field_type->to_string(compiler);
+            sb.append(field_str);
+        }
+
+        sb.append(")");
         sb.append(")");
 
         this->str = sb.build(compiler->arena);

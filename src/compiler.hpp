@@ -5,20 +5,34 @@
 struct Compiler;
 struct File;
 
+struct Expr;
+struct Stmt;
+struct Decl;
+
+struct Type;
+
 struct DeclRef {
     uint32_t id;
+
+    Decl get(Compiler *compiler);
 };
 
 struct StmtRef {
     uint32_t id;
+
+    Stmt get(Compiler *compiler);
 };
 
 struct ExprRef {
     uint32_t id;
+
+    Expr get(Compiler *compiler);
 };
 
 struct TypeRef {
     uint32_t id;
+
+    Type get(Compiler *compiler);
 };
 
 struct Scope {
@@ -29,6 +43,7 @@ struct Scope {
     static Scope *
     create(Compiler *compiler, File *file, Scope *parent = nullptr);
     void add(Compiler *compiler, DeclRef decl_ref);
+    DeclRef lookup(const ace::String &name);
 };
 
 struct File {
@@ -179,6 +194,7 @@ enum TypeKind {
     TypeKind_Pointer,
     TypeKind_Array,
     TypeKind_Slice,
+    TypeKind_Function,
 };
 
 struct Type {
@@ -209,6 +225,10 @@ struct Type {
         struct {
             TypeRef sub_type;
         } slice;
+        struct {
+            TypeRef return_type;
+            ace::Slice<TypeRef> param_types;
+        } func;
     };
 
     ace::String to_string(Compiler *compiler);
@@ -364,10 +384,13 @@ enum DeclKind {
 
 struct Decl {
     DeclKind kind;
+    TypeRef decl_type_ref;
+    TypeRef as_type_ref;
     Location loc;
     ace::String name;
     union {
         struct {
+            Scope *scope;
             uint32_t flags;
             ace::Array<ExprRef> return_type_expr_refs;
             ace::Array<DeclRef> param_decl_refs;
@@ -429,6 +452,8 @@ struct Compiler {
     TypeRef create_tuple_type(ace::Slice<TypeRef> fields);
     TypeRef create_array_type(TypeRef sub, size_t size);
     TypeRef create_slice_type(TypeRef sub);
+    TypeRef
+    create_func_type(TypeRef return_type, ace::Slice<TypeRef> param_types);
 
     ACE_PRINTF_FORMATTING(3, 4)
     void add_error(const Location &loc, const char *fmt, ...);
@@ -485,3 +510,23 @@ struct Compiler {
 
 void parse_file(Compiler *compiler, File *file);
 void analyze_file(Compiler *compiler, File *file);
+
+inline Decl DeclRef::get(Compiler *compiler)
+{
+    return compiler->decls[this->id];
+}
+
+inline Stmt StmtRef::get(Compiler *compiler)
+{
+    return compiler->stmts[this->id];
+}
+
+inline Expr ExprRef::get(Compiler *compiler)
+{
+    return compiler->exprs[this->id];
+}
+
+inline Type TypeRef::get(Compiler *compiler)
+{
+    return compiler->types[this->id];
+}

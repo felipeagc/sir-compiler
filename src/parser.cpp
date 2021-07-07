@@ -810,6 +810,7 @@ static Expr parse_func_expr(Compiler *compiler, TokenizerState *state)
         Decl param_decl = {};
         param_decl.kind = DeclKind_FunctionParameter;
         param_decl.loc = ident_token.loc;
+        param_decl.name = ident_token.str;
         param_decl.func_param.type_expr = type_expr_ref;
 
         DeclRef param_decl_ref = compiler->add_decl(param_decl);
@@ -1206,6 +1207,7 @@ parse_top_level_decl(Compiler *compiler, TokenizerState *state, File *file)
             Decl param_decl = {};
             param_decl.kind = DeclKind_FunctionParameter;
             param_decl.loc = ident_token.loc;
+            param_decl.name = ident_token.str;
             param_decl.func_param.type_expr = type_expr_ref;
 
             DeclRef param_decl_ref = compiler->add_decl(param_decl);

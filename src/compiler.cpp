@@ -1,6 +1,7 @@
 #include "compiler.hpp"
 
 #include <stdio.h>
+#include <time.h>
 
 Scope *Scope::create(Compiler *compiler, File *file, Scope *parent)
 {
@@ -356,9 +357,20 @@ void Compiler::compile(ace::String path)
             .top_level_decls = ace::Array<DeclRef>::create(this->arena),
         };
 
+        timespec start_time, end_time;
+        clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &start_time);
+
         parse_file(this, file);
         analyze_file(this, file);
         codegen_file(this, file);
+
+        clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &end_time);
+
+        uint64_t secs = end_time.tv_sec - start_time.tv_sec;
+        uint64_t nsecs = end_time.tv_nsec - start_time.tv_nsec;
+        double time = (double)secs + ((double)nsecs / (double)1e9);
+
+        printf("Compilation time: %lfs\n", time);
     } catch (...) {
         if (this->errors.len == 0) {
             fprintf(

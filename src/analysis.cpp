@@ -198,6 +198,7 @@ static void analyze_expr(
             Decl decl = decl_ref.get(compiler);
             expr.expr_type_ref = decl.decl_type_ref;
             expr.as_type_ref = decl.as_type_ref;
+            expr.ident.decl_ref = decl_ref;
         } else {
             compiler->add_error(
                 expr.loc,

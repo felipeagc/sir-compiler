@@ -225,15 +225,20 @@ Module *Module::create(TargetArch target_arch, Endianness endianness)
     const size_t expected_type_count = 1024;
     const size_t expected_const_count = 2048;
     const size_t expected_global_count = 2048;
+    const size_t expected_global_string_count = 2048;
 
-    auto arena = ArenaAllocator::create(parent_allocator, 1 << 25);
-    auto functions = Array<Function>::create(arena);
-    auto globals = Array<Global>::create(arena);
-    auto consts = Array<Const>::create(arena);
-    auto function_map =
-        StringMap<FunctionRef>::create(arena, expected_function_count);
-    auto type_map = StringMap<Type *>::create(arena, expected_type_count);
-    auto const_map = StringMap<ConstRef>::create(arena, expected_const_count);
+    auto arena = ArenaAllocator::create(parent_allocator, 1 << 24);
+    auto functions = Array<Function>::create(MallocAllocator::get_instance());
+    auto globals = Array<Global>::create(MallocAllocator::get_instance());
+    auto consts = Array<Const>::create(MallocAllocator::get_instance());
+    auto function_map = StringMap<FunctionRef>::create(
+        MallocAllocator::get_instance(), expected_function_count);
+    auto type_map = StringMap<Type *>::create(
+        MallocAllocator::get_instance(), expected_type_count);
+    auto const_map = StringMap<ConstRef>::create(
+        MallocAllocator::get_instance(), expected_const_count);
+    auto global_string_map = StringMap<GlobalRef>::create(
+        MallocAllocator::get_instance(), expected_global_string_count);
 
     functions.reserve(expected_function_count);
     globals.reserve(expected_global_count);
@@ -248,6 +253,7 @@ Module *Module::create(TargetArch target_arch, Endianness endianness)
         .function_map = function_map,
         .type_map = type_map,
         .const_map = const_map,
+        .global_string_map = global_string_map,
         .target_arch = target_arch,
         .endianness = endianness,
 
@@ -263,18 +269,21 @@ Module *Module::create(TargetArch target_arch, Endianness endianness)
 
     {
         Type *void_type = module->arena->alloc<Type>();
+        *void_type = {};
         void_type->kind = TypeKind_Void;
         module->void_type = module->get_cached_type(void_type);
     }
 
     {
         Type *bool_type = module->arena->alloc<Type>();
+        *bool_type = {};
         bool_type->kind = TypeKind_Bool;
         module->bool_type = module->get_cached_type(bool_type);
     }
 
     {
         Type *i8_type = module->arena->alloc<Type>();
+        *i8_type = {};
         i8_type->kind = TypeKind_Int;
         i8_type->int_.bits = 8;
         module->i8_type = module->get_cached_type(i8_type);
@@ -282,6 +291,7 @@ Module *Module::create(TargetArch target_arch, Endianness endianness)
 
     {
         Type *i16_type = module->arena->alloc<Type>();
+        *i16_type = {};
         i16_type->kind = TypeKind_Int;
         i16_type->int_.bits = 16;
         module->i16_type = module->get_cached_type(i16_type);
@@ -289,6 +299,7 @@ Module *Module::create(TargetArch target_arch, Endianness endianness)
 
     {
         Type *i32_type = module->arena->alloc<Type>();
+        *i32_type = {};
         i32_type->kind = TypeKind_Int;
         i32_type->int_.bits = 32;
         module->i32_type = module->get_cached_type(i32_type);
@@ -296,6 +307,7 @@ Module *Module::create(TargetArch target_arch, Endianness endianness)
 
     {
         Type *i64_type = module->arena->alloc<Type>();
+        *i64_type = {};
         i64_type->kind = TypeKind_Int;
         i64_type->int_.bits = 64;
         module->i64_type = module->get_cached_type(i64_type);
@@ -303,6 +315,7 @@ Module *Module::create(TargetArch target_arch, Endianness endianness)
 
     {
         Type *f32_type = module->arena->alloc<Type>();
+        *f32_type = {};
         f32_type->kind = TypeKind_Float;
         f32_type->float_.bits = 32;
         module->f32_type = module->get_cached_type(f32_type);
@@ -310,6 +323,7 @@ Module *Module::create(TargetArch target_arch, Endianness endianness)
 
     {
         Type *f64_type = module->arena->alloc<Type>();
+        *f64_type = {};
         f64_type->kind = TypeKind_Float;
         f64_type->float_.bits = 64;
         module->f64_type = module->get_cached_type(f64_type);
@@ -320,6 +334,13 @@ Module *Module::create(TargetArch target_arch, Endianness endianness)
 
 void Module::destroy()
 {
+    this->functions.destroy();
+    this->globals.destroy();
+    this->consts.destroy();
+    this->function_map.destroy();
+    this->type_map.destroy();
+    this->const_map.destroy();
+    this->global_string_map.destroy();
     this->arena->destroy();
 
     auto parent_allocator = MallocAllocator::get_instance();
@@ -350,6 +371,7 @@ String Module::print_alloc(Allocator *allocator)
 Type *Module::create_pointer_type()
 {
     Type *type = this->arena->alloc<Type>();
+    *type = {};
     type->kind = TypeKind_Pointer;
     return this->get_cached_type(type);
 }
@@ -357,6 +379,7 @@ Type *Module::create_pointer_type()
 Type *Module::create_array_type(Type *sub, uint64_t count)
 {
     Type *type = this->arena->alloc<Type>();
+    *type = {};
     type->kind = TypeKind_Array;
     type->array.sub = sub;
     type->array.count = count;
@@ -366,6 +389,7 @@ Type *Module::create_array_type(Type *sub, uint64_t count)
 Type *Module::create_struct_type(Slice<Type *> fields, bool packed)
 {
     Type *type = this->arena->alloc<Type>();
+    *type = {};
     type->kind = TypeKind_Array;
     type->struct_.fields = this->arena->clone(fields);
     type->struct_.packed = packed;
@@ -505,6 +529,11 @@ GlobalRef Module::add_global_string(const String &str)
 {
     ZoneScoped;
 
+    GlobalRef existing_global_ref = {0};
+    if (this->global_string_map.get(str, &existing_global_ref)) {
+        return existing_global_ref;
+    }
+
     Global global = {
         .type = this->create_array_type(this->i8_type, str.len + 1),
         .data = {(uint8_t *)this->arena->null_terminate(str), str.len + 1},
@@ -514,6 +543,8 @@ GlobalRef Module::add_global_string(const String &str)
     GlobalRef ref = {(uint32_t)this->globals.len};
 
     this->globals.push_back(global);
+
+    this->global_string_map.set(str, ref);
 
     return ref;
 }

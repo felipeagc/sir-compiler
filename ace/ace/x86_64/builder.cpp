@@ -409,8 +409,9 @@ size_t X86_64AsmBuilder::encode_direct_call(FunctionRef func_ref)
 {
     ZoneScoped;
 
-    Slice<uint8_t> code = {0xe8, 0x00, 0x00, 0x00, 0x00};
-    this->obj_builder->add_to_section(SectionType_Text, code);
+    uint8_t code[] = {0xe8, 0x00, 0x00, 0x00, 0x00};
+    Slice<uint8_t> code_slice = code;
+    this->obj_builder->add_to_section(SectionType_Text, code_slice);
 
     size_t curr_offset = this->get_code_offset();
 
@@ -419,7 +420,7 @@ size_t X86_64AsmBuilder::encode_direct_call(FunctionRef func_ref)
     obj_builder->add_procedure_relocation(
         meta_func->symbol_ref, curr_offset - 4, 4);
 
-    return code.len;
+    return code_slice.len;
 }
 
 void X86_64AsmBuilder::encode_function_ending(FunctionRef func_ref)
@@ -1284,10 +1285,10 @@ void X86_64AsmBuilder::generate_inst(
 
             if (called_func->variadic) {
                 // Write the amount of vector registers to %AL
-                MetaValue float_count_imm = create_imm_int_value(
-                    module->i8_type, float_count);
-                MetaValue float_count_reg = create_register_value(
-                    module->i8_type, RegisterIndex_RAX);
+                MetaValue float_count_imm =
+                    create_imm_int_value(module->i8_type, float_count);
+                MetaValue float_count_reg =
+                    create_register_value(module->i8_type, RegisterIndex_RAX);
                 this->encode_move(func_ref, &float_count_imm, &float_count_reg);
             }
 

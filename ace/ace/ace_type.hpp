@@ -35,12 +35,10 @@ struct Type {
     };
     TypeKind kind;
 
-  private:
     uint32_t size = 0;
     uint32_t alignment = 0;
     String str = {};
 
-  public:
     String to_string(Module *module);
     uint32_t align_of(Module *module);
     uint32_t size_of(Module *module);

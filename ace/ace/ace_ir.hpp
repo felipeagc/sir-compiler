@@ -171,6 +171,7 @@ struct Module {
     StringMap<FunctionRef> function_map;
     StringMap<Type *> type_map;
     StringMap<ConstRef> const_map;
+    StringMap<GlobalRef> global_string_map;
     TargetArch target_arch;
     Endianness endianness;
 

@@ -9,6 +9,7 @@ enum CodegenValueKind {
     CodegenValueKind_Global,
     CodegenValueKind_StackSlot,
     CodegenValueKind_Constant,
+    CodegenValueKind_Inst,
 };
 
 struct CodegenValue {
@@ -18,6 +19,7 @@ struct CodegenValue {
         ace::GlobalRef global;
         ace::StackSlotRef stack_slot;
         ace::ConstRef constant;
+        ace::InstRef inst;
     };
 };
 
@@ -26,7 +28,7 @@ struct CodegenContext {
     ace::Module *module;
     ace::Builder builder;
     ace::Array<ace::Type *> type_values;
-    ace::Array<ace::InstRef> expr_values;
+    ace::Array<CodegenValue> expr_values;
     ace::Array<CodegenValue> decl_values;
 };
 
@@ -90,6 +92,166 @@ get_ir_type(Compiler *compiler, CodegenContext *ctx, TypeRef type_ref)
     ACE_ASSERT(0);
 }
 
+static CodegenValue
+codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
+{
+    Expr expr = expr_ref.get(compiler);
+    CodegenValue value = {};
+
+    switch (expr.kind) {
+    case ExprKind_Unknown: ACE_ASSERT(0); break;
+
+    case ExprKind_VoidLiteral:
+    case ExprKind_VoidType:
+    case ExprKind_PointerType:
+    case ExprKind_BoolType:
+    case ExprKind_FloatType:
+    case ExprKind_IntType:
+    case ExprKind_SliceType:
+    case ExprKind_ArrayType: break;
+
+    case ExprKind_BoolLiteral: {
+        ACE_ASSERT(!"unimplemented");
+        break;
+    }
+
+    case ExprKind_IntLiteral: {
+        ACE_ASSERT(!"unimplemented");
+        break;
+    }
+
+    case ExprKind_FloatLiteral: {
+        ACE_ASSERT(!"unimplemented");
+        break;
+    }
+
+    case ExprKind_NullLiteral: {
+        ACE_ASSERT(!"unimplemented");
+        break;
+    }
+
+    case ExprKind_StringLiteral: {
+        Type type = expr.expr_type_ref.get(compiler);
+
+        switch (type.kind) {
+        case TypeKind_Pointer: {
+            ACE_ASSERT(type.pointer.sub_type.id == compiler->u8_type.id);
+
+            auto str_global =
+                ctx->module->add_global_string(expr.str_literal.str);
+
+            value.kind = CodegenValueKind_Inst;
+            value.inst = ctx->builder.insert_global_addr(str_global);
+
+            break;
+        }
+
+        case TypeKind_Slice: {
+            ACE_ASSERT(!"unimplemented");
+            break;
+        }
+
+        default: ACE_ASSERT(0); break;
+        }
+
+        break;
+    }
+
+    case ExprKind_Identifier: {
+        ACE_ASSERT(expr.ident.decl_ref.id > 0);
+
+        Decl decl = expr.ident.decl_ref.get(compiler);
+        switch (decl.kind) {
+        case DeclKind_Function: {
+            value = ctx->decl_values[expr.ident.decl_ref.id];
+            ACE_ASSERT(value.kind > 0);
+            break;
+        }
+
+        default: ACE_ASSERT(0); break;
+        }
+
+        break;
+    }
+
+    case ExprKind_Function: {
+        ACE_ASSERT(!"unimplemented");
+        break;
+    }
+
+    case ExprKind_FunctionCall: {
+        ace::Slice<ace::InstRef> params =
+            compiler->arena->alloc<ace::InstRef>(expr.func_call.param_refs.len);
+
+        for (size_t i = 0; i < expr.func_call.param_refs.len; ++i) {
+            CodegenValue param_value =
+                codegen_expr(compiler, ctx, expr.func_call.param_refs[i]);
+            ACE_ASSERT(param_value.kind == CodegenValueKind_Inst);
+            params[i] = param_value.inst;
+        }
+
+        CodegenValue func_value =
+            codegen_expr(compiler, ctx, expr.func_call.func_expr_ref);
+
+        switch (func_value.kind) {
+        case CodegenValueKind_Function: {
+            value.kind = CodegenValueKind_Inst;
+            value.inst = ctx->builder.insert_func_call(func_value.func, params);
+            break;
+        }
+
+        default: ACE_ASSERT(0); break;
+        }
+
+        break;
+    }
+
+    case ExprKind_Unary: {
+        ACE_ASSERT(!"unimplemented");
+        break;
+    }
+
+    case ExprKind_Binary: {
+        ACE_ASSERT(!"unimplemented");
+        break;
+    }
+    }
+
+    ctx->expr_values[expr_ref.id] = value;
+    return value;
+}
+
+static void
+codegen_stmt(Compiler *compiler, CodegenContext *ctx, StmtRef stmt_ref)
+{
+    Stmt stmt = stmt_ref.get(compiler);
+    switch (stmt.kind) {
+    case StmtKind_Unknown: ACE_ASSERT(0); break;
+    case StmtKind_Expr: {
+        codegen_expr(compiler, ctx, stmt.expr.expr_ref);
+        break;
+    }
+    case StmtKind_Block: {
+        for (StmtRef sub_stmt_ref : stmt.block.stmt_refs) {
+            codegen_stmt(compiler, ctx, sub_stmt_ref);
+        }
+        break;
+    }
+    case StmtKind_Return: {
+        ACE_ASSERT(!"unimplemented");
+        break;
+    }
+    case StmtKind_If: {
+        ACE_ASSERT(!"unimplemented");
+        break;
+    }
+    case StmtKind_While: {
+        ACE_ASSERT(!"unimplemented");
+        break;
+    }
+    }
+}
+
 static void
 codegen_decl(Compiler *compiler, CodegenContext *ctx, DeclRef decl_ref)
 {
@@ -133,11 +295,17 @@ codegen_decl(Compiler *compiler, CodegenContext *ctx, DeclRef decl_ref)
             param_types,
             return_type);
 
+        ctx->decl_values[decl_ref.id] = value;
+
         if (!(decl.func.flags & FunctionFlags_Extern)) {
             ctx->builder.set_function(value.func);
 
             auto block = module->insert_block_at_end(value.func);
             ctx->builder.position_at_end(block);
+
+            for (StmtRef stmt_ref : decl.func.body_stmts) {
+                codegen_stmt(compiler, ctx, stmt_ref);
+            }
 
             ctx->builder.insert_return_void();
         }
@@ -154,8 +322,6 @@ codegen_decl(Compiler *compiler, CodegenContext *ctx, DeclRef decl_ref)
         break;
     }
     }
-
-    ctx->decl_values[decl_ref.id] = value;
 }
 
 void codegen_file(Compiler *compiler, File *file)
@@ -171,7 +337,7 @@ void codegen_file(Compiler *compiler, File *file)
         ace::Array<ace::Type *>::create(ace::MallocAllocator::get_instance());
     ctx.type_values.resize(compiler->types.len);
     for (size_t i = 0; i < compiler->types.len; ++i) {
-        ctx.type_values[i] = {};
+        ctx.type_values[i] = nullptr;
     }
 
     ctx.decl_values =
@@ -182,7 +348,7 @@ void codegen_file(Compiler *compiler, File *file)
     }
 
     ctx.expr_values =
-        ace::Array<ace::InstRef>::create(ace::MallocAllocator::get_instance());
+        ace::Array<CodegenValue>::create(ace::MallocAllocator::get_instance());
     ctx.expr_values.resize(compiler->exprs.len);
     for (size_t i = 0; i < compiler->exprs.len; ++i) {
         ctx.expr_values[i] = {};
@@ -192,12 +358,14 @@ void codegen_file(Compiler *compiler, File *file)
         codegen_decl(compiler, &ctx, decl_ref);
     }
 
+#if 0
     {
         auto allocator = ace::MallocAllocator::get_instance();
         ace::String str = ctx.module->print_alloc(allocator);
         printf("%.*s", (int)str.len, str.ptr);
         allocator->free(str);
     }
+#endif
 
     ace::ObjectBuilder *obj_builder = ace::create_elf64_builder(ctx.module);
     ace::AsmBuilder *asm_builder =

@@ -318,6 +318,7 @@ struct Expr {
     union {
         struct {
             ace::String str;
+            DeclRef decl_ref;
         } ident;
         struct {
             ace::String str;

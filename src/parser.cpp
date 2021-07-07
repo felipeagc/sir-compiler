@@ -2,33 +2,6 @@
 
 using namespace ace;
 
-static bool expr_needs_semi(const Expr *expr)
-{
-    switch (expr->kind) {
-    case ExprKind_Unknown: {
-        ACE_ASSERT(0);
-        break;
-    }
-    case ExprKind_BoolLiteral:
-    case ExprKind_BoolType:
-    case ExprKind_FloatLiteral:
-    case ExprKind_FloatType:
-    case ExprKind_FunctionCall:
-    case ExprKind_Identifier:
-    case ExprKind_IntLiteral:
-    case ExprKind_IntType:
-    case ExprKind_NullLiteral:
-    case ExprKind_UnitLiteral:
-    case ExprKind_UnitType:
-    case ExprKind_PointerType:
-    case ExprKind_StringLiteral:
-    case ExprKind_If: return true;
-    case ExprKind_Block:
-    case ExprKind_Function: return false;
-    }
-    return true;
-}
-
 const char *token_kind_to_string(TokenKind kind)
 {
     switch (kind) {
@@ -801,7 +774,7 @@ static Expr parse_primary_expr(Compiler *compiler, TokenizerState *state)
     return expr;
 }
 
-static Expr parse_function_expr(Compiler *compiler, TokenizerState *state)
+static Expr parse_func_expr(Compiler *compiler, TokenizerState *state)
 {
     Expr expr = {};
 
@@ -887,10 +860,19 @@ static Expr parse_function_expr(Compiler *compiler, TokenizerState *state)
 
     state->consume_token(compiler, TokenKind_Arrow);
 
-    Expr body_expr = parse_expr(compiler, state);
-    ExprRef body_expr_ref = compiler->add_expr(body_expr);
+    state->consume_token(compiler, TokenKind_LCurly);
 
-    expr.func.body_expr_ref = body_expr_ref;
+    state->next_token(compiler, &next_token);
+    while (next_token.kind != TokenKind_RCurly) {
+        Stmt stmt = parse_stmt(compiler, state);
+        StmtRef stmt_ref = compiler->add_stmt(stmt);
+
+        expr.func.body_stmts.push_back(stmt_ref);
+
+        state->next_token(compiler, &next_token);
+    }
+
+    state->consume_token(compiler, TokenKind_RCurly);
 
     return expr;
 }
@@ -935,68 +917,173 @@ static Expr parse_func_call_expr(Compiler *compiler, TokenizerState *state)
     return expr;
 }
 
-static Expr parse_expr(Compiler *compiler, TokenizerState *state)
+enum BinaryOpSymbolKind {
+    BinaryOpSymbol_Expr,
+    BinaryOpSymbol_Operator,
+};
+
+struct BinaryOpSymbol {
+    BinaryOpSymbolKind kind;
+    union {
+        Expr expr;
+        BinaryOp op;
+    };
+};
+
+static Expr parse_binary_expr(Compiler *compiler, TokenizerState *state)
 {
+    Allocator *allocator = compiler->arena;
+
+    Expr expr = parse_func_call_expr(compiler, state);
+
     Token next_token = {};
     state->next_token(compiler, &next_token);
-
-    Expr expr = {};
-
     switch (next_token.kind) {
-    case TokenKind_LCurly: {
-        Token lcurly_token = state->consume_token(compiler, TokenKind_LCurly);
+    case TokenKind_Add:
+    case TokenKind_Sub:
+    case TokenKind_Mul:
+    case TokenKind_Div:
+    case TokenKind_Mod:
+    case TokenKind_BitOr:
+    case TokenKind_BitXor:
+    case TokenKind_BitAnd:
+    case TokenKind_LShift:
+    case TokenKind_RShift: break;
+    default: return expr;
+    }
 
-        expr.kind = ExprKind_Block;
-        expr.loc = lcurly_token.loc;
-        expr.block.stmt_refs = ace::Array<StmtRef>::create(compiler->arena);
+    ace::Array<BinaryOp> op_stack =
+        ace::Array<BinaryOp>::create(MallocAllocator::get_instance());
+    ace::Array<BinaryOpSymbol> symbol_queue =
+        ace::Array<BinaryOpSymbol>::create(MallocAllocator::get_instance());
 
-        state->next_token(compiler, &next_token);
-        while (next_token.kind != TokenKind_RCurly) {
-            StmtRef sub_stmt_ref =
-                compiler->add_stmt(parse_stmt(compiler, state));
+    static uint8_t precedences[BinaryOp_MAX] = {
+        0,  // BinaryOp_Unknown,
+        4,  // BinaryOp_Add
+        4,  // BinaryOp_Sub
+        3,  // BinaryOp_Mul
+        3,  // BinaryOp_Div
+        3,  // BinaryOp_Mod
+        8,  // BinaryOp_BitAnd
+        10, // BinaryOp_BitOr
+        9,  // BinaryOp_BitXor
+        5,  // BinaryOp_LShift
+        5,  // BinaryOp_RShift
+        7,  // BinaryOp_Equal
+        7,  // BinaryOp_NotEqual
+        6,  // BinaryOp_Less
+        6,  // BinaryOp_LessEqual
+        6,  // BinaryOp_Greater
+        6,  // BinaryOp_GreaterEqual
+    };
 
-            expr.block.stmt_refs.push_back(sub_stmt_ref);
+    {
+        BinaryOpSymbol expr_symbol = {};
+        expr_symbol.kind = BinaryOpSymbol_Expr;
+        expr_symbol.expr = expr;
+        symbol_queue.push_back(expr_symbol);
+    }
 
-            state->next_token(compiler, &next_token);
+    while (true) {
+        BinaryOp op = BinaryOp_Unknown;
+        switch (next_token.kind) {
+        case TokenKind_Add: op = BinaryOp_Add; break;
+        case TokenKind_Sub: op = BinaryOp_Sub; break;
+        case TokenKind_Mul: op = BinaryOp_Mul; break;
+        case TokenKind_Div: op = BinaryOp_Div; break;
+        case TokenKind_Mod: op = BinaryOp_Mod; break;
+        case TokenKind_BitAnd: op = BinaryOp_BitAnd; break;
+        case TokenKind_BitOr: op = BinaryOp_BitOr; break;
+        case TokenKind_BitXor: op = BinaryOp_BitXor; break;
+        case TokenKind_LShift: op = BinaryOp_LShift; break;
+        case TokenKind_RShift: op = BinaryOp_RShift; break;
+        case TokenKind_EqualEqual: op = BinaryOp_Equal; break;
+        case TokenKind_NotEqual: op = BinaryOp_NotEqual; break;
+        case TokenKind_Less: op = BinaryOp_Less; break;
+        case TokenKind_LessEqual: op = BinaryOp_LessEqual; break;
+        case TokenKind_Greater: op = BinaryOp_Greater; break;
+        case TokenKind_GreaterEqual: op = BinaryOp_GreaterEqual; break;
+        default: break;
         }
 
-        state->consume_token(compiler, TokenKind_RCurly);
-        break;
-    }
-    case TokenKind_If: {
-        Token if_token = state->consume_token(compiler, TokenKind_If);
-        expr.kind = ExprKind_If;
-        expr.loc = if_token.loc;
-        expr.if_ = {};
+        if (op == BinaryOp_Unknown) break;
 
-        state->consume_token(compiler, TokenKind_LParen);
+        state->consume_token(compiler, next_token.kind);
 
-        expr.if_.cond_expr_ref =
-            compiler->add_expr(parse_expr(compiler, state));
+        while (op_stack.len > 0 &&
+               precedences[op_stack[op_stack.len - 1]] < precedences[op]) {
+            BinaryOp popped_op = op_stack[op_stack.len - 1];
+            op_stack.pop();
 
-        state->consume_token(compiler, TokenKind_RParen);
-
-        expr.if_.true_expr_ref =
-            compiler->add_expr(parse_expr(compiler, state));
-
-        state->next_token(compiler, &next_token);
-        if (next_token.kind == TokenKind_Else) {
-            state->consume_token(compiler, TokenKind_Else);
-
-            expr.if_.false_expr_ref =
-                compiler->add_expr(parse_expr(compiler, state));
+            BinaryOpSymbol op_symbol = {};
+            op_symbol.kind = BinaryOpSymbol_Operator;
+            op_symbol.op = popped_op;
+            symbol_queue.push_back(op_symbol);
         }
 
-        break;
-    }
-    default: {
-        expr = parse_func_call_expr(compiler, state);
-        break;
-    }
+        op_stack.push_back(op);
+
+        Expr right_expr = parse_func_call_expr(compiler, state);
+
+        {
+            BinaryOpSymbol expr_symbol = {};
+            expr_symbol.kind = BinaryOpSymbol_Expr;
+            expr_symbol.expr = right_expr;
+            symbol_queue.push_back(expr_symbol);
+        }
+
+        state->next_token(compiler, &next_token);
     }
 
-    ACE_ASSERT(expr.kind != ExprKind_Unknown);
-    return expr;
+    while (op_stack.len > 0) {
+        BinaryOp popped_op = op_stack[op_stack.len - 1];
+        op_stack.pop();
+
+        BinaryOpSymbol op_symbol = {};
+        op_symbol.kind = BinaryOpSymbol_Operator;
+        op_symbol.op = popped_op;
+        symbol_queue.push_back(op_symbol);
+    }
+
+    ace::Array<Expr> expr_stack =
+        ace::Array<Expr>::create(MallocAllocator::get_instance());
+
+    for (size_t i = 0; i < symbol_queue.len; ++i) {
+        BinaryOpSymbol symbol = symbol_queue[i];
+        if (symbol.kind == BinaryOpSymbol_Operator) {
+            ACE_ASSERT(expr_stack.len >= 2);
+            Expr right_expr = expr_stack[expr_stack.len - 1];
+            Expr left_expr = expr_stack[expr_stack.len - 2];
+            expr_stack.pop();
+            expr_stack.pop();
+
+            Expr bin_expr = {};
+            bin_expr.kind = ExprKind_Binary;
+            bin_expr.loc = left_expr.loc;
+            bin_expr.binary.op = symbol.op;
+            bin_expr.binary.left_ref = compiler->add_expr(left_expr);
+            bin_expr.binary.right_ref = compiler->add_expr(right_expr);
+
+            expr_stack.push_back(bin_expr);
+        } else {
+            expr_stack.push_back(symbol.expr);
+        }
+    }
+
+    ACE_ASSERT(expr_stack.len == 1);
+
+    Expr result_expr = expr_stack[0];
+
+    op_stack.destroy();
+    symbol_queue.destroy();
+    expr_stack.destroy();
+
+    return result_expr;
+}
+
+static Expr parse_expr(Compiler *compiler, TokenizerState *state)
+{
+    return parse_binary_expr(compiler, state);
 }
 
 static Stmt parse_stmt(Compiler *compiler, TokenizerState *state)
@@ -1015,7 +1102,8 @@ static Stmt parse_stmt(Compiler *compiler, TokenizerState *state)
 
         state->consume_token(compiler, TokenKind_LParen);
 
-        stmt.if_.cond_expr_ref = compiler->add_expr(parse_expr(compiler, state));
+        stmt.if_.cond_expr_ref =
+            compiler->add_expr(parse_expr(compiler, state));
 
         state->consume_token(compiler, TokenKind_RParen);
 
@@ -1092,6 +1180,8 @@ parse_top_level_decl(Compiler *compiler, TokenizerState *state, File *file)
             ace::Array<DeclRef>::create(compiler->arena);
         func_decl.func.return_type_expr_refs =
             ace::Array<ExprRef>::create(compiler->arena);
+        func_decl.func.body_stmts =
+            ace::Array<StmtRef>::create(compiler->arena);
 
         state->next_token(compiler, &next_token);
         switch (next_token.kind) {
@@ -1171,16 +1261,19 @@ parse_top_level_decl(Compiler *compiler, TokenizerState *state, File *file)
         if (func_decl.func.flags & FunctionFlags_Extern) {
             state->consume_token(compiler, TokenKind_Semicolon);
         } else {
-            state->consume_token(compiler, TokenKind_Equal);
+            state->consume_token(compiler, TokenKind_LCurly);
 
-            Expr body_expr = parse_expr(compiler, state);
-            ExprRef body_expr_ref = compiler->add_expr(body_expr);
+            state->next_token(compiler, &next_token);
+            while (next_token.kind != TokenKind_RCurly) {
+                Stmt stmt = parse_stmt(compiler, state);
+                StmtRef stmt_ref = compiler->add_stmt(stmt);
 
-            if (expr_needs_semi(&body_expr)) {
-                state->consume_token(compiler, TokenKind_Semicolon);
+                func_decl.func.body_stmts.push_back(stmt_ref);
+
+                state->next_token(compiler, &next_token);
             }
 
-            func_decl.func.body_expr_ref = body_expr_ref;
+            state->consume_token(compiler, TokenKind_RCurly);
         }
 
         DeclRef func_decl_ref = compiler->add_decl(func_decl);

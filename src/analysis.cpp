@@ -77,16 +77,6 @@ static void analyze_expr(
         compiler->add_error(expr.loc, "unimplemented");
         break;
     }
-    case ExprKind_Block: {
-        for (StmtRef stmt_ref : expr.block.stmt_refs) {
-            analyze_stmt(compiler, state, stmt_ref);
-        }
-        break;
-    }
-    case ExprKind_If: {
-        compiler->add_error(expr.loc, "unimplemented");
-        break;
-    }
     }
 
     compiler->exprs[expr_ref.id] = expr;
@@ -146,9 +136,6 @@ static void analyze_decl(Compiler *compiler, AnalyzerState *state, DeclRef decl_
             analyze_decl(compiler, state, param_decl_ref);
         }
 
-        if (decl.func.body_expr_ref.id > 0) {
-            analyze_expr(compiler, state, decl.func.body_expr_ref);
-        }
         break;
     }
     case DeclKind_FunctionParameter: {

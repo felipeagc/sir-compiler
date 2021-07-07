@@ -220,6 +220,35 @@ enum FunctionFlags {
     FunctionFlags_Extern = 1 << 1,
 };
 
+enum UnaryOp {
+    UnaryOp_Unknown,
+
+    UnaryOp_Dereference,
+    UnaryOp_Not,
+    UnaryOp_Negate,
+};
+
+enum BinaryOp {
+    BinaryOp_Unknown,
+    BinaryOp_Add,
+    BinaryOp_Sub,
+    BinaryOp_Mul,
+    BinaryOp_Div,
+    BinaryOp_Mod,
+    BinaryOp_BitAnd,
+    BinaryOp_BitOr,
+    BinaryOp_BitXor,
+    BinaryOp_LShift,
+    BinaryOp_RShift,
+    BinaryOp_Equal,
+    BinaryOp_NotEqual,
+    BinaryOp_Less,
+    BinaryOp_LessEqual,
+    BinaryOp_Greater,
+    BinaryOp_GreaterEqual,
+    BinaryOp_MAX,
+};
+
 enum ExprKind {
     ExprKind_Unknown = 0,
     ExprKind_Identifier,
@@ -236,8 +265,8 @@ enum ExprKind {
     ExprKind_BoolType,
     ExprKind_IntType,
     ExprKind_FloatType,
-    ExprKind_Block,
-    ExprKind_If,
+    ExprKind_Unary,
+    ExprKind_Binary,
 };
 
 struct Expr {
@@ -263,7 +292,7 @@ struct Expr {
             uint32_t flags;
             ace::Array<ExprRef> return_type_expr_refs;
             ace::Array<DeclRef> param_decl_refs;
-            ExprRef body_expr_ref;
+            ace::Array<StmtRef> body_stmts;
         } func;
         struct {
             ExprRef func_expr_ref;
@@ -280,13 +309,14 @@ struct Expr {
             uint32_t bits;
         } float_type;
         struct {
-            ace::Array<StmtRef> stmt_refs;
-        } block;
+            ExprRef left_ref;
+            ExprRef right_ref;
+            BinaryOp op;
+        } binary;
         struct {
-            ExprRef cond_expr_ref;
-            ExprRef true_expr_ref;
-            ExprRef false_expr_ref;
-        } if_;
+            ExprRef left_ref;
+            UnaryOp op;
+        } unary;
     };
 };
 
@@ -338,7 +368,7 @@ struct Decl {
             uint32_t flags;
             ace::Array<ExprRef> return_type_expr_refs;
             ace::Array<DeclRef> param_decl_refs;
-            ExprRef body_expr_ref;
+            ace::Array<StmtRef> body_stmts;
         } func;
         struct {
             ExprRef type_expr;

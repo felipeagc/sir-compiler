@@ -13,6 +13,9 @@ static void analyze_expr(
     ExprRef expr_ref,
     TypeRef expected_type = {0})
 {
+    (void) state;
+    (void) expected_type;
+
     ACE_ASSERT(expr_ref.id > 0);
     Expr expr = compiler->exprs[expr_ref.id];
 
@@ -21,7 +24,7 @@ static void analyze_expr(
         ACE_ASSERT(0);
         break;
     }
-    case ExprKind_UnitType: {
+    case ExprKind_VoidType: {
         compiler->add_error(expr.loc, "unimplemented");
         break;
     }
@@ -61,7 +64,7 @@ static void analyze_expr(
         compiler->add_error(expr.loc, "unimplemented");
         break;
     }
-    case ExprKind_UnitLiteral: {
+    case ExprKind_VoidLiteral: {
         compiler->add_error(expr.loc, "unimplemented");
         break;
     }
@@ -74,6 +77,14 @@ static void analyze_expr(
         break;
     }
     case ExprKind_FunctionCall: {
+        compiler->add_error(expr.loc, "unimplemented");
+        break;
+    }
+    case ExprKind_Unary: {
+        compiler->add_error(expr.loc, "unimplemented");
+        break;
+    }
+    case ExprKind_Binary: {
         compiler->add_error(expr.loc, "unimplemented");
         break;
     }

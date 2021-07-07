@@ -78,7 +78,7 @@ const char *token_kind_to_string(TokenKind kind)
     case TokenKind_Break: return "break";
     case TokenKind_Continue: return "continue";
     case TokenKind_Return: return "return";
-    case TokenKind_Unit: return "unit";
+    case TokenKind_Void: return "void";
     case TokenKind_Bool: return "bool";
     case TokenKind_True: return "true";
     case TokenKind_False: return "false";
@@ -156,8 +156,6 @@ struct TokenizerState {
 
     Token consume_token(Compiler *compiler, TokenKind token_kind)
     {
-        Allocator *allocator = compiler->arena;
-
         Token token = {};
         *this = this->next_token(compiler, &token);
         if (token.kind != token_kind) {
@@ -614,17 +612,9 @@ static Expr parse_primary_expr(Compiler *compiler, TokenizerState *state)
 
     switch (next_token.kind) {
     case TokenKind_LParen: {
-        Token lparen_token = state->consume_token(compiler, TokenKind_LParen);
-
-        state->next_token(compiler, &next_token);
-        if (next_token.kind == TokenKind_RParen) {
-            expr.kind = ExprKind_UnitLiteral;
-            expr.loc = next_token.loc;
-            state->consume_token(compiler, TokenKind_RParen);
-        } else {
-            expr = parse_expr(compiler, state);
-            state->consume_token(compiler, TokenKind_RParen);
-        }
+        state->consume_token(compiler, TokenKind_LParen);
+        expr = parse_expr(compiler, state);
+        state->consume_token(compiler, TokenKind_RParen);
         break;
     }
     case TokenKind_Identifier: {
@@ -692,10 +682,10 @@ static Expr parse_primary_expr(Compiler *compiler, TokenizerState *state)
         expr.ptr_type.sub_expr_ref = sub_expr_ref;
         break;
     }
-    case TokenKind_Unit: {
+    case TokenKind_Void: {
         *state = state->next_token(compiler, &next_token);
 
-        expr.kind = ExprKind_UnitType;
+        expr.kind = ExprKind_VoidType;
         expr.loc = next_token.loc;
         break;
     }
@@ -932,8 +922,6 @@ struct BinaryOpSymbol {
 
 static Expr parse_binary_expr(Compiler *compiler, TokenizerState *state)
 {
-    Allocator *allocator = compiler->arena;
-
     Expr expr = parse_func_call_expr(compiler, state);
 
     Token next_token = {};

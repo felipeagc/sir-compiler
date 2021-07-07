@@ -252,6 +252,7 @@ Module *Module::create(TargetArch target_arch, Endianness endianness)
         .endianness = endianness,
 
         .void_type = nullptr,
+        .bool_type = nullptr,
         .i8_type = nullptr,
         .i16_type = nullptr,
         .i32_type = nullptr,

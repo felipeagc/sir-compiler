@@ -83,7 +83,7 @@ Compiler Compiler::create()
     keyword_map.set("break", TokenKind_Break);
     keyword_map.set("continue", TokenKind_Continue);
     keyword_map.set("return", TokenKind_Return);
-    keyword_map.set("unit", TokenKind_Unit);
+    keyword_map.set("void", TokenKind_Void);
     keyword_map.set("bool", TokenKind_Bool);
     keyword_map.set("u8", TokenKind_U8);
     keyword_map.set("u16", TokenKind_U16);
@@ -244,8 +244,9 @@ ace::String Type::to_string(Compiler *compiler)
     }
 
     switch (this->kind) {
-    case TypeKind_Unit: {
-        this->str = "@unit";
+    case TypeKind_Unknown: ACE_ASSERT(0); break;
+    case TypeKind_Void: {
+        this->str = "@void";
         break;
     }
     case TypeKind_Bool: {
@@ -352,10 +353,12 @@ ace::String Type::to_string(Compiler *compiler)
 
 uint32_t Type::align_of(Compiler *compiler)
 {
+    (void)compiler;
     return 0;
 }
 
 uint32_t Type::size_of(Compiler *compiler)
 {
+    (void)compiler;
     return 0;
 }

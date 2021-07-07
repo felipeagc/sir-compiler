@@ -353,6 +353,7 @@ void Compiler::compile(ace::String path)
         *file = {
             .path = path,
             .text = ace::String{file_content.ptr, file_content.len},
+            .line_count = 0,
             .scope = Scope::create(this, file),
             .top_level_decls = ace::Array<DeclRef>::create(this->arena),
         };
@@ -369,8 +370,10 @@ void Compiler::compile(ace::String path)
         uint64_t secs = end_time.tv_sec - start_time.tv_sec;
         uint64_t nsecs = end_time.tv_nsec - start_time.tv_nsec;
         double time = (double)secs + ((double)nsecs / (double)1e9);
+        double total_line_count = (double)file->line_count;
 
-        printf("Compilation time: %lfs\n", time);
+        printf("Compilation time: %.3lf seconds\n", time);
+        printf("Lines per second: %.3lf lines/s\n", total_line_count / time);
     } catch (...) {
         if (this->errors.len == 0) {
             fprintf(

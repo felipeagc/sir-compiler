@@ -49,6 +49,7 @@ struct Scope {
 struct File {
     ace::String path;
     ace::String text;
+    size_t line_count;
 
     Scope *scope;
     ace::Array<DeclRef> top_level_decls;

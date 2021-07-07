@@ -1337,4 +1337,6 @@ void parse_file(Compiler *compiler, File *file)
 
         parse_top_level_decl(compiler, &state, file);
     }
+
+    file->line_count = state.line + 1;
 }

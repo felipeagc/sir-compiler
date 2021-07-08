@@ -171,6 +171,12 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
             break;
         }
 
+        case DeclKind_FunctionParameter: {
+            value = ctx->decl_values[expr.ident.decl_ref.id];
+            ACE_ASSERT(value.kind == CodegenValueKind_Inst);
+            break;
+        }
+
         default: ACE_ASSERT(0); break;
         }
 
@@ -304,6 +310,15 @@ codegen_decl(Compiler *compiler, CodegenContext *ctx, DeclRef decl_ref)
 
         ctx->decl_values[decl_ref.id] = value;
 
+        for (size_t i = 0; i < decl.func.param_decl_refs.len; ++i) {
+            DeclRef param_decl_ref = decl.func.param_decl_refs[i];
+
+            CodegenValue param_value = {};
+            param_value.kind = CodegenValueKind_Inst;
+            param_value.inst = module->get_func_param(value.func, i);
+            ctx->decl_values[param_decl_ref.id] = param_value;
+        }
+
         if (!(decl.func.flags & FunctionFlags_Extern)) {
             ctx->builder.set_function(value.func);
 
@@ -367,7 +382,7 @@ void codegen_file(Compiler *compiler, File *file)
         codegen_decl(compiler, &ctx, decl_ref);
     }
 
-#if 0
+#if 1
     {
         auto allocator = ace::MallocAllocator::get_instance();
         ace::String str = ctx.module->print_alloc(allocator);

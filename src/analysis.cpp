@@ -374,9 +374,11 @@ analyze_decl(Compiler *compiler, AnalyzerState *state, DeclRef decl_ref)
         decl.decl_type_ref =
             compiler->create_func_type(return_type, param_types);
 
+        state->scope_stack.push_back(decl.func.scope);
         for (StmtRef stmt_ref : decl.func.body_stmts) {
             analyze_stmt(compiler, state, stmt_ref);
         }
+        state->scope_stack.pop();
 
         break;
     }

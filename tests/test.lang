@@ -1,5 +1,10 @@
 def extern puts(_: *u8): i32;
 
+def derp(str: *u8) {
+	puts(str);
+}
+
 def export main(argc: i32, argv: **u8) {
+	derp("hey");
 	puts("hello, world!");
 }

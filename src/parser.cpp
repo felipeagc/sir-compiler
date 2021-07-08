@@ -944,6 +944,43 @@ static Expr parse_func_call_expr(Compiler *compiler, TokenizerState *state)
     return expr;
 }
 
+static Expr parse_unary_expr(Compiler *compiler, TokenizerState *state)
+{
+    ZoneScoped;
+
+    Token next_token = {};
+    state->next_token(compiler, &next_token);
+    switch (next_token.kind) {
+    case TokenKind_Sub:
+    case TokenKind_Not:
+    case TokenKind_BitAnd: {
+        *state = state->next_token(compiler, &next_token);
+
+        UnaryOp op = {};
+
+        switch (next_token.kind) {
+        case TokenKind_Sub: op = UnaryOp_Negate; break;
+        case TokenKind_Not: op = UnaryOp_Not; break;
+        case TokenKind_BitAnd: op = UnaryOp_AddressOf; break;
+        default: ACE_ASSERT(0); break;
+        }
+
+        Expr expr = {};
+        expr.kind = ExprKind_Unary;
+        expr.loc = next_token.loc;
+        expr.unary.left_ref =
+            compiler->add_expr(parse_unary_expr(compiler, state));
+        expr.unary.op = op;
+
+        return expr;
+    }
+
+    default: break;
+    }
+
+    return parse_func_call_expr(compiler, state);
+}
+
 enum BinaryOpSymbolKind {
     BinaryOpSymbol_Expr,
     BinaryOpSymbol_Operator,
@@ -961,7 +998,7 @@ static Expr parse_binary_expr(Compiler *compiler, TokenizerState *state)
 {
     ZoneScoped;
 
-    Expr expr = parse_func_call_expr(compiler, state);
+    Expr expr = parse_unary_expr(compiler, state);
 
     Token next_token = {};
     state->next_token(compiler, &next_token);
@@ -1050,7 +1087,7 @@ static Expr parse_binary_expr(Compiler *compiler, TokenizerState *state)
 
         op_stack.push_back(op);
 
-        Expr right_expr = parse_func_call_expr(compiler, state);
+        Expr right_expr = parse_unary_expr(compiler, state);
 
         {
             BinaryOpSymbol expr_symbol = {};

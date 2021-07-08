@@ -51,16 +51,19 @@ static void analyze_expr(
         ACE_ASSERT(0);
         break;
     }
+
     case ExprKind_VoidType: {
         expr.expr_type_ref = compiler->type_type;
         expr.as_type_ref = compiler->void_type;
         break;
     }
+
     case ExprKind_BoolType: {
         expr.expr_type_ref = compiler->type_type;
         expr.as_type_ref = compiler->bool_type;
         break;
     }
+
     case ExprKind_IntType: {
         expr.expr_type_ref = compiler->type_type;
         if (expr.int_type.is_signed) {
@@ -80,6 +83,7 @@ static void analyze_expr(
         }
         break;
     }
+
     case ExprKind_FloatType: {
         expr.expr_type_ref = compiler->type_type;
         switch (expr.float_type.bits) {
@@ -88,6 +92,7 @@ static void analyze_expr(
         }
         break;
     }
+
     case ExprKind_PointerType: {
         analyze_expr(
             compiler, state, expr.ptr_type.sub_expr_ref, compiler->type_type);
@@ -98,6 +103,7 @@ static void analyze_expr(
         }
         break;
     }
+
     case ExprKind_SliceType: {
         analyze_expr(
             compiler,
@@ -112,6 +118,7 @@ static void analyze_expr(
         }
         break;
     }
+
     case ExprKind_ArrayType: {
         analyze_expr(
             compiler,
@@ -144,10 +151,12 @@ static void analyze_expr(
         }
         break;
     }
+
     case ExprKind_BoolLiteral: {
         expr.expr_type_ref = compiler->bool_type;
         break;
     }
+
     case ExprKind_IntLiteral: {
         if (expected_type_ref.id &&
             (expected_type_ref.get(compiler).kind == TypeKind_Int ||
@@ -158,6 +167,7 @@ static void analyze_expr(
         }
         break;
     }
+
     case ExprKind_FloatLiteral: {
         if (expected_type_ref.id &&
             expected_type_ref.get(compiler).kind == TypeKind_Float) {
@@ -167,6 +177,7 @@ static void analyze_expr(
         }
         break;
     }
+
     case ExprKind_StringLiteral: {
         expr.expr_type_ref = compiler->create_slice_type(compiler->u8_type);
         if (expected_type_ref.id) {
@@ -178,6 +189,7 @@ static void analyze_expr(
         }
         break;
     }
+
     case ExprKind_NullLiteral: {
         if (expected_type_ref.id &&
             expected_type_ref.get(compiler).kind == TypeKind_Pointer) {
@@ -188,10 +200,12 @@ static void analyze_expr(
         }
         break;
     }
+
     case ExprKind_VoidLiteral: {
         expr.expr_type_ref = compiler->void_type;
         break;
     }
+
     case ExprKind_Identifier: {
         Scope *scope = *state->scope_stack.last();
         DeclRef decl_ref = scope->lookup(expr.ident.str);
@@ -209,10 +223,12 @@ static void analyze_expr(
         }
         break;
     }
+
     case ExprKind_Function: {
         compiler->add_error(expr.loc, "unimplemented function expr");
         break;
     }
+
     case ExprKind_FunctionCall: {
         analyze_expr(compiler, state, expr.func_call.func_expr_ref);
 
@@ -247,10 +263,38 @@ static void analyze_expr(
 
         break;
     }
+
     case ExprKind_Unary: {
-        compiler->add_error(expr.loc, "unimplemented unary expr");
+        switch (expr.unary.op) {
+        case UnaryOp_Unknown: ACE_ASSERT(0); break;
+        case UnaryOp_AddressOf: {
+            analyze_expr(compiler, state, expr.unary.left_ref);
+
+            TypeRef subtype_ref =
+                expr.unary.left_ref.get(compiler).expr_type_ref;
+            if (subtype_ref.id) {
+                expr.expr_type_ref = compiler->create_pointer_type(subtype_ref);
+            }
+
+            break;
+        }
+        case UnaryOp_Dereference: {
+            compiler->add_error(expr.loc, "'.*' not implemented");
+            break;
+        }
+        case UnaryOp_Negate: {
+            compiler->add_error(expr.loc, "'-' not implemented");
+            break;
+        }
+        case UnaryOp_Not: {
+            compiler->add_error(expr.loc, "'!' not implemented");
+            break;
+        }
+        }
+
         break;
     }
+
     case ExprKind_Binary: {
         compiler->add_error(expr.loc, "unimplemented binary expr");
         break;

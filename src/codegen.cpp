@@ -4,6 +4,8 @@
 #include <ace_ir.hpp>
 #include <ace_obj.hpp>
 
+struct CodegenContext;
+
 enum CodegenValueKind {
     CodegenValueKind_Unknown = 0,
     CodegenValueKind_Function,
@@ -22,6 +24,8 @@ struct CodegenValue {
         ace::ConstRef constant;
         ace::InstRef inst;
     };
+
+    CodegenValue address_of(CodegenContext *ctx);
 };
 
 struct CodegenContext {
@@ -34,6 +38,35 @@ struct CodegenContext {
 
     ace::Array<ace::FunctionRef> function_stack;
 };
+
+CodegenValue CodegenValue::address_of(CodegenContext *ctx)
+{
+    CodegenValue result = {};
+    result.kind = CodegenValueKind_Inst;
+
+    switch (this->kind) {
+    case CodegenValueKind_Unknown:
+    case CodegenValueKind_Inst:
+    case CodegenValueKind_Constant: {
+        ACE_ASSERT(0);
+        break;
+    }
+    case CodegenValueKind_Function: {
+        ACE_ASSERT(!"unimplemented");
+        break;
+    }
+    case CodegenValueKind_StackSlot: {
+        result.inst = ctx->builder.insert_stack_addr(this->stack_slot);
+        break;
+    }
+    case CodegenValueKind_Global: {
+        result.inst = ctx->builder.insert_global_addr(this->global);
+        break;
+    }
+    }
+
+    return result;
+}
 
 static void
 codegen_decl(Compiler *compiler, CodegenContext *ctx, DeclRef decl_ref);
@@ -216,6 +249,12 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
             break;
         }
 
+        case DeclKind_LocalVarDecl: {
+            value = ctx->decl_values[expr.ident.decl_ref.id];
+            ACE_ASSERT(value.kind == CodegenValueKind_StackSlot);
+            break;
+        }
+
         default: ACE_ASSERT(0); break;
         }
 
@@ -255,7 +294,31 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
     }
 
     case ExprKind_Unary: {
-        ACE_ASSERT(!"unimplemented");
+
+        switch (expr.unary.op) {
+        case UnaryOp_Unknown: ACE_ASSERT(0); break;
+        case UnaryOp_AddressOf: {
+            CodegenValue operand_value =
+                codegen_expr(compiler, ctx, expr.unary.left_ref);
+
+            value = operand_value.address_of(ctx);
+
+            break;
+        }
+        case UnaryOp_Dereference: {
+            ACE_ASSERT(!"unimplemented");
+            break;
+        }
+        case UnaryOp_Negate: {
+            ACE_ASSERT(!"unimplemented");
+            break;
+        }
+        case UnaryOp_Not: {
+            ACE_ASSERT(!"unimplemented");
+            break;
+        }
+        }
+
         break;
     }
 

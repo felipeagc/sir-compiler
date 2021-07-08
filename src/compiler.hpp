@@ -261,15 +261,17 @@ enum FunctionFlags {
 };
 
 enum UnaryOp {
-    UnaryOp_Unknown,
+    UnaryOp_Unknown = 0,
 
+    UnaryOp_AddressOf,
     UnaryOp_Dereference,
     UnaryOp_Not,
     UnaryOp_Negate,
 };
 
 enum BinaryOp {
-    BinaryOp_Unknown,
+    BinaryOp_Unknown = 0,
+
     BinaryOp_Add,
     BinaryOp_Sub,
     BinaryOp_Mul,

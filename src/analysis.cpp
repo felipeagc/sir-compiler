@@ -290,22 +290,32 @@ analyze_stmt(Compiler *compiler, AnalyzerState *state, StmtRef stmt_ref)
         ACE_ASSERT(0);
         break;
     }
+
     case StmtKind_Block: {
         compiler->add_error(stmt.loc, "unimplemented block stmt");
         break;
     }
+
     case StmtKind_Expr: {
         analyze_expr(compiler, state, stmt.expr.expr_ref);
         break;
     }
+
+    case StmtKind_Decl: {
+        analyze_decl(compiler, state, stmt.decl.decl_ref);
+        break;
+    }
+
     case StmtKind_Return: {
         compiler->add_error(stmt.loc, "unimplemented return stmt");
         break;
     }
+
     case StmtKind_If: {
         compiler->add_error(stmt.loc, "unimplemented if stmt");
         break;
     }
+
     case StmtKind_While: {
         compiler->add_error(stmt.loc, "unimplemented while stmt");
         break;
@@ -390,7 +400,37 @@ analyze_decl(Compiler *compiler, AnalyzerState *state, DeclRef decl_ref)
         break;
     }
     case DeclKind_LocalVarDecl: {
-        compiler->add_error(decl.loc, "local var decl unimplemented");
+        Scope *scope = *state->scope_stack.last();
+        scope->add(compiler, decl_ref);
+
+        TypeRef var_type = {0};
+
+        if (decl.local_var_decl.type_expr.id > 0) {
+            analyze_expr(
+                compiler,
+                state,
+                decl.local_var_decl.type_expr,
+                compiler->type_type);
+            var_type = decl.local_var_decl.type_expr.get(compiler).as_type_ref;
+        }
+
+        if (decl.local_var_decl.value_expr.id > 0) {
+            analyze_expr(
+                compiler, state, decl.local_var_decl.value_expr, var_type);
+            if (var_type.id == 0) {
+                var_type =
+                    decl.local_var_decl.value_expr.get(compiler).expr_type_ref;
+            }
+        }
+
+        decl.decl_type_ref = var_type;
+
+        if (decl.decl_type_ref.id == 0) {
+            compiler->add_error(
+                decl.loc,
+                "could not resolve type for local variable declaration");
+        }
+
         break;
     }
     case DeclKind_GlobalVarDecl: {

@@ -376,6 +376,7 @@ enum StmtKind {
     StmtKind_Unknown = 0,
     StmtKind_Block,
     StmtKind_Expr,
+    StmtKind_Decl,
     StmtKind_If,
     StmtKind_While,
     StmtKind_Return,
@@ -391,6 +392,9 @@ struct Stmt {
         struct {
             ExprRef expr_ref;
         } expr;
+        struct {
+            DeclRef decl_ref;
+        } decl;
         struct {
             ExprRef returned_expr_ref;
         } return_;

@@ -7,6 +7,7 @@ def derp(str: *u8) {
 def export main(argc: i32, argv: **u8) {
 	a: i32 = 123;
 	b: f64 = 123;
+	d: f64 = b;
 	c: *f64 = &b;
 	derp("hey");
 	puts("hello, world!");

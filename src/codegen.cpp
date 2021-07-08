@@ -26,6 +26,8 @@ struct CodegenValue {
     };
 
     CodegenValue address_of(CodegenContext *ctx);
+    CodegenValue load(CodegenContext *ctx, ace::Type *type) const;
+    void store(CodegenContext *ctx, const CodegenValue &other);
 };
 
 struct CodegenContext {
@@ -66,6 +68,64 @@ CodegenValue CodegenValue::address_of(CodegenContext *ctx)
     }
 
     return result;
+}
+
+CodegenValue CodegenValue::load(CodegenContext *ctx, ace::Type *type) const
+{
+    CodegenValue result = *this;
+    result.kind = CodegenValueKind_Inst;
+
+    switch (this->kind) {
+    case CodegenValueKind_Unknown:
+    case CodegenValueKind_Inst:
+    case CodegenValueKind_Function:
+    case CodegenValueKind_Constant: {
+        break;
+    }
+    case CodegenValueKind_StackSlot: {
+        result.inst = ctx->builder.insert_stack_load(this->stack_slot);
+        break;
+    }
+    case CodegenValueKind_Global: {
+        result.inst = ctx->builder.insert_global_load(this->global, type);
+        break;
+    }
+    }
+
+    return result;
+}
+
+void CodegenValue::store(CodegenContext *ctx, const CodegenValue &other)
+{
+    switch (this->kind) {
+    case CodegenValueKind_Unknown:
+    case CodegenValueKind_Inst:
+    case CodegenValueKind_Function:
+    case CodegenValueKind_Constant: {
+        ACE_ASSERT(0);
+        break;
+    }
+    case CodegenValueKind_StackSlot: {
+        ace::FunctionRef current_func_ref = ctx->builder.current_func_ref;
+        ace::Function *func = &ctx->module->functions[current_func_ref.id];
+        ace::StackSlot *stack_slot = &func->stack_slots[this->stack_slot.id];
+
+        CodegenValue loaded_val = other.load(ctx, stack_slot->type);
+        ACE_ASSERT(loaded_val.kind == CodegenValueKind_Inst);
+
+        ctx->builder.insert_stack_store(this->stack_slot, loaded_val.inst);
+        break;
+    }
+    case CodegenValueKind_Global: {
+        ace::Global *global = &ctx->module->globals[this->global.id];
+
+        CodegenValue loaded_val = other.load(ctx, global->type);
+        ACE_ASSERT(loaded_val.kind == CodegenValueKind_Inst);
+
+        ctx->builder.insert_global_store(this->global, loaded_val.inst);
+        break;
+    }
+    }
 }
 
 static void
@@ -460,10 +520,10 @@ codegen_decl(Compiler *compiler, CodegenContext *ctx, DeclRef decl_ref)
 
     case DeclKind_LocalVarDecl: {
         ace::FunctionRef func_ref = *ctx->function_stack.last();
+        ace::Type *ir_type = get_ir_type(compiler, ctx, decl.decl_type_ref);
 
         value.kind = CodegenValueKind_StackSlot;
-        value.stack_slot = module->add_stack_slot(
-            func_ref, get_ir_type(compiler, ctx, decl.decl_type_ref));
+        value.stack_slot = module->add_stack_slot(func_ref, ir_type);
 
         ctx->decl_values[decl_ref.id] = value;
 
@@ -471,9 +531,8 @@ codegen_decl(Compiler *compiler, CodegenContext *ctx, DeclRef decl_ref)
             CodegenValue assigned_value =
                 codegen_expr(compiler, ctx, decl.local_var_decl.value_expr);
 
-            ACE_ASSERT(assigned_value.kind == CodegenValueKind_Inst);
             ctx->builder.insert_stack_store(
-                value.stack_slot, assigned_value.inst);
+                value.stack_slot, assigned_value.load(ctx, ir_type).inst);
         }
 
         break;

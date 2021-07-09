@@ -1202,11 +1202,6 @@ static Stmt parse_stmt(Compiler *compiler, TokenizerState *state)
             stmt.block.stmt_refs.push_back(sub_stmt_ref);
 
             state->next_token(compiler, &next_token);
-            if (next_token.kind != TokenKind_RCurly) {
-                state->consume_token(compiler, TokenKind_Semicolon);
-            }
-
-            state->next_token(compiler, &next_token);
         }
 
         state->consume_token(compiler, TokenKind_RCurly);

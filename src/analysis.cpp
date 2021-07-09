@@ -369,7 +369,9 @@ analyze_stmt(Compiler *compiler, AnalyzerState *state, StmtRef stmt_ref)
     }
 
     case StmtKind_Block: {
-        compiler->add_error(stmt.loc, "unimplemented block stmt");
+        for (StmtRef sub_stmt_ref : stmt.block.stmt_refs) {
+            analyze_stmt(compiler, state, sub_stmt_ref);
+        }
         break;
     }
 

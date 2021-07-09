@@ -273,6 +273,17 @@ static void analyze_expr(
 
             TypeRef subtype_ref =
                 expr.unary.left_ref.get(compiler).expr_type_ref;
+            if (!subtype_ref.is_runtime(compiler)) {
+                Type subtype = subtype_ref.get(compiler);
+                ace::String type_string = subtype.to_string(compiler);
+                compiler->add_error(
+                    expr.loc,
+                    "cannot take address of variable of non-runtime type: "
+                    "'%.*s'",
+                    (int)type_string.len,
+                    type_string.ptr);
+            }
+
             if (subtype_ref.id) {
                 expr.expr_type_ref = compiler->create_pointer_type(subtype_ref);
             }
@@ -496,6 +507,18 @@ analyze_decl(Compiler *compiler, AnalyzerState *state, DeclRef decl_ref)
                 decl.loc,
                 "could not resolve type for local variable "
                 "declaration");
+            break;
+        }
+
+        if (!decl.decl_type_ref.is_runtime(compiler)) {
+            Type decl_type = decl.decl_type_ref.get(compiler);
+            ace::String type_string = decl_type.to_string(compiler);
+            compiler->add_error(
+                decl.loc,
+                "cannot create stack variable of non-runtime type: "
+                "'%.*s'",
+                (int)type_string.len,
+                type_string.ptr);
         }
 
         break;

@@ -34,6 +34,7 @@ struct TypeRef {
     uint32_t id;
 
     Type get(Compiler *compiler);
+    bool is_runtime(Compiler *compiler);
 };
 
 struct Scope {

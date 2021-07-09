@@ -21,6 +21,26 @@ bool ExprRef::is_lvalue(Compiler *compiler)
     return is_lvalue;
 }
 
+bool TypeRef::is_runtime(Compiler *compiler)
+{
+    bool is_runtime = true;
+
+    Type type = this->get(compiler);
+    switch (type.kind) {
+    case TypeKind_Unknown:
+    case TypeKind_UntypedFloat:
+    case TypeKind_UntypedInt:
+    case TypeKind_Function:
+    case TypeKind_Type: {
+        is_runtime = false;
+        break;
+    }
+    default: break;
+    }
+
+    return is_runtime;
+}
+
 Scope *Scope::create(Compiler *compiler, File *file, Scope *parent)
 {
     Scope *scope = compiler->arena->alloc<Scope>();

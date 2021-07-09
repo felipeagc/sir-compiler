@@ -6,7 +6,8 @@ struct AnalyzerState {
     ace::Array<Scope *> scope_stack;
 };
 
-bool interp_expr(Compiler *compiler, ExprRef expr_ref, InterpValue *out_value)
+static bool
+interp_expr(Compiler *compiler, ExprRef expr_ref, InterpValue *out_value)
 {
     Expr expr = expr_ref.get(compiler);
     switch (expr.kind) {
@@ -339,21 +340,7 @@ analyze_stmt(Compiler *compiler, AnalyzerState *state, StmtRef stmt_ref)
         analyze_expr(compiler, state, stmt.assign.assigned_expr_ref);
 
         Expr assigned_expr = stmt.assign.assigned_expr_ref.get(compiler);
-
-        bool is_assignable = false;
-        if (assigned_expr.kind == ExprKind_Identifier) {
-            DeclKind decl_kind =
-                assigned_expr.ident.decl_ref.get(compiler).kind;
-            is_assignable =
-                (decl_kind == DeclKind_LocalVarDecl ||
-                 decl_kind == DeclKind_GlobalVarDecl);
-        } else if (
-            assigned_expr.kind == ExprKind_Unary &&
-            assigned_expr.unary.op == UnaryOp_Dereference) {
-            is_assignable = true;
-        }
-
-        if (!is_assignable) {
+        if (!stmt.assign.assigned_expr_ref.is_lvalue(compiler)) {
             compiler->add_error(
                 assigned_expr.loc, "expression is not assignable");
             break;

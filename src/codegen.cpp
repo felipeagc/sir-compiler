@@ -366,7 +366,20 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
             CodegenValue operand_value =
                 codegen_expr(compiler, ctx, expr.unary.left_ref);
 
-            value = operand_value.address_of(ctx);
+            if (!expr.unary.left_ref.is_lvalue(compiler)) {
+                ace::FunctionRef func_ref = *ctx->function_stack.last();
+
+                Expr left_expr = expr.unary.left_ref.get(compiler);
+                ace::Type *ir_type =
+                    get_ir_type(compiler, ctx, left_expr.expr_type_ref);
+                ace::StackSlotRef stack_slot =
+                    ctx->module->add_stack_slot(func_ref, ir_type);
+
+                value.kind = CodegenValueKind_Inst;
+                value.inst = ctx->builder.insert_stack_addr(stack_slot);
+            } else {
+                value = operand_value.address_of(ctx);
+            }
 
             break;
         }

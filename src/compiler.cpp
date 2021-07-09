@@ -3,6 +3,24 @@
 #include <stdio.h>
 #include <time.h>
 
+bool ExprRef::is_lvalue(Compiler *compiler)
+{
+    bool is_lvalue = false;
+    Expr expr = this->get(compiler);
+
+    if (expr.kind == ExprKind_Identifier) {
+        DeclKind decl_kind = expr.ident.decl_ref.get(compiler).kind;
+        is_lvalue =
+            (decl_kind == DeclKind_LocalVarDecl ||
+             decl_kind == DeclKind_GlobalVarDecl);
+    } else if (
+        expr.kind == ExprKind_Unary && expr.unary.op == UnaryOp_Dereference) {
+        is_lvalue = true;
+    }
+
+    return is_lvalue;
+}
+
 Scope *Scope::create(Compiler *compiler, File *file, Scope *parent)
 {
     Scope *scope = compiler->arena->alloc<Scope>();

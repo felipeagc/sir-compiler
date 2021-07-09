@@ -27,6 +27,7 @@ struct ExprRef {
     uint32_t id;
 
     Expr get(Compiler *compiler);
+    bool is_lvalue(Compiler *compiler);
 };
 
 struct TypeRef {

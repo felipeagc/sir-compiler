@@ -235,32 +235,61 @@ static void analyze_expr(
 
         Expr func_expr = expr.func_call.func_expr_ref.get(compiler);
         Type func_type = func_expr.expr_type_ref.get(compiler);
-        if (func_type.kind != TypeKind_Function) {
+        switch (func_type.kind) {
+        case TypeKind_Function: {
+            // Actual function call
+            if (func_type.func.param_types.len !=
+                expr.func_call.param_refs.len) {
+                compiler->add_error(
+                    expr.loc,
+                    "expected '%zu' parameters for function call, instead got "
+                    "'%zu'",
+                    func_type.func.param_types.len,
+                    expr.func_call.param_refs.len);
+                break;
+            }
+
+            for (size_t i = 0; i < expr.func_call.param_refs.len; ++i) {
+                TypeRef param_expected_type = func_type.func.param_types[i];
+                analyze_expr(
+                    compiler,
+                    state,
+                    expr.func_call.param_refs[i],
+                    param_expected_type);
+            }
+
+            expr.expr_type_ref = func_type.func.return_type;
+            break;
+        }
+
+        case TypeKind_Type: {
+            // Type cast
+
+            if (expr.func_call.param_refs.len != 1) {
+                compiler->add_error(
+                    func_expr.loc, "expected type cast to have 1 parameter");
+                break;
+            }
+
+            ACE_ASSERT(func_expr.as_type_ref.id != 0);
+
+            analyze_expr(
+                compiler,
+                state,
+                expr.func_call.param_refs[0],
+                func_expr.as_type_ref);
+
+            expr.expr_type_ref = func_expr.as_type_ref;
+
+            break;
+        }
+
+        default: {
             compiler->add_error(
                 func_expr.loc, "expected expression to have function type");
             break;
         }
-
-        if (func_type.func.param_types.len != expr.func_call.param_refs.len) {
-            compiler->add_error(
-                expr.loc,
-                "expected '%zu' parameters for function call, instead got "
-                "'%zu'",
-                func_type.func.param_types.len,
-                expr.func_call.param_refs.len);
-            break;
         }
-
-        for (size_t i = 0; i < expr.func_call.param_refs.len; ++i) {
-            TypeRef param_expected_type = func_type.func.param_types[i];
-            analyze_expr(
-                compiler,
-                state,
-                expr.func_call.param_refs[i],
-                param_expected_type);
-        }
-
-        expr.expr_type_ref = func_type.func.return_type;
 
         break;
     }

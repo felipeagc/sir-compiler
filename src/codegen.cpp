@@ -327,28 +327,48 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
     }
 
     case ExprKind_FunctionCall: {
-        ace::Slice<ace::InstRef> params =
-            compiler->arena->alloc<ace::InstRef>(expr.func_call.param_refs.len);
+        Expr func_expr = expr.func_call.func_expr_ref.get(compiler);
+        Type func_type = func_expr.expr_type_ref.get(compiler);
 
-        for (size_t i = 0; i < expr.func_call.param_refs.len; ++i) {
-            CodegenValue param_value =
-                codegen_expr(compiler, ctx, expr.func_call.param_refs[i]);
-            TypeRef param_type =
-                expr.func_call.param_refs[i].get(compiler).expr_type_ref;
-            ace::Type *param_ir_type = get_ir_type(compiler, ctx, param_type);
+        switch (func_type.kind) {
+        case TypeKind_Function: {
+            ace::Slice<ace::InstRef> params =
+                compiler->arena->alloc<ace::InstRef>(
+                    expr.func_call.param_refs.len);
 
-            param_value = param_value.load(ctx, param_ir_type);
-            ACE_ASSERT(param_value.kind == CodegenValueKind_Inst);
-            params[i] = param_value.inst;
+            for (size_t i = 0; i < expr.func_call.param_refs.len; ++i) {
+                CodegenValue param_value =
+                    codegen_expr(compiler, ctx, expr.func_call.param_refs[i]);
+                TypeRef param_type =
+                    expr.func_call.param_refs[i].get(compiler).expr_type_ref;
+                ace::Type *param_ir_type =
+                    get_ir_type(compiler, ctx, param_type);
+
+                param_value = param_value.load(ctx, param_ir_type);
+                ACE_ASSERT(param_value.kind == CodegenValueKind_Inst);
+                params[i] = param_value.inst;
+            }
+
+            CodegenValue func_value =
+                codegen_expr(compiler, ctx, expr.func_call.func_expr_ref);
+
+            switch (func_value.kind) {
+            case CodegenValueKind_Function: {
+                value.kind = CodegenValueKind_Inst;
+                value.inst =
+                    ctx->builder.insert_func_call(func_value.func, params);
+                break;
+            }
+
+            default: ACE_ASSERT(0); break;
+            }
+
+            break;
         }
 
-        CodegenValue func_value =
-            codegen_expr(compiler, ctx, expr.func_call.func_expr_ref);
-
-        switch (func_value.kind) {
-        case CodegenValueKind_Function: {
-            value.kind = CodegenValueKind_Inst;
-            value.inst = ctx->builder.insert_func_call(func_value.func, params);
+        case TypeKind_Type: {
+            ACE_ASSERT(expr.func_call.param_refs.len == 1);
+            value = codegen_expr(compiler, ctx, expr.func_call.param_refs[0]);
             break;
         }
 
@@ -616,7 +636,7 @@ void codegen_file(Compiler *compiler, File *file)
         codegen_decl(compiler, &ctx, decl_ref);
     }
 
-#if 1
+#if !NDEBUG
     {
         auto allocator = ace::MallocAllocator::get_instance();
         ace::String str = ctx.module->print_alloc(allocator);

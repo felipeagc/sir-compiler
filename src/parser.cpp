@@ -1260,9 +1260,20 @@ static Stmt parse_stmt(Compiler *compiler, TokenizerState *state)
             Expr expr = parse_expr(compiler, state);
             ExprRef expr_ref = compiler->add_expr(expr);
 
-            stmt.kind = StmtKind_Expr;
-            stmt.loc = expr.loc;
-            stmt.expr.expr_ref = expr_ref;
+            state->next_token(compiler, &next_token);
+            if (next_token.kind == TokenKind_Equal) {
+                *state = state->next_token(compiler, &next_token);
+
+                stmt.kind = StmtKind_Assign;
+                stmt.loc = expr.loc;
+                stmt.assign.assigned_expr_ref = expr_ref;
+                stmt.assign.value_expr_ref =
+                    compiler->add_expr(parse_expr(compiler, state));
+            } else {
+                stmt.kind = StmtKind_Expr;
+                stmt.loc = expr.loc;
+                stmt.expr.expr_ref = expr_ref;
+            }
         }
 
         state->consume_token(compiler, TokenKind_Semicolon);

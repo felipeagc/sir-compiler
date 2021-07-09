@@ -335,6 +335,39 @@ analyze_stmt(Compiler *compiler, AnalyzerState *state, StmtRef stmt_ref)
         break;
     }
 
+    case StmtKind_Assign: {
+        analyze_expr(compiler, state, stmt.assign.assigned_expr_ref);
+
+        Expr assigned_expr = stmt.assign.assigned_expr_ref.get(compiler);
+
+        bool is_assignable = false;
+        if (assigned_expr.kind == ExprKind_Identifier) {
+            DeclKind decl_kind =
+                assigned_expr.ident.decl_ref.get(compiler).kind;
+            is_assignable =
+                (decl_kind == DeclKind_LocalVarDecl ||
+                 decl_kind == DeclKind_GlobalVarDecl);
+        } else if (
+            assigned_expr.kind == ExprKind_Unary &&
+            assigned_expr.unary.op == UnaryOp_Dereference) {
+            is_assignable = true;
+        }
+
+        if (!is_assignable) {
+            compiler->add_error(
+                assigned_expr.loc, "expression is not assignable");
+            break;
+        }
+
+        analyze_expr(
+            compiler,
+            state,
+            stmt.assign.value_expr_ref,
+            assigned_expr.expr_type_ref);
+
+        break;
+    }
+
     case StmtKind_Block: {
         compiler->add_error(stmt.loc, "unimplemented block stmt");
         break;
@@ -472,7 +505,8 @@ analyze_decl(Compiler *compiler, AnalyzerState *state, DeclRef decl_ref)
         if (decl.decl_type_ref.id == 0) {
             compiler->add_error(
                 decl.loc,
-                "could not resolve type for local variable declaration");
+                "could not resolve type for local variable "
+                "declaration");
         }
 
         break;

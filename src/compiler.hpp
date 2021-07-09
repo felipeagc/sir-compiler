@@ -382,6 +382,7 @@ enum StmtKind {
     StmtKind_If,
     StmtKind_While,
     StmtKind_Return,
+    StmtKind_Assign,
 };
 
 struct Stmt {
@@ -405,6 +406,10 @@ struct Stmt {
             StmtRef true_stmt_ref;
             StmtRef false_stmt_ref;
         } if_;
+        struct {
+            ExprRef assigned_expr_ref;
+            ExprRef value_expr_ref;
+        } assign;
     };
 };
 

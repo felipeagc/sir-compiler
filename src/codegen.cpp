@@ -333,6 +333,11 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
         for (size_t i = 0; i < expr.func_call.param_refs.len; ++i) {
             CodegenValue param_value =
                 codegen_expr(compiler, ctx, expr.func_call.param_refs[i]);
+            TypeRef param_type =
+                expr.func_call.param_refs[i].get(compiler).expr_type_ref;
+            ace::Type *param_ir_type = get_ir_type(compiler, ctx, param_type);
+
+            param_value = param_value.load(ctx, param_ir_type);
             ACE_ASSERT(param_value.kind == CodegenValueKind_Inst);
             params[i] = param_value.inst;
         }
@@ -408,6 +413,20 @@ codegen_stmt(Compiler *compiler, CodegenContext *ctx, StmtRef stmt_ref)
 
     case StmtKind_Decl: {
         codegen_decl(compiler, ctx, stmt.decl.decl_ref);
+        break;
+    }
+
+    case StmtKind_Assign: {
+        CodegenValue receiver_value =
+            codegen_expr(compiler, ctx, stmt.assign.assigned_expr_ref);
+        CodegenValue value =
+            codegen_expr(compiler, ctx, stmt.assign.value_expr_ref);
+
+        TypeRef value_type =
+            stmt.assign.value_expr_ref.get(compiler).expr_type_ref;
+        ace::Type *value_ir_type = get_ir_type(compiler, ctx, value_type);
+
+        receiver_value.store(ctx, value.load(ctx, value_ir_type));
         break;
     }
 

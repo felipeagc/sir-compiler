@@ -26,7 +26,7 @@ struct CodegenValue {
     };
 
     CodegenValue address_of(CodegenContext *ctx);
-    CodegenValue load(CodegenContext *ctx, ace::Type *type) const;
+    CodegenValue load(CodegenContext *ctx) const;
     void store(CodegenContext *ctx, const CodegenValue &other);
 };
 
@@ -70,7 +70,7 @@ CodegenValue CodegenValue::address_of(CodegenContext *ctx)
     return result;
 }
 
-CodegenValue CodegenValue::load(CodegenContext *ctx, ace::Type *type) const
+CodegenValue CodegenValue::load(CodegenContext *ctx) const
 {
     CodegenValue result = *this;
     result.kind = CodegenValueKind_Inst;
@@ -87,7 +87,7 @@ CodegenValue CodegenValue::load(CodegenContext *ctx, ace::Type *type) const
         break;
     }
     case CodegenValueKind_Global: {
-        result.inst = ctx->builder.insert_global_load(this->global, type);
+        result.inst = ctx->builder.insert_global_load(this->global);
         break;
     }
     }
@@ -106,20 +106,14 @@ void CodegenValue::store(CodegenContext *ctx, const CodegenValue &other)
         break;
     }
     case CodegenValueKind_StackSlot: {
-        ace::FunctionRef current_func_ref = ctx->builder.current_func_ref;
-        ace::Function *func = &ctx->module->functions[current_func_ref.id];
-        ace::StackSlot *stack_slot = &func->stack_slots[this->stack_slot.id];
-
-        CodegenValue loaded_val = other.load(ctx, stack_slot->type);
+        CodegenValue loaded_val = other.load(ctx);
         ACE_ASSERT(loaded_val.kind == CodegenValueKind_Inst);
 
         ctx->builder.insert_stack_store(this->stack_slot, loaded_val.inst);
         break;
     }
     case CodegenValueKind_Global: {
-        ace::Global *global = &ctx->module->globals[this->global.id];
-
-        CodegenValue loaded_val = other.load(ctx, global->type);
+        CodegenValue loaded_val = other.load(ctx);
         ACE_ASSERT(loaded_val.kind == CodegenValueKind_Inst);
 
         ctx->builder.insert_global_store(this->global, loaded_val.inst);
@@ -132,63 +126,63 @@ static void
 codegen_decl(Compiler *compiler, CodegenContext *ctx, DeclRef decl_ref);
 
 static ace::Type *
-get_ir_type(Compiler *compiler, CodegenContext *ctx, TypeRef type_ref)
+get_ir_type(Compiler *compiler, ace::Module *module, const Type &type)
 {
-    if (ctx->type_values[type_ref.id] != nullptr) {
-        return ctx->type_values[type_ref.id];
-    }
+    (void)compiler;
 
-    Type type = type_ref.get(compiler);
     switch (type.kind) {
     case TypeKind_Unknown:
     case TypeKind_Function:
     case TypeKind_UntypedInt:
     case TypeKind_UntypedFloat:
-    case TypeKind_Type: ACE_ASSERT(0);
+    case TypeKind_Type: return nullptr;
+
     case TypeKind_Void: {
-        return ctx->module->void_type;
+        return module->void_type;
     }
     case TypeKind_Bool: {
-        return ctx->module->i8_type;
+        return module->i8_type;
     }
     case TypeKind_Int: {
         switch (type.int_.bits) {
-        case 8: return ctx->module->i8_type;
-        case 16: return ctx->module->i16_type;
-        case 32: return ctx->module->i32_type;
-        case 64: return ctx->module->i64_type;
+        case 8: return module->i8_type;
+        case 16: return module->i16_type;
+        case 32: return module->i32_type;
+        case 64: return module->i64_type;
         }
         break;
     }
     case TypeKind_Float: {
         switch (type.float_.bits) {
-        case 32: return ctx->module->f32_type;
-        case 64: return ctx->module->f64_type;
+        case 32: return module->f32_type;
+        case 64: return module->f64_type;
         }
         break;
     }
     case TypeKind_Pointer: {
-        return ctx->module->create_pointer_type();
+        ace::Type *subtype =
+            get_ir_type(compiler, module, type.pointer.sub_type.get(compiler));
+        return module->create_pointer_type(subtype);
     }
     case TypeKind_Slice: {
-        ACE_ASSERT(!"unimplemented");
+        /* ACE_ASSERT(!"unimplemented"); */
         break;
     }
     case TypeKind_Array: {
-        ACE_ASSERT(!"unimplemented");
+        /* ACE_ASSERT(!"unimplemented"); */
         break;
     }
     case TypeKind_Tuple: {
-        ACE_ASSERT(!"unimplemented");
+        /* ACE_ASSERT(!"unimplemented"); */
         break;
     }
     case TypeKind_Struct: {
-        ACE_ASSERT(!"unimplemented");
+        /* ACE_ASSERT(!"unimplemented"); */
         break;
     }
     }
 
-    ACE_ASSERT(0);
+    return nullptr;
 }
 
 static CodegenValue
@@ -223,7 +217,7 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
         case TypeKind_Int: {
             ace::InstRef int_const =
                 ctx->builder.insert_get_const(ctx->module->create_int_const(
-                    get_ir_type(compiler, ctx, expr.expr_type_ref),
+                    ctx->type_values[expr.expr_type_ref.id],
                     expr.int_literal.i64));
 
             value.kind = CodegenValueKind_Inst;
@@ -233,7 +227,7 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
         case TypeKind_Float: {
             ace::InstRef float_const =
                 ctx->builder.insert_get_const(ctx->module->create_float_const(
-                    get_ir_type(compiler, ctx, expr.expr_type_ref),
+                    ctx->type_values[expr.expr_type_ref.id],
                     (double)expr.int_literal.i64));
 
             value.kind = CodegenValueKind_Inst;
@@ -251,7 +245,7 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
 
         ace::InstRef float_const =
             ctx->builder.insert_get_const(ctx->module->create_float_const(
-                get_ir_type(compiler, ctx, expr.expr_type_ref),
+                ctx->type_values[expr.expr_type_ref.id],
                 expr.float_literal.f64));
 
         value.kind = CodegenValueKind_Inst;
@@ -275,8 +269,11 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
             auto str_global =
                 ctx->module->add_global_string(expr.str_literal.str);
 
+            ace::InstRef global_addr = ctx->builder.insert_global_addr(str_global);
+
             value.kind = CodegenValueKind_Inst;
-            value.inst = ctx->builder.insert_global_addr(str_global);
+            value.inst = ctx->builder.insert_ptr_cast(
+                ctx->type_values[expr.expr_type_ref.id], global_addr);
 
             break;
         }
@@ -339,12 +336,8 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
             for (size_t i = 0; i < expr.func_call.param_refs.len; ++i) {
                 CodegenValue param_value =
                     codegen_expr(compiler, ctx, expr.func_call.param_refs[i]);
-                TypeRef param_type =
-                    expr.func_call.param_refs[i].get(compiler).expr_type_ref;
-                ace::Type *param_ir_type =
-                    get_ir_type(compiler, ctx, param_type);
 
-                param_value = param_value.load(ctx, param_ir_type);
+                param_value = param_value.load(ctx);
                 ACE_ASSERT(param_value.kind == CodegenValueKind_Inst);
                 params[i] = param_value.inst;
             }
@@ -391,7 +384,8 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
 
                 Expr left_expr = expr.unary.left_ref.get(compiler);
                 ace::Type *ir_type =
-                    get_ir_type(compiler, ctx, left_expr.expr_type_ref);
+                    ctx->type_values[left_expr.expr_type_ref.id];
+
                 ace::StackSlotRef stack_slot =
                     ctx->module->add_stack_slot(func_ref, ir_type);
 
@@ -455,11 +449,7 @@ codegen_stmt(Compiler *compiler, CodegenContext *ctx, StmtRef stmt_ref)
         CodegenValue value =
             codegen_expr(compiler, ctx, stmt.assign.value_expr_ref);
 
-        TypeRef value_type =
-            stmt.assign.value_expr_ref.get(compiler).expr_type_ref;
-        ace::Type *value_ir_type = get_ir_type(compiler, ctx, value_type);
-
-        receiver_value.store(ctx, value.load(ctx, value_ir_type));
+        receiver_value.store(ctx, value.load(ctx));
         break;
     }
 
@@ -511,12 +501,11 @@ codegen_decl(Compiler *compiler, CodegenContext *ctx, DeclRef decl_ref)
         ace::Slice<ace::Type *> param_types =
             compiler->arena->alloc<ace::Type *>(func_type.func.param_types.len);
         for (size_t i = 0; i < func_type.func.param_types.len; ++i) {
-            param_types[i] =
-                get_ir_type(compiler, ctx, func_type.func.param_types[i]);
+            param_types[i] = ctx->type_values[func_type.func.param_types[i].id];
         }
 
         ace::Type *return_type =
-            get_ir_type(compiler, ctx, func_type.func.return_type);
+            ctx->type_values[func_type.func.return_type.id];
 
         ace::Linkage linkage = ace::Linkage_Internal;
         if ((decl.func.flags & FunctionFlags_Exported) ||
@@ -572,7 +561,7 @@ codegen_decl(Compiler *compiler, CodegenContext *ctx, DeclRef decl_ref)
 
     case DeclKind_LocalVarDecl: {
         ace::FunctionRef func_ref = *ctx->function_stack.last();
-        ace::Type *ir_type = get_ir_type(compiler, ctx, decl.decl_type_ref);
+        ace::Type *ir_type = ctx->type_values[decl.decl_type_ref.id];
 
         value.kind = CodegenValueKind_StackSlot;
         value.stack_slot = module->add_stack_slot(func_ref, ir_type);
@@ -584,7 +573,7 @@ codegen_decl(Compiler *compiler, CodegenContext *ctx, DeclRef decl_ref)
                 codegen_expr(compiler, ctx, decl.local_var_decl.value_expr);
 
             ctx->builder.insert_stack_store(
-                value.stack_slot, assigned_value.load(ctx, ir_type).inst);
+                value.stack_slot, assigned_value.load(ctx).inst);
         }
 
         break;
@@ -612,7 +601,8 @@ void codegen_file(Compiler *compiler, File *file)
         ace::Array<ace::Type *>::create(ace::MallocAllocator::get_instance());
     ctx.type_values.resize(compiler->types.len);
     for (size_t i = 0; i < compiler->types.len; ++i) {
-        ctx.type_values[i] = nullptr;
+        ctx.type_values[i] =
+            get_ir_type(compiler, ctx.module, compiler->types[i]);
     }
 
     ctx.decl_values =

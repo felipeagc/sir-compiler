@@ -70,6 +70,7 @@ enum InstKind {
     InstKind_GlobalAddr,
     InstKind_GlobalLoad,
     InstKind_GlobalStore,
+    InstKind_PtrCast,
 };
 
 struct Inst {
@@ -110,6 +111,9 @@ struct Inst {
             GlobalRef global_ref;
             InstRef inst_ref;
         } global_store;
+        struct {
+            InstRef inst_ref;
+        } ptr_cast;
     };
     InstKind kind;
     Type *type;
@@ -189,7 +193,7 @@ public:
     static Module *create(TargetArch target_arch, Endianness endianness);
     void destroy();
 
-    Type *create_pointer_type();
+    Type *create_pointer_type(Type *sub);
     Type *create_array_type(Type *sub, uint64_t count);
     Type *create_struct_type(Slice<Type *> fields, bool packed);
 
@@ -235,12 +239,14 @@ struct Builder {
     InstRef insert_get_const(ConstRef const_ref);
 
     InstRef insert_global_addr(GlobalRef global_ref);
-    InstRef insert_global_load(GlobalRef global_ref, Type *type);
+    InstRef insert_global_load(GlobalRef global_ref);
     void insert_global_store(GlobalRef global_ref, InstRef inst_ref);
 
     InstRef insert_stack_addr(StackSlotRef ss_ref);
     InstRef insert_stack_load(StackSlotRef ss_ref);
     void insert_stack_store(StackSlotRef ss_ref, InstRef inst_ref);
+
+    InstRef insert_ptr_cast(Type *dest_type, InstRef inst_ref);
 
     InstRef
     insert_func_call(FunctionRef func_ref, const Slice<InstRef> &parameters);

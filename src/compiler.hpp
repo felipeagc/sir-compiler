@@ -14,26 +14,26 @@ struct Type;
 struct DeclRef {
     uint32_t id;
 
-    Decl get(Compiler *compiler);
+    Decl get(Compiler *compiler) const;
 };
 
 struct StmtRef {
     uint32_t id;
 
-    Stmt get(Compiler *compiler);
+    Stmt get(Compiler *compiler) const;
 };
 
 struct ExprRef {
     uint32_t id;
 
-    Expr get(Compiler *compiler);
+    Expr get(Compiler *compiler) const;
     bool is_lvalue(Compiler *compiler);
 };
 
 struct TypeRef {
     uint32_t id;
 
-    Type get(Compiler *compiler);
+    Type get(Compiler *compiler) const;
     bool is_runtime(Compiler *compiler);
 };
 
@@ -554,22 +554,22 @@ void parse_file(Compiler *compiler, File *file);
 void analyze_file(Compiler *compiler, File *file);
 void codegen_file(Compiler *compiler, File *file);
 
-inline Decl DeclRef::get(Compiler *compiler)
+inline Decl DeclRef::get(Compiler *compiler) const
 {
     return compiler->decls[this->id];
 }
 
-inline Stmt StmtRef::get(Compiler *compiler)
+inline Stmt StmtRef::get(Compiler *compiler) const
 {
     return compiler->stmts[this->id];
 }
 
-inline Expr ExprRef::get(Compiler *compiler)
+inline Expr ExprRef::get(Compiler *compiler) const
 {
     return compiler->exprs[this->id];
 }
 
-inline Type TypeRef::get(Compiler *compiler)
+inline Type TypeRef::get(Compiler *compiler) const
 {
     return compiler->types[this->id];
 }

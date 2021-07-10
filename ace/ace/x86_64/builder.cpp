@@ -1205,6 +1205,13 @@ void X86_64AsmBuilder::generate_inst(
     case InstKind_FunctionParameter: {
         break;
     }
+    case InstKind_PtrCast: {
+        MetaInst *source_meta_inst =
+            &meta_func->insts[inst->ptr_cast.inst_ref.id];
+        meta_inst->value = source_meta_inst->value;
+        meta_inst->value.type = inst->type;
+        break;
+    }
     case InstKind_GetConst: {
         MetaConst *meta_const =
             &this->meta_consts[inst->get_const.const_ref.id];
@@ -1518,7 +1525,8 @@ void X86_64AsmBuilder::generate_function(FunctionRef func_ref)
                 case InstKind_Jump:
                 case InstKind_ReturnVoid:
                 case InstKind_ReturnValue:
-                case InstKind_GetConst: break;
+                case InstKind_GetConst:
+                case InstKind_PtrCast: break;
 
                 case InstKind_GlobalAddr:
                 case InstKind_StackAddr:

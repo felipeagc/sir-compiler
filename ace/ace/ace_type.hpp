@@ -26,6 +26,9 @@ struct Type {
         } float_;
         struct {
             Type *sub;
+        } pointer;
+        struct {
+            Type *sub;
             uint64_t count;
         } array;
         struct {

@@ -60,6 +60,16 @@ static void print_instruction(
 
     switch (inst->kind) {
     case InstKind_FunctionParameter: ACE_ASSERT(0); break;
+    case InstKind_PtrCast: {
+        String type_string = inst->type->to_string(module);
+        sb->sprintf(
+            "%%r%u = ptr_cast %.*s %%r%u",
+            inst_ref.id,
+            (int)type_string.len,
+            type_string.ptr,
+            inst->ptr_cast.inst_ref.id);
+        break;
+    }
     case InstKind_GetConst: {
         String type_string = inst->type->to_string(module);
         sb->sprintf(
@@ -368,11 +378,12 @@ String Module::print_alloc(Allocator *allocator)
     return result;
 }
 
-Type *Module::create_pointer_type()
+Type *Module::create_pointer_type(Type *sub)
 {
     Type *type = this->arena->alloc<Type>();
     *type = {};
     type->kind = TypeKind_Pointer;
+    type->pointer.sub = sub;
     return this->get_cached_type(type);
 }
 
@@ -687,21 +698,25 @@ InstRef Builder::insert_global_addr(GlobalRef global_ref)
 {
     ZoneScoped;
 
+    Global *global = &this->module->globals[global_ref.id];
+
     Inst inst = {};
     inst.kind = InstKind_GlobalAddr;
-    inst.type = this->module->create_pointer_type();
+    inst.type = this->module->create_pointer_type(global->type);
     inst.global_addr = {global_ref};
 
     return push_instruction(this, inst);
 }
 
-InstRef Builder::insert_global_load(GlobalRef global_ref, Type *type)
+InstRef Builder::insert_global_load(GlobalRef global_ref)
 {
     ZoneScoped;
 
+    Global *global = &this->module->globals[global_ref.id];
+
     Inst inst = {};
     inst.kind = InstKind_GlobalLoad;
-    inst.type = type;
+    inst.type = global->type;
     inst.global_load = {global_ref};
 
     return push_instruction(this, inst);
@@ -725,9 +740,12 @@ InstRef Builder::insert_stack_addr(StackSlotRef ss_ref)
 {
     ZoneScoped;
 
+    Function *func = &this->module->functions[this->current_func_ref.id];
+    StackSlot *ss = &func->stack_slots[ss_ref.id];
+
     Inst inst = {};
     inst.kind = InstKind_StackAddr;
-    inst.type = this->module->create_pointer_type();
+    inst.type = this->module->create_pointer_type(ss->type);
     inst.stack_addr.ss_ref = {ss_ref};
 
     return push_instruction(this, inst);
@@ -756,6 +774,20 @@ void Builder::insert_stack_store(StackSlotRef ss_ref, InstRef inst_ref)
     inst.stack_store = {ss_ref, inst_ref};
 
     push_instruction(this, inst);
+}
+
+InstRef Builder::insert_ptr_cast(Type *dest_type, InstRef inst_ref)
+{
+    ZoneScoped;
+
+    ACE_ASSERT(dest_type->kind == TypeKind_Pointer);
+
+    Inst inst = {};
+    inst.kind = InstKind_PtrCast;
+    inst.type = dest_type;
+    inst.ptr_cast = {inst_ref};
+
+    return push_instruction(this, inst);
 }
 
 InstRef Builder::insert_func_call(

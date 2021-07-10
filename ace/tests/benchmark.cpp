@@ -24,7 +24,7 @@ int main()
         ace::CallingConvention_SystemV,
         ace::Linkage_External,
         true,
-        {module->create_pointer_type()},
+        {module->create_pointer_type(module->i8_type)},
         module->i32_type);
 
     for (size_t i = 0; i < 1000; ++i) {

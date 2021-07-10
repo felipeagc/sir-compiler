@@ -23,13 +23,9 @@ int main()
     auto f32_fmt_str = module->add_global_string("%lf\n");
 
     auto global_int = module->add_global(
-        module->i64_type,
-        GlobalFlags_Initialized,
-        {127, 0, 0, 0, 0, 0, 0, 0});
+        module->i64_type, GlobalFlags_Initialized, {127, 0, 0, 0, 0, 0, 0, 0});
     auto global_int2 = module->add_global(
-        module->i64_type,
-        GlobalFlags_Initialized,
-        {0, 0, 0, 0, 0, 0, 0, 0});
+        module->i64_type, GlobalFlags_Initialized, {0, 0, 0, 0, 0, 0, 0, 0});
     auto global_float1 = module->add_global(
         module->f64_type, GlobalFlags_Initialized, {0, 0, 0, 0, 0, 0, 0, 0});
 
@@ -38,7 +34,7 @@ int main()
         ace::CallingConvention_SystemV,
         ace::Linkage_External,
         false,
-        {module->create_pointer_type()},
+        {module->create_pointer_type(module->i8_type)},
         module->void_type);
 
     auto printf_func = module->add_function(
@@ -46,7 +42,7 @@ int main()
         ace::CallingConvention_SystemV,
         ace::Linkage_External,
         true,
-        {module->create_pointer_type()},
+        {module->create_pointer_type(module->i8_type)},
         module->i32_type);
 
     {
@@ -86,8 +82,8 @@ int main()
 
         builder.insert_global_store(
             global_float1,
-            builder.insert_get_const(module->create_float_const(
-                module->f64_type, 1.0)));
+            builder.insert_get_const(
+                module->create_float_const(module->f64_type, 1.0)));
 
         builder.insert_return_void();
     }
@@ -113,8 +109,8 @@ int main()
             module->add_stack_slot(function_ref, module->i64_type);
         StackSlotRef ss4 =
             module->add_stack_slot(function_ref, module->i64_type);
-        StackSlotRef ss5 =
-            module->add_stack_slot(function_ref, module->create_pointer_type());
+        StackSlotRef ss5 = module->add_stack_slot(
+            function_ref, module->create_pointer_type(module->i64_type));
 
         builder.set_function(function_ref);
 
@@ -163,38 +159,35 @@ int main()
             printf_func,
             {
                 builder.insert_global_addr(int_fmt_str),
-                builder.insert_global_load(
-                    global_int, module->i64_type),
+                builder.insert_global_load(global_int),
             });
         builder.insert_global_store(
             global_int,
             builder.insert_get_const(
                 module->create_int_const(module->i64_type, 123)));
-        auto loaded_int = builder.insert_global_load(
-            global_int2, module->i64_type);
+        auto loaded_int =
+            builder.insert_global_load(global_int2);
         builder.insert_global_store(global_int, loaded_int);
         builder.insert_func_call(
             printf_func,
             {
                 builder.insert_global_addr(int_fmt_str),
-                builder.insert_global_load(
-                    global_int, module->i64_type),
+                builder.insert_global_load(global_int),
             });
 
         builder.insert_func_call(
             printf_func,
             {
                 builder.insert_global_addr(f32_fmt_str),
-                builder.insert_global_load(
-                    global_float1, module->f64_type),
+                builder.insert_global_load(global_float1),
             });
         builder.insert_func_call(change_global_float_func, {});
         builder.insert_func_call(
             printf_func,
             {
                 builder.insert_global_addr(f32_fmt_str),
-                builder.insert_get_const(module->create_float_const(
-                    module->f64_type, 123.0)),
+                builder.insert_get_const(
+                    module->create_float_const(module->f64_type, 123.0)),
             });
 
         auto const_return = builder.insert_get_const(

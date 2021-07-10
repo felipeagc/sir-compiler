@@ -19,7 +19,9 @@ String Type::to_string(Module *module)
         break;
     }
     case TypeKind_Pointer: {
-        this->str = "@pointer";
+        String sub_string = this->pointer.sub->to_string(module);
+        this->str = module->arena->sprintf(
+            "@ptr(%.*s)", (int)sub_string.len, sub_string.ptr);
         break;
     }
     case TypeKind_Int: {

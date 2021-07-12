@@ -173,6 +173,22 @@ struct Module {
     /* InstRef insert_block_after(InstRef func_ref, InstRef block_ref); */
     /* InstRef insert_block_before(InstRef func_ref, InstRef block_ref); */
 
+    InstRef make_imm_int(Type *type, uint64_t value);
+    InstRef make_imm_float(Type *type, double value);
+
+    InstRef make_array_elem_ptr(InstRef accessed_ref, InstRef index_ref);
+
+    InstRef make_store(InstRef ptr_ref, InstRef value_ref);
+    InstRef make_load(InstRef ptr_ref);
+
+    InstRef make_ptr_cast(Type *dest_type, InstRef inst_ref);
+
+    InstRef
+    make_func_call(InstRef func_ref, const Slice<InstRef> &parameters);
+    InstRef make_jump(InstRef block_ref);
+    InstRef make_return_value(InstRef inst_ref);
+    InstRef make_return_void();
+
     String print_alloc(Allocator *allocator);
 };
 
@@ -186,21 +202,7 @@ struct Builder {
     void set_function(InstRef func_ref);
     void position_at_end(InstRef block_ref);
 
-    InstRef insert_imm_int(Type *type, uint64_t value);
-    InstRef insert_imm_float(Type *type, double value);
-
-    InstRef insert_array_elem_ptr(InstRef accessed_ref, InstRef index_ref);
-
-    void insert_store(InstRef ptr_ref, InstRef value_ref);
-    InstRef insert_load(InstRef ptr_ref);
-
-    InstRef insert_ptr_cast(Type *dest_type, InstRef inst_ref);
-
-    InstRef
-    insert_func_call(InstRef func_ref, const Slice<InstRef> &parameters);
-    void insert_jump(InstRef block_ref);
-    void insert_return_value(InstRef inst_ref);
-    void insert_return_void();
+    void insert_inst(InstRef ref);
 };
 
 inline Inst InstRef::get(Module *module) const

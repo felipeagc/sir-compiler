@@ -12,7 +12,7 @@ add_library(
   ace/ace_obj.hpp
   ace/ace_elf64.cpp
 
-  # ace/x86_64/builder.cpp
+  ace/x86_64/builder.cpp
   ace/x86_64/encoder.h
   ace/x86_64/encoder.c
 

@@ -52,124 +52,19 @@ static int64_t REGISTERS[] = {
     FE_XMM12, FE_XMM13, FE_XMM14, FE_XMM15,
 };
 
-enum MetaValueKind {
-    MetaValueKind_None,
-    MetaValueKind_Register,
-    MetaValueKind_RegisterMemIndirect,
-    MetaValueKind_ImmInt,
-    MetaValueKind_Stack,
-    MetaValueKind_Global,
-};
-
-struct MetaValue {
-    MetaValueKind kind;
-    Type *type;
-    union {
-        struct {
-            uint64_t u64;
-        } imm_int;
-        struct {
-            double f64;
-        } imm_float;
-        struct {
-            int32_t index;
-        } reg;
-        struct {
-            int32_t offset;
-        } stack;
-        struct {
-            SectionType section_type;
-            size_t offset;
-        } global;
-    };
-};
-
-struct MetaStackSlot {
-    MetaValue value;
-};
-
-struct MetaBlock {
-    uint64_t offset;
-};
-
-struct MetaInst {
-    MetaValue value;
-};
-
-struct MetaConst {
-    MetaValue value;
-    bool is_global;
-    GlobalRef global_ref;
-};
-
-struct MetaGlobal {
-    MetaValue value;
-};
-
 struct FuncJumpPatch {
     int64_t instruction;
     size_t instruction_offset;
-    BlockRef destination_block;
+    InstRef destination_block;
 };
 
 struct MetaFunction {
     uint32_t stack_size;
-    Array<MetaStackSlot> stack_slots;
-    Array<MetaBlock> blocks;
-    Array<MetaInst> insts;
     Array<FuncJumpPatch> jump_patches;
     bool registers_used[RegisterIndex_COUNT];
     int32_t saved_register_stack_offset[RegisterIndex_COUNT];
     Slice<RegisterIndex> callee_saved_registers;
     SymbolRef symbol_ref{};
-
-    void init(Module *module, ObjectBuilder *obj_builder, Function *func)
-    {
-        ZoneScoped;
-
-        *this = {};
-
-        this->jump_patches = Array<FuncJumpPatch>::create(module->arena);
-
-        this->stack_slots = Array<MetaStackSlot>::create(module->arena);
-        this->stack_slots.resize(func->stack_slots.len);
-
-        this->blocks = Array<MetaBlock>::create(module->arena);
-        this->blocks.resize(func->blocks.len);
-
-        this->insts = Array<MetaInst>::create(module->arena);
-        this->insts.resize(func->insts.len);
-
-        switch (func->calling_convention) {
-        case CallingConvention_SystemV: {
-            static RegisterIndex system_v_callee_saved[] = {
-                RegisterIndex_RBX,
-                RegisterIndex_R12,
-                RegisterIndex_R13,
-                RegisterIndex_R14,
-                RegisterIndex_R15,
-            };
-            this->callee_saved_registers = {system_v_callee_saved};
-            break;
-        }
-        }
-
-        if (func->block_refs.is_empty()) {
-            // Function without body
-            this->symbol_ref = obj_builder->add_symbol(
-                func->name,
-                SectionType_None,
-                SymbolType_None,
-                Linkage_External);
-        } else {
-            // Function with body
-            this->symbol_ref = obj_builder->add_symbol(
-                func->name,
-                SectionType_Text,
-                SymbolType_Function,
-                Linkage_External);
-        }
-    }
 
     ACE_INLINE
     RegisterIndex get_scratch_int_register_index()
@@ -184,12 +79,50 @@ struct MetaFunction {
     }
 };
 
+enum MetaValueKind {
+    MetaValueKind_Unknown = 0,
+    MetaValueKind_Function,
+    MetaValueKind_Block,
+    MetaValueKind_IRegister,
+    MetaValueKind_FRegister,
+    MetaValueKind_ImmInt,
+    MetaValueKind_Stack,
+    MetaValueKind_Global,
+};
+
+struct MetaValue {
+    MetaValueKind kind;
+    union {
+        struct {
+            uint64_t offset;
+        } block;
+        MetaFunction *func;
+        struct {
+            uint64_t u64;
+            uint8_t bytes;
+        } imm_int;
+        struct {
+            double f64;
+            uint8_t bits;
+        } imm_float;
+        struct {
+            int32_t index;
+            uint8_t bytes;
+        } reg;
+        struct {
+            int32_t offset;
+        } stack;
+        struct {
+            SectionType section_type;
+            size_t offset;
+        } global;
+    };
+};
+
 struct X86_64AsmBuilder : AsmBuilder {
     Module *module;
     ObjectBuilder *obj_builder;
-    Array<MetaFunction> meta_funcs;
-    Array<MetaGlobal> meta_globals;
-    Array<MetaConst> meta_consts;
+    Array<MetaValue> meta_insts;
 
     size_t get_code_offset();
     size_t encode(
@@ -201,45 +134,18 @@ struct X86_64AsmBuilder : AsmBuilder {
         FeOp op1 = 0,
         FeOp op2 = 0,
         FeOp op3 = 0);
-    size_t encode_direct_call(FunctionRef func_ref);
-    void encode_function_ending(FunctionRef func_ref);
-    void encode_move(FunctionRef func_ref, MetaValue *source, MetaValue *dest);
-    void encode_lea(FunctionRef func_ref, MetaValue *source, MetaValue *dest);
-    void encode_move_int_to_register(
-        MetaFunction *meta_func,
-        MetaValue *source,
-        MetaValue *dest,
-        size_t size);
-    void encode_move_int_to_stack(
-        MetaFunction *meta_func,
-        MetaValue *source,
-        MetaValue *dest,
-        size_t size);
-    void encode_move_int_to_global(
-        MetaFunction *meta_func,
-        MetaValue *source,
-        MetaValue *dest,
-        size_t size);
-    void encode_move_float_to_register(
-        MetaFunction *meta_func,
-        MetaValue *source,
-        MetaValue *dest,
-        size_t size);
-    void encode_move_float_to_stack(
-        MetaFunction *meta_func,
-        MetaValue *source,
-        MetaValue *dest,
-        size_t size);
-    void encode_move_float_to_global(
-        MetaFunction *meta_func,
-        MetaValue *source,
-        MetaValue *dest,
-        size_t size);
 
-    void
-    generate_inst(FunctionRef func_ref, BlockRef block_ref, InstRef inst_ref);
-    void generate_global(GlobalRef global_ref);
-    void generate_function(FunctionRef func_ref);
+    void encode_lea(const MetaValue &source, const MetaValue &dest);
+    void encode_move(
+        size_t byte_size, const MetaValue &source, const MetaValue &dest);
+
+    size_t encode_direct_call(InstRef func_ref);
+    void encode_function_ending(InstRef func_ref);
+
+    void generate_global(InstRef global_ref);
+    void generate_function(InstRef global_ref);
+    void generate_inst(
+        InstRef func_ref, InstRef inst_ref, const MetaValue &dest_value);
 
     virtual void generate() override;
     virtual void destroy() override;
@@ -253,114 +159,71 @@ AsmBuilder *create_x86_64_builder(Module *module, ObjectBuilder *obj_builder)
     asm_builder->module = module;
     asm_builder->obj_builder = obj_builder;
 
-    asm_builder->meta_consts =
-        Array<MetaConst>::create(MallocAllocator::get_instance());
-    asm_builder->meta_consts.resize(module->consts.len);
+    asm_builder->meta_insts =
+        Array<MetaValue>::create(MallocAllocator::get_instance());
+    asm_builder->meta_insts.resize(module->insts.len);
 
-    for (size_t i = 0; i < module->consts.len; ++i) {
-        Const *constant = &module->consts[i];
-        MetaConst *meta_const = &asm_builder->meta_consts[i];
-        *meta_const = {};
-
-        switch (constant->type->kind) {
-        case TypeKind_Int: {
-            meta_const->value = MetaValue{
-                .kind = MetaValueKind_ImmInt,
-                .type = constant->type,
-                .imm_int = {constant->u64},
-            };
-            break;
-        }
-        case TypeKind_Float: {
-            uint8_t data[8];
-            size_t byte_size = constant->type->size_of(module);
-            switch (constant->type->int_.bits) {
-            case 32: *((float *)data) = (float)constant->f64; break;
-            case 64: *((double *)data) = (double)constant->f64; break;
-            }
-
-            meta_const->is_global = true;
-            meta_const->global_ref = module->add_global(
-                constant->type,
-                GlobalFlags_Initialized | GlobalFlags_ReadOnly,
-                {data, byte_size});
-
-            break;
-        }
-        default: {
-            break;
-        }
-        }
-    }
-
-    asm_builder->meta_globals =
-        Array<MetaGlobal>::create(MallocAllocator::get_instance());
-    asm_builder->meta_globals.resize(module->globals.len);
-
-    for (size_t i = 0; i < module->globals.len; ++i) {
-        MetaGlobal *meta_global = &asm_builder->meta_globals[i];
-        *meta_global = {};
-    }
-
-    asm_builder->meta_funcs =
-        Array<MetaFunction>::create(MallocAllocator::get_instance());
-    asm_builder->meta_funcs.resize(module->functions.len);
-
-    for (size_t i = 0; i < module->functions.len; ++i) {
-        Function *func = &module->functions[i];
-        MetaFunction *meta_func = &asm_builder->meta_funcs[i];
-
-        meta_func->init(module, obj_builder, func);
+    for (size_t i = 0; i < asm_builder->meta_insts.len; ++i) {
+        asm_builder->meta_insts[i] = {};
     }
 
     return asm_builder;
 }
 
 ACE_INLINE
-MetaValue create_register_value(Type *type, RegisterIndex index)
+MetaValue create_int_register_value(uint8_t bytes, RegisterIndex index)
 {
     ZoneScoped;
 
     MetaValue value = {};
-    value.kind = MetaValueKind_Register;
-    value.type = type;
+    value.kind = MetaValueKind_IRegister;
+    value.reg.bytes = bytes;
     value.reg.index = index;
     return value;
 }
 
 ACE_INLINE
-MetaValue create_stack_value(Type *type, int32_t offset)
+MetaValue create_float_register_value(uint8_t bytes, RegisterIndex index)
+{
+    ZoneScoped;
+
+    MetaValue value = {};
+    value.kind = MetaValueKind_FRegister;
+    value.reg.bytes = bytes;
+    value.reg.index = index;
+    return value;
+}
+
+ACE_INLINE
+MetaValue create_stack_value(int32_t offset)
 {
     ZoneScoped;
 
     MetaValue value = {};
     value.kind = MetaValueKind_Stack;
-    value.type = type;
     value.stack.offset = offset;
     return value;
 }
 
 ACE_INLINE
-MetaValue create_imm_int_value(Type *type, uint64_t int_value)
+MetaValue create_imm_int_value(uint8_t bytes, uint64_t int_value)
 {
     ZoneScoped;
 
     MetaValue value = {};
     value.kind = MetaValueKind_ImmInt;
-    value.type = type;
     value.imm_int.u64 = int_value;
+    value.imm_int.bytes = bytes;
     return value;
 }
 
 ACE_INLINE
-MetaValue
-create_global_value(Type *type, SectionType section_type, size_t offset)
+MetaValue create_global_value(SectionType section_type, size_t offset)
 {
     ZoneScoped;
 
     MetaValue value = {};
     value.kind = MetaValueKind_Global;
-    value.type = type;
     value.global.offset = offset;
     value.global.section_type = section_type;
     return value;
@@ -406,7 +269,7 @@ size_t X86_64AsmBuilder::encode_at(
 }
 
 ACE_INLINE
-size_t X86_64AsmBuilder::encode_direct_call(FunctionRef func_ref)
+size_t X86_64AsmBuilder::encode_direct_call(InstRef func_ref)
 {
     ZoneScoped;
 
@@ -416,19 +279,19 @@ size_t X86_64AsmBuilder::encode_direct_call(FunctionRef func_ref)
 
     size_t curr_offset = this->get_code_offset();
 
-    MetaFunction *meta_func = &this->meta_funcs[func_ref.id];
+    MetaValue *meta_inst = &this->meta_insts[func_ref.id];
 
     obj_builder->add_procedure_relocation(
-        meta_func->symbol_ref, curr_offset - 4, 4);
+        meta_inst->func->symbol_ref, curr_offset - 4, 4);
 
     return code_slice.len;
 }
 
-void X86_64AsmBuilder::encode_function_ending(FunctionRef func_ref)
+void X86_64AsmBuilder::encode_function_ending(InstRef func_ref)
 {
     ZoneScoped;
 
-    MetaFunction *meta_func = &this->meta_funcs[func_ref.id];
+    MetaFunction *meta_func = this->meta_insts[func_ref.id].func;
 
     // Restore callee saved registers
     for (RegisterIndex reg_index : meta_func->callee_saved_registers) {
@@ -450,58 +313,47 @@ void X86_64AsmBuilder::encode_function_ending(FunctionRef func_ref)
 }
 
 void X86_64AsmBuilder::encode_lea(
-    FunctionRef func_ref, MetaValue *source, MetaValue *dest)
+    const MetaValue &source, const MetaValue &dest)
 {
     ZoneScoped;
 
-    MetaFunction *meta_func = &this->meta_funcs[func_ref.id];
+    switch (dest.kind) {
+    case MetaValueKind_IRegister: {
 
-    switch (dest->kind) {
-    case MetaValueKind_None:
-    case MetaValueKind_ImmInt:
-    case MetaValueKind_Global: ACE_ASSERT(0);
-
-    case MetaValueKind_Register: {
-        switch (source->kind) {
-        case MetaValueKind_None:ACE_ASSERT(0);
-        case MetaValueKind_Register:ACE_ASSERT(0);
-        case MetaValueKind_ImmInt:ACE_ASSERT(0);
-        case MetaValueKind_RegisterMemIndirect: ACE_ASSERT(0);
-
+        switch (source.kind) {
         case MetaValueKind_Stack: {
-            int64_t source_mem = FE_MEM(FE_BP, 0, 0, source->stack.offset);
-            this->encode(FE_LEA64rm, REGISTERS[dest->reg.index], source_mem);
+            int64_t source_mem = FE_MEM(FE_BP, 0, 0, source.stack.offset);
+            this->encode(FE_LEA64rm, REGISTERS[dest.reg.index], source_mem);
             break;
         }
-
         case MetaValueKind_Global: {
             int64_t source_mem = FE_MEM(FE_IP, 0, 0, 0);
 
-            int64_t inst_len = this->encode(
-                FE_LEA64rm, REGISTERS[dest->reg.index], source_mem);
+            int64_t inst_len =
+                this->encode(FE_LEA64rm, REGISTERS[dest.reg.index], source_mem);
             ACE_ASSERT(inst_len > 4);
 
             int64_t relocation_offset = this->get_code_offset() - 4;
 
             this->obj_builder->add_data_relocation(
-                source->global.section_type,
-                source->global.offset,
+                source.global.section_type,
+                source.global.offset,
                 relocation_offset,
                 4);
             break;
         }
+        default: ACE_ASSERT(0);
         }
+
         break;
     }
 
     case MetaValueKind_Stack: {
-        int64_t dest_mem = FE_MEM(FE_BP, 0, 0, dest->stack.offset);
+        ACE_ASSERT(!"unimplemented lea");
+#if 0
+        int64_t dest_mem = FE_MEM(FE_BP, 0, 0, dest.stack.offset);
 
-        switch (source->kind) {
-        case MetaValueKind_None:
-        case MetaValueKind_Register:
-        case MetaValueKind_ImmInt: ACE_ASSERT(0);
-
+        switch (source.kind) {
         case MetaValueKind_Stack: {
             int64_t scratch_register =
                 REGISTERS[meta_func->get_scratch_int_register_index()];
@@ -511,7 +363,6 @@ void X86_64AsmBuilder::encode_lea(
             this->encode(FE_MOV64mr, dest_mem, scratch_register);
             break;
         }
-
         case MetaValueKind_Global: {
             int64_t scratch_register =
                 REGISTERS[meta_func->get_scratch_int_register_index()];
@@ -533,65 +384,17 @@ void X86_64AsmBuilder::encode_lea(
                 4);
             break;
         }
+        default: ACE_ASSERT(0);
         }
+#endif
         break;
     }
 
-    case MetaValueKind_RegisterMemIndirect: {
-        int64_t dest_mem = FE_MEM(REGISTERS[dest->reg.index], 0, 0, 0);
-
-        switch (source->kind) {
-        case MetaValueKind_None:
-        case MetaValueKind_Register:
-        case MetaValueKind_ImmInt: ACE_ASSERT(0);
-
-        case MetaValueKind_Stack: {
-            int64_t scratch_register =
-                REGISTERS[meta_func->get_scratch_int_register_index()];
-
-            int64_t source_mem = FE_MEM(FE_BP, 0, 0, source->stack.offset);
-            this->encode(FE_LEA64rm, scratch_register, source_mem);
-            this->encode(FE_MOV64mr, dest_mem, scratch_register);
-            break;
-        }
-
-        case MetaValueKind_RegisterMemIndirect: {
-            int64_t scratch_register =
-                REGISTERS[meta_func->get_scratch_int_register_index()];
-
-            int64_t source_mem = FE_MEM(REGISTERS[source->reg.index], 0, 0, 0);
-            this->encode(FE_LEA64rm, scratch_register, source_mem);
-            this->encode(FE_MOV64mr, dest_mem, scratch_register);
-            break;
-        }
-
-        case MetaValueKind_Global: {
-            int64_t scratch_register =
-                REGISTERS[meta_func->get_scratch_int_register_index()];
-
-            int64_t source_mem = FE_MEM(FE_IP, 0, 0, 0);
-
-            int64_t inst_len =
-                this->encode(FE_LEA64rm, scratch_register, source_mem);
-            ACE_ASSERT(inst_len > 4);
-
-            int64_t relocation_offset = this->get_code_offset() - 4;
-
-            this->encode(FE_MOV64mr, dest_mem, scratch_register);
-
-            this->obj_builder->add_data_relocation(
-                source->global.section_type,
-                source->global.offset,
-                relocation_offset,
-                4);
-            break;
-        }
-        }
-        break;
-    }
+    default: ACE_ASSERT(0);
     }
 }
 
+#if 0
 void X86_64AsmBuilder::encode_move_int_to_register(
     MetaFunction *meta_func, MetaValue *source, MetaValue *dest, size_t size)
 {
@@ -1177,125 +980,293 @@ void X86_64AsmBuilder::encode_move_float_to_global(
     }
     }
 }
+#endif
 
 void X86_64AsmBuilder::encode_move(
-    FunctionRef func_ref, MetaValue *source, MetaValue *dest)
+    size_t byte_size, const MetaValue &source, const MetaValue &dest)
 {
     ZoneScoped;
 
-    ACE_ASSERT(source->type);
-    ACE_ASSERT(dest->type);
-    ACE_ASSERT(source->type == dest->type);
+    switch (dest.kind) {
+    case MetaValueKind_IRegister: {
 
-    MetaFunction *meta_func = &this->meta_funcs[func_ref.id];
+        switch (source.kind) {
+        case MetaValueKind_IRegister: {
+            ACE_ASSERT(dest.reg.bytes == source.reg.bytes);
 
-    uint32_t size = source->type->size_of(this->module);
+            int64_t x86_inst;
+            switch (byte_size) {
+            case 1: x86_inst = FE_MOV8rr; break;
+            case 2: x86_inst = FE_MOV16rr; break;
+            case 4: x86_inst = FE_MOV32rr; break;
+            case 8: x86_inst = FE_MOV64rr; break;
+            default: ACE_ASSERT(0);
+            }
 
-    switch (source->type->kind) {
-    case TypeKind_Pointer:
-    case TypeKind_Int: {
-        switch (dest->kind) {
-        case MetaValueKind_ImmInt:
-        case MetaValueKind_None: ACE_ASSERT(0); break;
-
-        case MetaValueKind_Register: {
-            this->encode_move_int_to_register(meta_func, source, dest, size);
+            this->encode(
+                x86_inst,
+                REGISTERS[dest.reg.index],
+                REGISTERS[source.reg.index]);
             break;
         }
+        case MetaValueKind_ImmInt: {
+            ACE_ASSERT(dest.reg.bytes == source.imm_int.bytes);
 
-        case MetaValueKind_Stack: {
-            this->encode_move_int_to_stack(meta_func, source, dest, size);
+            int64_t x86_inst;
+            switch (byte_size) {
+            case 1: x86_inst = FE_MOV8ri; break;
+            case 2: x86_inst = FE_MOV16ri; break;
+            case 4: x86_inst = FE_MOV32ri; break;
+            case 8: x86_inst = FE_MOV64ri; break;
+            default: ACE_ASSERT(0);
+            }
+
+            this->encode(
+                x86_inst, REGISTERS[dest.reg.index], source.imm_int.u64);
             break;
         }
-
+        case MetaValueKind_FRegister: {
+            ACE_ASSERT(!"unimplemented move");
+            break;
+        }
         case MetaValueKind_Global: {
-            this->encode_move_int_to_global(meta_func, source, dest, size);
+            int64_t source_mem = FE_MEM(FE_IP, 0, 0, 0);
+
+            int64_t x86_inst;
+            switch (byte_size) {
+            case 1: x86_inst = FE_MOV8rm; break;
+            case 2: x86_inst = FE_MOV16rm; break;
+            case 4: x86_inst = FE_MOV32rm; break;
+            case 8: x86_inst = FE_MOV64rm; break;
+            default: ACE_ASSERT(0);
+            }
+
+            int64_t inst_len =
+                this->encode(x86_inst, REGISTERS[dest.reg.index], source_mem);
+            ACE_ASSERT(inst_len > 4);
+
+            int64_t relocation_offset = this->get_code_offset() - 4;
+
+            this->obj_builder->add_data_relocation(
+                source.global.section_type,
+                source.global.offset,
+                relocation_offset,
+                4);
+
             break;
         }
-        }
-        break;
-    }
-    case TypeKind_Float: {
-        switch (dest->kind) {
-        case MetaValueKind_ImmInt:
-        case MetaValueKind_None: ACE_ASSERT(0); break;
-
-        case MetaValueKind_Register: {
-            this->encode_move_float_to_register(meta_func, source, dest, size);
-            break;
-        }
-
         case MetaValueKind_Stack: {
-            this->encode_move_float_to_stack(meta_func, source, dest, size);
+            int64_t source_mem = FE_MEM(FE_BP, 0, 0, source.stack.offset);
+
+            int64_t x86_inst;
+            switch (byte_size) {
+            case 1: x86_inst = FE_MOV8rm; break;
+            case 2: x86_inst = FE_MOV16rm; break;
+            case 4: x86_inst = FE_MOV32rm; break;
+            case 8: x86_inst = FE_MOV64rm; break;
+            default: ACE_ASSERT(0);
+            }
+
+            this->encode(x86_inst, REGISTERS[dest.reg.index], source_mem);
             break;
+        }
+        default: ACE_ASSERT(0); break;
         }
 
-        case MetaValueKind_Global: {
-            this->encode_move_float_to_global(meta_func, source, dest, size);
+        break;
+    }
+    case MetaValueKind_FRegister: {
+        ACE_ASSERT(!"unimplemented move");
+        break;
+    }
+    case MetaValueKind_Stack: {
+        int64_t dest_mem = FE_MEM(FE_BP, 0, 0, dest.stack.offset);
+
+        switch (source.kind) {
+        case MetaValueKind_IRegister: {
+            int64_t x86_inst;
+            switch (byte_size) {
+            case 1: x86_inst = FE_MOV8mr; break;
+            case 2: x86_inst = FE_MOV16mr; break;
+            case 4: x86_inst = FE_MOV32mr; break;
+            case 8: x86_inst = FE_MOV64mr; break;
+            default: ACE_ASSERT(0);
+            }
+
+            this->encode(x86_inst, dest_mem, REGISTERS[source.reg.index]);
             break;
         }
+        case MetaValueKind_ImmInt: {
+            int64_t x86_inst;
+            switch (byte_size) {
+            case 1: x86_inst = FE_MOV8mi; break;
+            case 2: x86_inst = FE_MOV16mi; break;
+            case 4: x86_inst = FE_MOV32mi; break;
+            case 8: x86_inst = FE_MOV64mi; break;
+            default: ACE_ASSERT(0);
+            }
+
+            this->encode(x86_inst, dest_mem, source.imm_int.u64);
+            break;
         }
+        case MetaValueKind_FRegister: {
+            ACE_ASSERT(!"unimplemented move");
+            break;
+        }
+        case MetaValueKind_Global: {
+            ACE_ASSERT(!"unimplemented move");
+            break;
+        }
+        case MetaValueKind_Stack: {
+            int64_t scratch_register = REGISTERS[RegisterIndex_RAX];
+            int64_t source_mem = FE_MEM(FE_BP, 0, 0, source.stack.offset);
+
+            int64_t x86_inst1;
+            int64_t x86_inst2;
+            switch (byte_size) {
+            case 1:
+                x86_inst1 = FE_MOV8rm;
+                x86_inst2 = FE_MOV8mr;
+                break;
+            case 2:
+                x86_inst1 = FE_MOV16rm;
+                x86_inst2 = FE_MOV16mr;
+                break;
+            case 4:
+                x86_inst1 = FE_MOV32rm;
+                x86_inst2 = FE_MOV32mr;
+                break;
+            case 8:
+                x86_inst1 = FE_MOV64rm;
+                x86_inst2 = FE_MOV64mr;
+                break;
+            default: ACE_ASSERT(0);
+            }
+
+            this->encode(x86_inst1, scratch_register, source_mem);
+            this->encode(x86_inst2, dest_mem, scratch_register);
+            break;
+        }
+        default: ACE_ASSERT(0); break;
+        }
+
         break;
     }
-    default: {
-        ACE_ASSERT(!"unsupported type for move");
+    case MetaValueKind_Global: {
+        ACE_ASSERT(!"unimplemented move");
         break;
     }
+    default: ACE_ASSERT(0); break;
     }
 }
 
 void X86_64AsmBuilder::generate_inst(
-    FunctionRef func_ref, BlockRef block_ref, InstRef inst_ref)
+    InstRef func_ref, InstRef inst_ref, const MetaValue &dest_value)
 {
     ZoneScoped;
 
-    (void)block_ref;
+    MetaFunction *meta_func = this->meta_insts[func_ref.id].func;
 
-    Function *func = &this->module->functions[func_ref.id];
-    MetaFunction *meta_func = &this->meta_funcs[func_ref.id];
-    Inst *inst = &func->insts[inst_ref.id];
-    MetaInst *meta_inst = &meta_func->insts[inst_ref.id];
+    Inst inst = inst_ref.get(this->module);
+    MetaValue *meta_inst = &this->meta_insts[inst_ref.id];
 
-    switch (inst->kind) {
-    case InstKind_FunctionParameter: {
+    switch (inst.kind) {
+    case InstKind_Unknown: ACE_ASSERT(0); break;
+    case InstKind_Function:
+    case InstKind_FunctionParameter:
+    case InstKind_Block: break;
+
+    case InstKind_Global: {
+        ACE_ASSERT(meta_inst->kind == MetaValueKind_Global);
+        MetaValue tmp_value = create_int_register_value(8, RegisterIndex_RAX);
+        this->encode_lea(*meta_inst, tmp_value);
+        this->encode_move(8, tmp_value, dest_value);
         break;
     }
+
+    case InstKind_StackSlot: {
+        ACE_ASSERT(meta_inst->kind == MetaValueKind_Stack);
+        MetaValue tmp_value = create_int_register_value(8, RegisterIndex_RAX);
+        this->encode_lea(*meta_inst, tmp_value);
+        this->encode_move(8, tmp_value, dest_value);
+        break;
+    }
+
+    case InstKind_ImmediateInt: {
+        if (dest_value.kind != MetaValueKind_Unknown) {
+            MetaValue source_value = create_imm_int_value(
+                inst.type->int_.bits >> 3, inst.imm_int.u64);
+            this->encode_move(
+                source_value.imm_int.bytes, source_value, dest_value);
+        }
+        break;
+    }
+
+    case InstKind_ImmediateFloat: {
+        ACE_ASSERT(!"unimplemented");
+        break;
+    }
+
     case InstKind_PtrCast: {
-        MetaInst *source_meta_inst =
-            &meta_func->insts[inst->ptr_cast.inst_ref.id];
-        meta_inst->value = source_meta_inst->value;
-        meta_inst->value.type = inst->type;
+        MetaValue *source_meta_inst =
+            &this->meta_insts[inst.ptr_cast.inst_ref.id];
+        *meta_inst = *source_meta_inst;
         break;
     }
+
     case InstKind_ArrayElemPtr: {
         ACE_ASSERT(!"unimplemented");
         break;
     }
-    case InstKind_IndirectStore: {
-        MetaInst *meta_ptr =
-            &meta_func->insts[inst->indirect_store.ptr_ref.id];
-        MetaInst *meta_value =
-            &meta_func->insts[inst->indirect_store.value_ref.id];
 
-        this->encode_move(
-            func_ref, &meta_value->value, &meta_ptr->value);
+    case InstKind_Store: {
+        this->generate_inst(
+            func_ref,
+            inst.store.value_ref,
+            this->meta_insts[inst.store.ptr_ref.id]);
+        break;
+    }
+
+    case InstKind_Load: {
+        Inst loaded_inst = inst.load.ptr_ref.get(this->module);
+        ACE_ASSERT(inst.type);
+
+        switch (loaded_inst.kind) {
+        case InstKind_Global:
+        case InstKind_StackSlot: {
+            size_t size = inst.type->size_of(this->module);
+            switch (size) {
+            case 1:
+            case 2:
+            case 4:
+            case 8: {
+                MetaValue mem_value = this->meta_insts[inst.load.ptr_ref.id];
+                this->encode_move(size, mem_value, dest_value);
+                break;
+            }
+            default: {
+                ACE_ASSERT(!"TODO: use memcpy");
+                break;
+            }
+            }
+            break;
+        }
+        default: {
+            ACE_ASSERT(!"unimplemented");
+            break;
+        }
+        }
 
         break;
     }
-    case InstKind_GetConst: {
-        MetaConst *meta_const =
-            &this->meta_consts[inst->get_const.const_ref.id];
-        meta_inst->value = meta_const->value;
-        break;
-    }
+
     case InstKind_FuncCall: {
-        Function *called_func =
-            &this->module->functions[inst->func_call.func_ref.id];
+        Function *called_func = inst.func_call.func_ref.get(this->module).func;
 
         // TODO: save and restore caller-saved registers
 
         ACE_ASSERT(
-            called_func->param_types.len <= inst->func_call.parameters.len);
+            called_func->param_types.len <= inst.func_call.parameters.len);
 
         switch (called_func->calling_convention) {
         case CallingConvention_SystemV: {
@@ -1322,31 +1293,38 @@ void X86_64AsmBuilder::generate_inst(
             uint32_t int_count = 0;
             uint32_t float_count = 0;
 
-            for (size_t i = 0; i < inst->func_call.parameters.len; ++i) {
-                InstRef param_inst_ref = inst->func_call.parameters[i];
-                Inst *param_inst = &func->insts[param_inst_ref.id];
-                MetaInst *meta_param_inst =
-                    &meta_func->insts[param_inst_ref.id];
+            // Write parameters to ABI locations
+            for (size_t i = 0; i < inst.func_call.parameters.len; ++i) {
+                InstRef param_inst_ref = inst.func_call.parameters[i];
+                ACE_ASSERT(param_inst_ref.id > 0);
+
+                Inst param_inst = param_inst_ref.get(this->module);
 
                 if (i < called_func->param_types.len) {
                     Type *param_type = called_func->param_types[i];
-                    ACE_ASSERT(param_type == param_inst->type);
+                    ACE_ASSERT(param_type == param_inst.type);
                 }
 
-                MetaValue *source_param_value = &meta_param_inst->value;
                 MetaValue dest_param_value = {};
 
-                switch (param_inst->type->kind) {
-                case TypeKind_Pointer:
+                switch (param_inst.type->kind) {
+                case TypeKind_Pointer: {
+                    dest_param_value = create_int_register_value(
+                        8, sysv_int_param_regs[int_count]);
+                    int_count++;
+                    break;
+                }
                 case TypeKind_Int: {
-                    dest_param_value = create_register_value(
-                        param_inst->type, sysv_int_param_regs[int_count]);
+                    dest_param_value = create_int_register_value(
+                        param_inst.type->int_.bits >> 3,
+                        sysv_int_param_regs[int_count]);
                     int_count++;
                     break;
                 }
                 case TypeKind_Float: {
-                    dest_param_value = create_register_value(
-                        param_inst->type, sysv_float_param_regs[float_count]);
+                    dest_param_value = create_float_register_value(
+                        param_inst.type->float_.bits >> 3,
+                        sysv_float_param_regs[float_count]);
                     float_count++;
                     break;
                 }
@@ -1356,50 +1334,51 @@ void X86_64AsmBuilder::generate_inst(
                 }
                 }
 
-                this->encode_move(
-                    func_ref, source_param_value, &dest_param_value);
+                this->generate_inst(func_ref, param_inst_ref, dest_param_value);
             }
 
             if (called_func->variadic) {
                 // Write the amount of vector registers to %AL
                 MetaValue float_count_imm =
-                    create_imm_int_value(module->i8_type, float_count);
+                    create_imm_int_value(1, float_count);
                 MetaValue float_count_reg =
-                    create_register_value(module->i8_type, RegisterIndex_RAX);
-                this->encode_move(func_ref, &float_count_imm, &float_count_reg);
+                    create_int_register_value(1, RegisterIndex_RAX);
+                this->encode_move(1, float_count_imm, float_count_reg);
             }
 
             break;
         }
         }
 
-        this->encode_direct_call(inst->func_call.func_ref);
+        this->encode_direct_call(inst.func_call.func_ref);
 
         switch (called_func->calling_convention) {
         case CallingConvention_SystemV: {
             switch (called_func->return_type->kind) {
             case TypeKind_Void: break;
 
-            case TypeKind_Int:
-            case TypeKind_Pointer: {
-                MetaValue returned_value = {
-                    .kind = MetaValueKind_Register,
-                    .type = called_func->return_type,
-                    .reg = {.index = RegisterIndex_RAX},
-                };
+            case TypeKind_Int: {
+                MetaValue returned_value = create_int_register_value(
+                    called_func->return_type->int_.bits >> 3,
+                    RegisterIndex_RAX);
+                this->encode_move(
+                    returned_value.reg.bytes, returned_value, *meta_inst);
+                break;
+            }
 
-                this->encode_move(func_ref, &returned_value, &meta_inst->value);
+            case TypeKind_Pointer: {
+                MetaValue returned_value =
+                    create_int_register_value(8, RegisterIndex_RAX);
+                this->encode_move(8, returned_value, *meta_inst);
                 break;
             }
 
             case TypeKind_Float: {
-                MetaValue returned_value = {
-                    .kind = MetaValueKind_Register,
-                    .type = called_func->return_type,
-                    .reg = {.index = RegisterIndex_XMM0},
-                };
-
-                this->encode_move(func_ref, &returned_value, &meta_inst->value);
+                MetaValue returned_value = create_float_register_value(
+                    called_func->return_type->float_.bits >> 3,
+                    RegisterIndex_XMM0);
+                this->encode_move(
+                    returned_value.reg.bytes, returned_value, *meta_inst);
                 break;
             }
 
@@ -1411,88 +1390,52 @@ void X86_64AsmBuilder::generate_inst(
 
         break;
     }
+
     case InstKind_ReturnVoid: {
         this->encode_function_ending(func_ref);
         break;
     }
+
     case InstKind_ReturnValue: {
-        Inst *returned_inst = &func->insts[inst->return_value.inst_ref.id];
-        MetaInst *returned_meta_inst =
-            &meta_func->insts[inst->return_value.inst_ref.id];
+        Inst returned_inst = inst.return_value.inst_ref.get(this->module);
+        MetaValue returned_meta_inst =
+            this->meta_insts[inst.return_value.inst_ref.id];
+        ACE_ASSERT(returned_meta_inst.kind != MetaValueKind_Unknown);
 
         // TODO: ABI compliance
-        MetaValue return_value =
-            create_register_value(returned_inst->type, RegisterIndex_RAX);
-        this->encode_move(func_ref, &returned_meta_inst->value, &return_value);
+        switch (returned_inst.type->kind) {
+        case TypeKind_Int: {
+            MetaValue return_value = create_int_register_value(
+                returned_inst.type->int_.bits >> 3, RegisterIndex_RAX);
+            this->encode_move(
+                return_value.reg.bytes, returned_meta_inst, return_value);
+            break;
+        }
+        case TypeKind_Pointer: {
+            MetaValue return_value =
+                create_int_register_value(8, RegisterIndex_RAX);
+            this->encode_move(8, returned_meta_inst, return_value);
+            break;
+        }
+        case TypeKind_Float: {
+            MetaValue return_value =
+                create_float_register_value(8, RegisterIndex_XMM0);
+            this->encode_move(
+                return_value.reg.bytes, returned_meta_inst, return_value);
+            break;
+        }
+        default: ACE_ASSERT(0); break;
+        }
 
         this->encode_function_ending(func_ref);
         break;
     }
-    case InstKind_StackStore: {
-        MetaStackSlot *meta_stack_slot =
-            &meta_func->stack_slots[inst->stack_store.ss_ref.id];
-        MetaInst *stored_meta_inst =
-            &meta_func->insts[inst->stack_store.inst_ref.id];
 
-        this->encode_move(
-            func_ref, &stored_meta_inst->value, &meta_stack_slot->value);
-
-        break;
-    }
-    case InstKind_StackLoad: {
-        MetaStackSlot *meta_stack_slot =
-            &meta_func->stack_slots[inst->stack_load.ss_ref.id];
-
-        MetaInst *meta_inst = &meta_func->insts[inst_ref.id];
-
-        this->encode_move(func_ref, &meta_stack_slot->value, &meta_inst->value);
-
-        break;
-    }
-    case InstKind_GlobalStore: {
-        MetaGlobal *meta_global =
-            &this->meta_globals[inst->global_store.global_ref.id];
-        MetaInst *stored_meta_inst =
-            &meta_func->insts[inst->global_store.inst_ref.id];
-
-        this->encode_move(
-            func_ref, &stored_meta_inst->value, &meta_global->value);
-
-        break;
-    }
-    case InstKind_GlobalLoad: {
-        MetaGlobal *meta_global =
-            &this->meta_globals[inst->global_store.global_ref.id];
-
-        MetaInst *meta_inst = &meta_func->insts[inst_ref.id];
-
-        this->encode_move(func_ref, &meta_global->value, &meta_inst->value);
-
-        break;
-    }
-    case InstKind_GlobalAddr: {
-        MetaGlobal *meta_global =
-            &this->meta_globals[inst->global_store.global_ref.id];
-
-        MetaInst *meta_inst = &meta_func->insts[inst_ref.id];
-
-        this->encode_lea(func_ref, &meta_global->value, &meta_inst->value);
-        break;
-    }
-    case InstKind_StackAddr: {
-        MetaStackSlot *meta_stack_slot =
-            &meta_func->stack_slots[inst->stack_load.ss_ref.id];
-
-        MetaInst *meta_inst = &meta_func->insts[inst_ref.id];
-
-        this->encode_lea(func_ref, &meta_stack_slot->value, &meta_inst->value);
-        break;
-    }
     case InstKind_Jump: {
         FuncJumpPatch patch = {
             .instruction = FE_JMP | FE_JMPL,
             .instruction_offset = this->get_code_offset(),
-            .destination_block = inst->jump.block_ref,
+            .destination_block = inst.jump.block_ref,
         };
         meta_func->jump_patches.push_back(patch);
 
@@ -1503,18 +1446,19 @@ void X86_64AsmBuilder::generate_inst(
     }
 }
 
-void X86_64AsmBuilder::generate_global(GlobalRef global_ref)
+void X86_64AsmBuilder::generate_global(InstRef global_ref)
 {
     ZoneScoped;
 
-    Global *global = &this->module->globals[global_ref.id];
-    MetaGlobal *meta_global = &this->meta_globals[global_ref.id];
+    Inst global = global_ref.get(this->module);
+    MetaValue *meta_global = &this->meta_insts[global_ref.id];
+    *meta_global = {};
 
     SectionType section_type = SectionType_Data;
-    if (!(global->flags & GlobalFlags_Initialized)) {
+    if (!(global.global.flags & GlobalFlags_Initialized)) {
         section_type = SectionType_BSS;
     } else {
-        if (global->flags & GlobalFlags_ReadOnly) {
+        if (global.global.flags & GlobalFlags_ReadOnly) {
             section_type = SectionType_ROData;
         } else {
             section_type = SectionType_Data;
@@ -1522,100 +1466,130 @@ void X86_64AsmBuilder::generate_global(GlobalRef global_ref)
     }
 
     size_t offset = this->obj_builder->get_section_size(section_type);
-    this->obj_builder->add_to_section(section_type, global->data);
+    this->obj_builder->add_to_section(section_type, global.global.data);
 
-    meta_global->value = {
-        .kind = MetaValueKind_Global,
-        .type = global->type,
-        .global =
-            {
-                .section_type = section_type,
-                .offset = offset,
-            },
-    };
+    *meta_global = create_global_value(section_type, offset);
 }
 
-void X86_64AsmBuilder::generate_function(FunctionRef func_ref)
+void X86_64AsmBuilder::generate_function(InstRef func_ref)
 {
     ZoneScoped;
 
-    Function *func = &this->module->functions[func_ref.id];
-    MetaFunction *meta_func = &this->meta_funcs[func_ref.id];
+    Inst func_inst = func_ref.get(this->module);
+    ACE_ASSERT(func_inst.kind == InstKind_Function);
+    Function *func = func_inst.func;
+    ACE_ASSERT(func);
 
-    if (func->block_refs.is_empty()) {
+    MetaFunction *meta_func = this->module->arena->alloc<MetaFunction>();
+    *meta_func = {};
+
+    meta_func->jump_patches = Array<FuncJumpPatch>::create(module->arena);
+
+    switch (func->calling_convention) {
+    case CallingConvention_SystemV: {
+        static RegisterIndex system_v_callee_saved[] = {
+            RegisterIndex_RBX,
+            RegisterIndex_R12,
+            RegisterIndex_R13,
+            RegisterIndex_R14,
+            RegisterIndex_R15,
+        };
+        meta_func->callee_saved_registers = {system_v_callee_saved};
+        break;
+    }
+    }
+
+    if (func->blocks.len == 0) {
+        // Function without body
+        meta_func->symbol_ref = obj_builder->add_symbol(
+            func->name, SectionType_None, SymbolType_None, Linkage_External);
+    } else {
+        // Function with body
+        meta_func->symbol_ref = obj_builder->add_symbol(
+            func->name,
+            SectionType_Text,
+            SymbolType_Function,
+            Linkage_External);
+    }
+
+    MetaValue *func_meta_inst = &this->meta_insts[func_ref.id];
+    *func_meta_inst = {};
+    func_meta_inst->kind = MetaValueKind_Function;
+    func_meta_inst->func = meta_func;
+
+    if (func->blocks.len == 0) {
         return;
     }
 
-    for (size_t i = 0; i < func->stack_slots.len; ++i) {
-        StackSlot *stack_slot = &func->stack_slots[i];
-
-        uint32_t slot_size = stack_slot->type->size_of(this->module);
-        uint32_t slot_align = stack_slot->type->align_of(this->module);
+    for (InstRef stack_slot_ref : func->stack_slots) {
+        Inst stack_slot = stack_slot_ref.get(this->module);
+        ACE_ASSERT(stack_slot.type->kind == TypeKind_Pointer);
+        uint32_t slot_size =
+            stack_slot.type->pointer.sub->size_of(this->module);
+        uint32_t slot_align =
+            stack_slot.type->pointer.sub->align_of(this->module);
         meta_func->stack_size = ACE_ROUND_UP(slot_align, meta_func->stack_size);
         meta_func->stack_size += slot_size;
 
-        meta_func->stack_slots[i].value = create_stack_value(
-            func->stack_slots[i].type, -((int32_t)meta_func->stack_size));
+        this->meta_insts[stack_slot_ref.id] =
+            create_stack_value(-((int32_t)meta_func->stack_size));
     }
 
     // Create stack space for function parameters
     for (InstRef param_inst_ref : func->param_insts) {
-        Inst *inst = &func->insts[param_inst_ref.id];
-        MetaInst *meta_inst = &meta_func->insts[param_inst_ref.id];
-        *meta_inst = {};
+        Inst param_inst = param_inst_ref.get(this->module);
 
-        uint32_t inst_size = inst->type->size_of(this->module);
-        uint32_t inst_align = inst->type->align_of(this->module);
+        uint32_t inst_size = param_inst.type->size_of(this->module);
+        uint32_t inst_align = param_inst.type->align_of(this->module);
 
         meta_func->stack_size = ACE_ROUND_UP(inst_align, meta_func->stack_size);
         meta_func->stack_size += inst_size;
 
-        meta_inst->value =
-            create_stack_value(inst->type, -((int32_t)meta_func->stack_size));
+        this->meta_insts[param_inst_ref.id] =
+            create_stack_value(-((int32_t)meta_func->stack_size));
     }
 
     // Spill all elegible insts to stack
-    for (auto &block_ref_node : func->block_refs) {
-        BlockRef block_ref = block_ref_node.value;
-        Block *block = &func->blocks[block_ref.id];
-        for (auto &inst_ref : block->inst_refs) {
-            Inst *inst = &func->insts[inst_ref.id];
-            MetaInst *meta_inst = &meta_func->insts[inst_ref.id];
-            *meta_inst = {};
+    for (InstRef block_ref : func->blocks) {
+        Inst block = block_ref.get(this->module);
+        for (InstRef inst_ref : block.block.inst_refs) {
+            Inst inst = inst_ref.get(this->module);
 
-            if (inst->type) {
-                switch (inst->kind) {
-                case InstKind_FunctionParameter:
-                    ACE_ASSERT(0); // Function parameters are handled above
-                    break;
+            switch (inst.kind) {
+            // Invalid for this stage of generation:
+            case InstKind_Unknown:
+            case InstKind_Global:
+            case InstKind_StackSlot:
+            case InstKind_Block:
+            case InstKind_Function:
+            case InstKind_FunctionParameter: ACE_ASSERT(0); break;
 
-                // Don't spill:
-                case InstKind_StackStore:
-                case InstKind_GlobalStore:
-                case InstKind_Jump:
-                case InstKind_ReturnVoid:
-                case InstKind_ReturnValue:
-                case InstKind_GetConst:
-                case InstKind_PtrCast: break;
+            // Contain no data for spilling:
+            case InstKind_Store:
+            case InstKind_Jump:
+            case InstKind_ReturnVoid:
+            case InstKind_ReturnValue: break;
 
-                case InstKind_ArrayElemPtr:
-                case InstKind_GlobalAddr:
-                case InstKind_StackAddr:
-                case InstKind_StackLoad:
-                case InstKind_GlobalLoad:
-                case InstKind_FuncCall: {
-                    uint32_t inst_size = inst->type->size_of(this->module);
-                    uint32_t inst_align = inst->type->align_of(this->module);
+            // Data already stored somewhere else:
+            case InstKind_ImmediateInt:
+            case InstKind_ImmediateFloat:
+            case InstKind_PtrCast: break;
 
-                    meta_func->stack_size =
-                        ACE_ROUND_UP(inst_align, meta_func->stack_size);
-                    meta_func->stack_size += inst_size;
+            // Create stack space for these kinds:
+            case InstKind_ArrayElemPtr:
+            case InstKind_Load:
+            case InstKind_FuncCall: {
+                uint32_t inst_size = inst.type->size_of(this->module);
+                uint32_t inst_align = inst.type->align_of(this->module);
 
-                    meta_inst->value = create_stack_value(
-                        inst->type, -((int32_t)meta_func->stack_size));
-                    break;
-                }
-                }
+                meta_func->stack_size =
+                    ACE_ROUND_UP(inst_align, meta_func->stack_size);
+                meta_func->stack_size += inst_size;
+
+                this->meta_insts[inst_ref.id] =
+                    create_stack_value(-((int32_t)meta_func->stack_size));
+                break;
+            }
             }
         }
     }
@@ -1656,19 +1630,27 @@ void X86_64AsmBuilder::generate_function(FunctionRef func_ref)
         for (uint32_t i = 0; i < func->param_types.len; ++i) {
             Type *param_type = func->param_types[i];
             InstRef param_inst_ref = func->param_insts[i];
-            MetaInst *param_meta_inst = &meta_func->insts[param_inst_ref.id];
+            MetaValue param_meta_inst = this->meta_insts[param_inst_ref.id];
 
             switch (param_type->kind) {
-            case TypeKind_Int:
-            case TypeKind_Pointer: {
-                MetaValue param_register_value = {
-                    .kind = MetaValueKind_Register,
-                    .type = param_type,
-                    .reg = {.index = sysv_int_param_regs[i]},
-                };
+            case TypeKind_Int: {
+                MetaValue param_register_value = create_int_register_value(
+                    param_type->int_.bits >> 3, sysv_int_param_regs[i]);
 
                 this->encode_move(
-                    func_ref, &param_register_value, &param_meta_inst->value);
+                    param_register_value.reg.bytes,
+                    param_register_value,
+                    param_meta_inst);
+                break;
+            }
+            case TypeKind_Pointer: {
+                MetaValue param_register_value =
+                    create_int_register_value(8, sysv_int_param_regs[i]);
+
+                this->encode_move(
+                    param_register_value.reg.bytes,
+                    param_register_value,
+                    param_meta_inst);
                 break;
             }
             default: {
@@ -1696,23 +1678,27 @@ void X86_64AsmBuilder::generate_function(FunctionRef func_ref)
         }
     }
 
-    for (auto &block_ref_node : func->block_refs) {
-        BlockRef block_ref = block_ref_node.value;
-        Block *block = &func->blocks[block_ref.id];
-        MetaBlock *meta_block = &meta_func->blocks[block_ref.id];
-        meta_block->offset = this->get_code_offset();
-        for (auto &inst_ref : block->inst_refs) {
-            this->generate_inst(func_ref, block_ref, inst_ref);
+    // Generate blocks
+    for (InstRef block_ref : func->blocks) {
+        Inst block = block_ref.get(this->module);
+        MetaValue *meta_block = &this->meta_insts[block_ref.id];
+        *meta_block = {};
+
+        meta_block->kind = MetaValueKind_Block;
+        meta_block->block.offset = this->get_code_offset();
+        for (InstRef inst_ref : block.block.inst_refs) {
+            this->generate_inst(func_ref, inst_ref, {});
         }
     }
 
-    for (auto &jump_patch : meta_func->jump_patches) {
-        MetaBlock *meta_block =
-            &meta_func->blocks[jump_patch.destination_block.id];
+    // Patch jumps
+    for (const FuncJumpPatch &jump_patch : meta_func->jump_patches) {
+        MetaValue *meta_block =
+            &this->meta_insts[jump_patch.destination_block.id];
         this->encode_at(
             jump_patch.instruction_offset,
             jump_patch.instruction,
-            meta_block->offset - jump_patch.instruction_offset);
+            meta_block->block.offset - jump_patch.instruction_offset);
     }
 
     size_t function_end_offset =
@@ -1728,29 +1714,20 @@ void X86_64AsmBuilder::generate()
 {
     ZoneScoped;
 
-    for (uint32_t i = 0; i < this->module->globals.len; ++i) {
-        this->generate_global({i});
+    // Generate globals
+    for (InstRef global_ref : this->module->globals) {
+        this->generate_global(global_ref);
     }
-    for (size_t i = 0; i < module->consts.len; ++i) {
-        MetaConst *meta_const = &this->meta_consts[i];
 
-        if (meta_const->is_global) {
-            meta_const->value =
-                this->meta_globals[meta_const->global_ref.id].value;
-        }
-
-        ACE_ASSERT(meta_const->value.kind != MetaValueKind_None);
-    }
-    for (uint32_t i = 0; i < this->module->functions.len; ++i) {
-        this->generate_function({i});
+    // Generate functions
+    for (InstRef func_ref : this->module->functions) {
+        this->generate_function(func_ref);
     }
 }
 
 void X86_64AsmBuilder::destroy()
 {
-    this->meta_funcs.destroy();
-    this->meta_globals.destroy();
-    this->meta_consts.destroy();
+    this->meta_insts.destroy();
 }
 
 } // namespace ace

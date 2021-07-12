@@ -1,5 +1,6 @@
-def extern puts(_: *u8): i32;
-def extern putchar(_: i32): i32;
+def extern printf(_: *u8, _: f64): void;
+def extern puts(_: *u8): void;
+def extern putchar(_: i32): void;
  
 // def derp(str: *u8) {
 // 	puts(str);
@@ -37,6 +38,8 @@ def export main() {
 	b := &a;
 	c := a;
 
+	f := f32(123);
+
 	int := i32(50);
 
 	msg: *u8 = "hello";
@@ -44,5 +47,8 @@ def export main() {
 	putchar(48);
 	putchar(49);
 	putchar(int);
+	putchar(10);
+
+	printf("%lf", f64(123));
 	putchar(10);
 }

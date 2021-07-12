@@ -323,6 +323,19 @@ static void analyze_expr(
                 "accessed expression in subscript is not an array");
         }
 
+        switch (indexed_type.kind)
+        {
+        case TypeKind_Array: {
+            expr.expr_type_ref = indexed_type.array.sub_type;
+            break;
+        }
+        case TypeKind_Slice: {
+            expr.expr_type_ref = indexed_type.slice.sub_type;
+            break;
+        }
+        default: ACE_ASSERT(0);
+        }
+
         break;
     }
 

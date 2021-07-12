@@ -294,6 +294,38 @@ static void analyze_expr(
         break;
     }
 
+    case ExprKind_Subscript: {
+        analyze_expr(compiler, state, expr.subscript.left_ref);
+        analyze_expr(compiler, state, expr.subscript.right_ref, compiler->u64_type);
+
+        Expr left_expr = expr.subscript.left_ref.get(compiler);
+        Expr right_expr = expr.subscript.right_ref.get(compiler);
+
+        TypeRef indexed_type_ref = left_expr.expr_type_ref;
+        TypeRef index_type_ref = right_expr.expr_type_ref;
+        if (index_type_ref.id == 0 || indexed_type_ref.id == 0) {
+            ACE_ASSERT(compiler->errors.len > 0);
+            break;
+        }
+
+        Type index_type = index_type_ref.get(compiler);
+        Type indexed_type = indexed_type_ref.get(compiler);
+
+        if (index_type.kind != TypeKind_Int && index_type.kind != TypeKind_UntypedInt) {
+            compiler->add_error(
+                right_expr.loc, "subscript index is not an integer");
+        }
+
+        if (indexed_type.kind != TypeKind_Array &&
+            indexed_type.kind != TypeKind_Slice) {
+            compiler->add_error(
+                left_expr.loc,
+                "accessed expression in subscript is not an array");
+        }
+
+        break;
+    }
+
     case ExprKind_Unary: {
         switch (expr.unary.op) {
         case UnaryOp_Unknown: ACE_ASSERT(0); break;

@@ -910,35 +910,61 @@ static Expr parse_func_call_expr(Compiler *compiler, TokenizerState *state)
 
     Token next_token = {};
     state->next_token(compiler, &next_token);
-    if (next_token.kind == TokenKind_LParen) {
-        state->consume_token(compiler, TokenKind_LParen);
+    while (next_token.kind == TokenKind_LBracket ||
+           next_token.kind == TokenKind_LParen) {
 
-        Expr func_expr = expr;
-        ExprRef func_expr_ref = compiler->add_expr(func_expr);
+        switch (next_token.kind) {
+        case TokenKind_LBracket: {
+            state->consume_token(compiler, TokenKind_LBracket);
 
-        expr = {};
-        expr.loc = func_expr.loc;
-        expr.kind = ExprKind_FunctionCall;
-        expr.func_call.func_expr_ref = func_expr_ref;
-        expr.func_call.param_refs =
-            ace::Array<ExprRef>::create(compiler->arena);
+            Expr indexed_expr = expr;
+            ExprRef indexed_expr_ref = compiler->add_expr(indexed_expr);
 
-        state->next_token(compiler, &next_token);
-        while (next_token.kind != TokenKind_RParen) {
-            Expr param_expr = parse_expr(compiler, state);
-            ExprRef param_expr_ref = compiler->add_expr(param_expr);
+            expr = {};
+            expr.loc = indexed_expr.loc;
+            expr.kind = ExprKind_Subscript;
+            expr.subscript.left_ref = indexed_expr_ref;
+            expr.subscript.right_ref =
+                compiler->add_expr(parse_expr(compiler, state));
 
-            expr.func_call.param_refs.push_back(param_expr_ref);
+            state->consume_token(compiler, TokenKind_RBracket);
+            break;
+        }
+        case TokenKind_LParen: {
+            state->consume_token(compiler, TokenKind_LParen);
+
+            Expr func_expr = expr;
+            ExprRef func_expr_ref = compiler->add_expr(func_expr);
+
+            expr = {};
+            expr.loc = func_expr.loc;
+            expr.kind = ExprKind_FunctionCall;
+            expr.func_call.func_expr_ref = func_expr_ref;
+            expr.func_call.param_refs =
+                ace::Array<ExprRef>::create(compiler->arena);
 
             state->next_token(compiler, &next_token);
-            if (next_token.kind != TokenKind_RParen) {
-                state->consume_token(compiler, TokenKind_Comma);
+            while (next_token.kind != TokenKind_RParen) {
+                Expr param_expr = parse_expr(compiler, state);
+                ExprRef param_expr_ref = compiler->add_expr(param_expr);
+
+                expr.func_call.param_refs.push_back(param_expr_ref);
+
+                state->next_token(compiler, &next_token);
+                if (next_token.kind != TokenKind_RParen) {
+                    state->consume_token(compiler, TokenKind_Comma);
+                }
+
+                state->next_token(compiler, &next_token);
             }
 
-            state->next_token(compiler, &next_token);
+            state->consume_token(compiler, TokenKind_RParen);
+            break;
+        }
+        default: ACE_ASSERT(0);
         }
 
-        state->consume_token(compiler, TokenKind_RParen);
+        state->next_token(compiler, &next_token);
     }
 
     return expr;

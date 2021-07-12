@@ -16,6 +16,8 @@ bool ExprRef::is_lvalue(Compiler *compiler)
     } else if (
         expr.kind == ExprKind_Unary && expr.unary.op == UnaryOp_Dereference) {
         is_lvalue = true;
+    } else if (expr.kind == ExprKind_Subscript) {
+        is_lvalue = true;
     }
 
     return is_lvalue;

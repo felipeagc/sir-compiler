@@ -311,6 +311,7 @@ enum ExprKind {
     ExprKind_FloatType,
     ExprKind_SliceType,
     ExprKind_ArrayType,
+    ExprKind_Subscript,
     ExprKind_Unary,
     ExprKind_Binary,
 };
@@ -364,6 +365,10 @@ struct Expr {
             ExprRef subtype_expr_ref;
             ExprRef size_expr_ref;
         } array_type;
+        struct {
+            ExprRef left_ref;
+            ExprRef right_ref;
+        } subscript;
         struct {
             ExprRef left_ref;
             ExprRef right_ref;

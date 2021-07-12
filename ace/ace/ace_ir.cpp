@@ -22,44 +22,78 @@ String ace::linkage_to_string(Linkage linkage)
     ACE_ASSERT(0);
 }
 
-String Const::to_string(Module *module)
-{
-    switch (this->type->kind) {
-    case TypeKind_Int: {
-        switch (this->type->float_.bits) {
-        case 8: return module->arena->sprintf("@i8(%lu)", this->u64);
-        case 16: return module->arena->sprintf("@i16(%lu)", this->u64);
-        case 32: return module->arena->sprintf("@i32(%lu)", this->u64);
-        case 64: return module->arena->sprintf("@i64(%lu)", this->u64);
-        default: ACE_ASSERT(0); break;
-        }
-        break;
-    }
-    case TypeKind_Float: {
-        switch (this->type->float_.bits) {
-        case 32: return module->arena->sprintf("@f32(%lf)", this->f64);
-        case 64: return module->arena->sprintf("@f64(%lf)", this->f64);
-        default: ACE_ASSERT(0); break;
-        }
-        break;
-    }
-    default: break;
-    }
-
-    return "";
-}
-
-static void print_instruction(
-    Module *module, Function *func, InstRef inst_ref, StringBuilder *sb)
+static void
+print_instruction(Module *module, InstRef inst_ref, StringBuilder *sb)
 {
     ZoneScoped;
 
     (void)module;
-    Inst *inst = &func->insts[inst_ref.id];
+    Inst *inst = &module->insts[inst_ref.id];
     sb->append("    ");
 
     switch (inst->kind) {
-    case InstKind_FunctionParameter: ACE_ASSERT(0); break;
+    case InstKind_Unknown: ACE_ASSERT(0); break;
+    case InstKind_Block: ACE_ASSERT(0); break;
+    case InstKind_Function: ACE_ASSERT(0); break;
+
+    case InstKind_Global: {
+        String type_string = inst->type->to_string(module);
+        sb->sprintf(
+            "%%r%u = global %.*s",
+            inst_ref.id,
+            (int)type_string.len,
+            type_string.ptr);
+        break;
+    }
+    case InstKind_StackSlot: {
+        String type_string = inst->type->to_string(module);
+        sb->sprintf(
+            "%%r%u = stack_slot %.*s",
+            inst_ref.id,
+            (int)type_string.len,
+            type_string.ptr);
+        break;
+    }
+    case InstKind_FunctionParameter: {
+        String type_string = inst->type->to_string(module);
+        sb->sprintf(
+            "%%r%u = func_param %.*s",
+            inst_ref.id,
+            (int)type_string.len,
+            type_string.ptr);
+        break;
+    }
+    case InstKind_Load: {
+        sb->sprintf("%%r%u = load %%r%u", inst_ref.id, inst->load.ptr_ref.id);
+        break;
+    }
+    case InstKind_Store: {
+        sb->sprintf(
+            "store %%r%u, %%r%u",
+            inst->store.ptr_ref.id,
+            inst->store.value_ref.id);
+        break;
+    }
+    case InstKind_ImmediateInt: {
+        String type_string = inst->type->to_string(module);
+        sb->sprintf(
+            "%%r%u = imm_int %.*s %lu",
+            inst_ref.id,
+            (int)type_string.len,
+            type_string.ptr,
+            inst->imm_int.u64);
+        break;
+    }
+    case InstKind_ImmediateFloat: {
+        String type_string = inst->type->to_string(module);
+        sb->sprintf(
+            "%%r%u = imm_float %.*s %lf",
+            inst_ref.id,
+            (int)type_string.len,
+            type_string.ptr,
+            inst->imm_float.f64);
+        break;
+    }
     case InstKind_PtrCast: {
         String type_string = inst->type->to_string(module);
         sb->sprintf(
@@ -70,37 +104,22 @@ static void print_instruction(
             inst->ptr_cast.inst_ref.id);
         break;
     }
-    case InstKind_GetConst: {
+    case InstKind_ArrayElemPtr: {
         String type_string = inst->type->to_string(module);
         sb->sprintf(
-            "%%r%u = get_const %.*s %%const%u",
+            "%%r%u = array_elem_ptr %.*s %%r%u %%r%u",
             inst_ref.id,
             (int)type_string.len,
             type_string.ptr,
-            inst->get_const.const_ref.id);
-        break;
-    }
-    case InstKind_GlobalAddr: {
-        sb->sprintf(
-            "%%r%u = global_addr %%global%u",
-            inst_ref.id,
-            inst->global_addr.global_ref.id);
-        break;
-    }
-    case InstKind_StackAddr: {
-        sb->sprintf(
-            "%%r%u = stack_addr %%ss%u",
-            inst_ref.id,
-            inst->stack_addr.ss_ref.id);
+            inst->array_elem_ptr.accessed_ref.id,
+            inst->array_elem_ptr.index_ref.id);
         break;
     }
     case InstKind_FuncCall: {
-        Function *called_func = &module->functions[inst->func_call.func_ref.id];
         sb->sprintf(
-            "%%r%u = func_call %.*s (",
+            "%%r%u = func_call %%r%u (",
             inst_ref.id,
-            (int)called_func->name.len,
-            called_func->name.ptr);
+            inst->func_call.func_ref.id);
         for (size_t i = 0; i < inst->func_call.parameters.len; ++i) {
             if (i > 0) sb->append(", ");
             InstRef param_inst_ref = inst->func_call.parameters[i];
@@ -117,34 +136,6 @@ static void print_instruction(
         sb->sprintf("return_value %%r%u", inst->return_value.inst_ref.id);
         break;
     }
-    case InstKind_StackLoad: {
-        sb->sprintf(
-            "%%r%u = stack_load %%ss%u",
-            inst_ref.id,
-            inst->stack_load.ss_ref.id);
-        break;
-    }
-    case InstKind_StackStore: {
-        sb->sprintf(
-            "stack_store %%ss%u, %%r%u",
-            inst->stack_store.ss_ref.id,
-            inst->stack_store.inst_ref.id);
-        break;
-    }
-    case InstKind_GlobalLoad: {
-        sb->sprintf(
-            "%%r%u = global_load %%global%u",
-            inst_ref.id,
-            inst->global_load.global_ref.id);
-        break;
-    }
-    case InstKind_GlobalStore: {
-        sb->sprintf(
-            "global_store %%global%u, %%r%u",
-            inst->global_store.global_ref.id,
-            inst->global_store.inst_ref.id);
-        break;
-    }
     case InstKind_Jump: {
         sb->sprintf("jump %%b%u", inst->jump.block_ref.id);
         break;
@@ -154,41 +145,38 @@ static void print_instruction(
     sb->append("\n");
 }
 
-static void print_block(
-    Module *module, Function *func, BlockRef block_ref, StringBuilder *sb)
+static void print_block(Module *module, InstRef block_ref, StringBuilder *sb)
 {
     ZoneScoped;
 
-    Block *block = &func->blocks[block_ref.id];
+    Inst *block = &module->insts[block_ref.id];
 
-    sb->sprintf("  block %%b%u:\n", block_ref.id);
+    sb->sprintf("  block %%r%u:\n", block_ref.id);
 
-    for (InstRef inst_ref : block->inst_refs) {
-        print_instruction(module, func, inst_ref, sb);
+    for (InstRef inst_ref : block->block.inst_refs) {
+        print_instruction(module, inst_ref, sb);
     }
 
     sb->append("\n");
 }
 
-static void
-print_global(Module *module, GlobalRef global_ref, StringBuilder *sb)
+static void print_global(Module *module, InstRef global_ref, StringBuilder *sb)
 {
-    Global *global = &module->globals[global_ref.id];
-    sb->sprintf("global %%global%u: ", global_ref.id);
-
-    sb->append(global->type->to_string(module));
-    sb->append("\n");
+    print_instruction(module, global_ref, sb);
 }
 
-static void print_function(Module *module, Function *func, StringBuilder *sb)
+static void print_function(Module *module, InstRef func_ref, StringBuilder *sb)
 {
     ZoneScoped;
+
+    Function *func = module->insts[func_ref.id].func;
 
     String calling_conv_str =
         calling_convention_to_string(func->calling_convention);
     String linkage_str = linkage_to_string(func->linkage);
     sb->sprintf(
-        "function [%.*s, %.*s] \"%.*s\" (",
+        "function %%r%u [%.*s, %.*s] \"%.*s\" (",
+        func_ref.id,
         (int)calling_conv_str.len,
         calling_conv_str.ptr,
         (int)linkage_str.len,
@@ -208,20 +196,23 @@ static void print_function(Module *module, Function *func, StringBuilder *sb)
     sb->append(func->return_type->to_string(module));
     sb->append(" {\n");
 
-    for (uint32_t i = 0; i < func->stack_slots.len; ++i) {
-        StackSlot *stack_slot = &func->stack_slots[i];
+    for (InstRef stack_slot_ref : func->stack_slots) {
+        Inst *stack_slot = &module->insts[stack_slot_ref.id];
+        ACE_ASSERT(stack_slot->type);
         String type_string = stack_slot->type->to_string(module);
         sb->sprintf(
-            "  %%ss%u: %.*s\n", i, (int)type_string.len, type_string.ptr);
+            "  %%r%u: stack_slot %.*s\n",
+            stack_slot_ref.id,
+            (int)type_string.len,
+            type_string.ptr);
     }
 
     if (func->stack_slots.len > 0) {
         sb->append("\n");
     }
 
-    for (auto &block_node : func->block_refs) {
-        BlockRef block_ref = block_node.value;
-        print_block(module, func, block_ref, sb);
+    for (InstRef block_ref : func->blocks) {
+        print_block(module, block_ref, sb);
     }
 
     sb->append("}\n\n");
@@ -231,39 +222,37 @@ Module *Module::create(TargetArch target_arch, Endianness endianness)
 {
     auto parent_allocator = MallocAllocator::get_instance();
 
+    const size_t expected_inst_count = 262144;
     const size_t expected_function_count = 65536;
     const size_t expected_type_count = 1024;
-    const size_t expected_const_count = 2048;
     const size_t expected_global_count = 2048;
-    const size_t expected_global_string_count = 2048;
 
     auto arena = ArenaAllocator::create(parent_allocator, 1 << 24);
-    auto functions = Array<Function>::create(MallocAllocator::get_instance());
-    auto globals = Array<Global>::create(MallocAllocator::get_instance());
-    auto consts = Array<Const>::create(MallocAllocator::get_instance());
-    auto function_map = StringMap<FunctionRef>::create(
+    auto insts = Array<Inst>::create(MallocAllocator::get_instance());
+    auto globals = Array<InstRef>::create(MallocAllocator::get_instance());
+    auto functions = Array<InstRef>::create(MallocAllocator::get_instance());
+    auto function_map = StringMap<InstRef>::create(
         MallocAllocator::get_instance(), expected_function_count);
+    auto global_string_map = StringMap<InstRef>::create(
+        MallocAllocator::get_instance(), expected_global_count);
     auto type_map = StringMap<Type *>::create(
         MallocAllocator::get_instance(), expected_type_count);
-    auto const_map = StringMap<ConstRef>::create(
-        MallocAllocator::get_instance(), expected_const_count);
-    auto global_string_map = StringMap<GlobalRef>::create(
-        MallocAllocator::get_instance(), expected_global_string_count);
 
+    insts.reserve(expected_inst_count);
     functions.reserve(expected_function_count);
     globals.reserve(expected_global_count);
-    consts.reserve(expected_const_count);
+
+    insts.push_back({}); // 0th inst
 
     Module *module = parent_allocator->alloc<Module>();
     *module = {
         .arena = arena,
-        .functions = functions,
+        .insts = insts,
         .globals = globals,
-        .consts = consts,
+        .functions = functions,
         .function_map = function_map,
-        .type_map = type_map,
-        .const_map = const_map,
         .global_string_map = global_string_map,
+        .type_map = type_map,
         .target_arch = target_arch,
         .endianness = endianness,
 
@@ -344,13 +333,12 @@ Module *Module::create(TargetArch target_arch, Endianness endianness)
 
 void Module::destroy()
 {
-    this->functions.destroy();
+    this->insts.destroy();
     this->globals.destroy();
-    this->consts.destroy();
+    this->functions.destroy();
     this->function_map.destroy();
-    this->type_map.destroy();
-    this->const_map.destroy();
     this->global_string_map.destroy();
+    this->type_map.destroy();
     this->arena->destroy();
 
     auto parent_allocator = MallocAllocator::get_instance();
@@ -363,14 +351,14 @@ String Module::print_alloc(Allocator *allocator)
 
     StringBuilder sb = StringBuilder::create(allocator);
 
-    for (uint32_t i = 0; i < this->globals.len; ++i) {
-        print_global(this, {i}, &sb);
+    for (InstRef global_ref : this->globals) {
+        print_instruction(this, global_ref, &sb);
     }
 
     sb.append("\n");
 
-    for (auto &func : this->functions) {
-        print_function(this, &func, &sb);
+    for (InstRef func_ref : this->functions) {
+        print_function(this, func_ref, &sb);
     }
 
     String result = sb.build(allocator);
@@ -421,48 +409,14 @@ Type *Module::get_cached_type(Type *type)
     return type;
 }
 
-ConstRef Module::create_int_const(Type *type, uint64_t value)
+InstRef Module::add_inst(const Inst &inst)
 {
-    ACE_ASSERT(type->kind == TypeKind_Int);
-    Const constant = {};
-    constant.type = type;
-    constant.u64 = value;
-
-    return this->register_const(constant);
+    InstRef ref = {(uint32_t)this->insts.len};
+    this->insts.push_back(inst);
+    return ref;
 }
 
-ConstRef Module::create_float_const(Type *type, double value)
-{
-    ACE_ASSERT(type->kind == TypeKind_Float);
-    Const constant = {};
-    constant.type = type;
-    constant.f64 = value;
-
-    return this->register_const(constant);
-}
-
-ConstRef Module::register_const(Const constant)
-{
-    ZoneScoped;
-
-    String const_string = constant.to_string(this);
-    if (const_string.len == 0) {
-        ConstRef new_const_ref = {(uint32_t)this->consts.len};
-        this->consts.push_back(constant);
-        return new_const_ref;
-    }
-
-    ConstRef existing_const_ref = {};
-    if (this->const_map.get(const_string, &existing_const_ref)) {
-        return existing_const_ref;
-    }
-
-    ConstRef new_const_ref = {(uint32_t)this->consts.len};
-    this->consts.push_back(constant);
-    return new_const_ref;
-}
-
-FunctionRef Module::add_function(
+InstRef Module::add_function(
     String name,
     CallingConvention calling_convention,
     Linkage linkage,
@@ -480,19 +434,16 @@ FunctionRef Module::add_function(
             "%.*s.%u", (int)name.len, name.ptr, func_index);
     }
 
-    Function function = {
+    Function *function = this->arena->alloc<Function>();
+    *function = Function{
         .name = func_name,
         .param_types = this->arena->clone(param_types),
         .return_type = return_type,
         .variadic = variadic,
 
-        .stack_slots = Array<StackSlot>::create(this->arena),
-        .blocks = Array<Block>::create(this->arena),
-        .insts = Array<Inst>::create(this->arena),
+        .stack_slots = Array<InstRef>::create(this->arena),
+        .blocks = Array<InstRef>::create(this->arena),
         .param_insts = Array<InstRef>::create(this->arena),
-
-        .block_nodes = Array<List<BlockRef>::Node *>::create(this->arena),
-        .block_refs = List<BlockRef>::create(this->arena),
 
         .linkage = linkage,
         .calling_convention = calling_convention,
@@ -504,149 +455,165 @@ FunctionRef Module::add_function(
             .kind = InstKind_FunctionParameter,
             .type = param_types[i],
         };
-        InstRef inst_ref = {(uint32_t)function.insts.len};
-        function.insts.push_back(param_inst);
-        function.param_insts.push_back(inst_ref);
+        InstRef inst_ref = this->add_inst(param_inst);
+        function->param_insts.push_back(inst_ref);
     }
 
-    FunctionRef ref = {(uint32_t)this->functions.len};
+    Inst func_inst = {};
+    func_inst.kind = InstKind_Function;
+    func_inst.func = function;
+    InstRef func_ref = this->add_inst(func_inst);
 
-    this->function_map.set(function.name, ref);
-    this->functions.push_back(function);
+    this->functions.push_back(func_ref);
+    this->function_map.set(function->name, func_ref);
 
-    return ref;
+    return func_ref;
 }
 
-GlobalRef Module::add_global(Type *type, uint32_t flags, Slice<uint8_t> data)
+InstRef Module::add_global(Type *type, uint32_t flags, Slice<uint8_t> data)
 {
     ZoneScoped;
 
     ACE_ASSERT(type->size_of(this) == data.len);
 
-    Global global = {
-        .type = type,
-        .data = this->arena->clone(data),
-        .flags = flags,
-    };
+    Inst global = {};
+    global.kind = InstKind_Global;
+    global.type = this->create_pointer_type(type);
+    global.global.data = this->arena->clone(data);
+    global.global.flags = flags;
 
-    GlobalRef ref = {(uint32_t)this->globals.len};
+    InstRef global_ref = this->add_inst(global);
 
-    this->globals.push_back(global);
+    this->globals.push_back(global_ref);
 
-    return ref;
+    return global_ref;
 }
 
-GlobalRef Module::add_global_string(const String &str)
+InstRef Module::add_global_string(const String &str)
 {
     ZoneScoped;
 
-    GlobalRef existing_global_ref = {0};
+    InstRef existing_global_ref = {0};
     if (this->global_string_map.get(str, &existing_global_ref)) {
         return existing_global_ref;
     }
 
-    Global global = {
-        .type = this->create_array_type(this->i8_type, str.len + 1),
-        .data = {(uint8_t *)this->arena->null_terminate(str), str.len + 1},
-        .flags = GlobalFlags_Initialized | GlobalFlags_ReadOnly,
-    };
+    Inst global = {};
+    global.kind = InstKind_Global;
+    global.type = this->create_pointer_type(
+        this->create_array_type(this->i8_type, str.len + 1));
+    global.global.data = {
+        (uint8_t *)this->arena->null_terminate(str), str.len + 1};
+    global.global.flags = GlobalFlags_Initialized | GlobalFlags_ReadOnly;
 
-    GlobalRef ref = {(uint32_t)this->globals.len};
+    InstRef global_ref = this->add_inst(global);
 
-    this->globals.push_back(global);
+    this->globals.push_back(global_ref);
 
-    this->global_string_map.set(str, ref);
+    this->global_string_map.set(str, global_ref);
 
-    return ref;
+    return global_ref;
 }
 
-StackSlotRef Module::add_stack_slot(FunctionRef func_ref, Type *type)
+InstRef Module::add_stack_slot(InstRef func_ref, Type *type)
 {
     ZoneScoped;
 
-    Function *func = &this->functions[func_ref.id];
+    Inst func_inst = func_ref.get(this);
+    ACE_ASSERT(func_inst.kind == InstKind_Function);
 
-    StackSlot stack_slot = {
-        .type = type,
-    };
+    Function *func = func_inst.func;
 
-    StackSlotRef ref = {(uint32_t)func->stack_slots.len};
-    func->stack_slots.push_back(stack_slot);
+    Inst stack_slot = {};
+    stack_slot.kind = InstKind_StackSlot;
+    stack_slot.type = this->create_pointer_type(type);
+    InstRef stack_slot_ref = this->add_inst(stack_slot);
 
-    return ref;
+    func->stack_slots.push_back(stack_slot_ref);
+
+    return stack_slot_ref;
 }
 
-InstRef Module::get_func_param(FunctionRef func_ref, uint32_t param_index)
+InstRef Module::get_func_param(InstRef func_ref, uint32_t param_index)
 {
     ZoneScoped;
-    Function *func = &this->functions[func_ref.id];
+
+    Inst func_inst = func_ref.get(this);
+    ACE_ASSERT(func_inst.kind == InstKind_Function);
+    Function *func = func_inst.func;
+
     return func->param_insts[param_index];
 }
 
-BlockRef Module::insert_block_at_end(FunctionRef func_ref)
+InstRef Module::insert_block_at_end(InstRef func_ref)
 {
     ZoneScoped;
 
-    auto func = &this->functions[func_ref.id];
+    Inst func_inst = func_ref.get(this);
+    ACE_ASSERT(func_inst.kind == InstKind_Function);
+    Function *func = func_inst.func;
 
-    Block basic_block = {
-        .inst_refs = Array<InstRef>::create(this->arena),
-    };
+    Inst block = {};
+    block.kind = InstKind_Block;
+    block.block.inst_refs = Array<InstRef>::create(this->arena);
+    InstRef block_ref = this->add_inst(block);
 
-    BlockRef ref = {
-        .id = (uint32_t)func->blocks.len,
-    };
+    func->blocks.push_back(block_ref);
 
-    auto node = func->block_refs.push_back(ref);
-    func->blocks.push_back(basic_block);
-    func->block_nodes.push_back(node);
-
-    return ref;
+    return block_ref;
 }
 
-BlockRef Module::insert_block_after(FunctionRef func_ref, BlockRef other_ref)
-{
-    ZoneScoped;
+/* InstRef Module::insert_block_after(InstRef func_ref, InstRef other_ref) */
+/* { */
+/*     ZoneScoped; */
 
-    auto func = &this->functions[func_ref.id];
+/*     Inst func_inst = func_ref.get(this); */
+/*     ACE_ASSERT(func_inst.kind == InstKind_Function); */
+/*     Function *func = func_inst.func; */
 
-    auto other_node = func->block_nodes[other_ref.id];
-    ACE_ASSERT(other_node);
+/*     Inst block = {}; */
+/*     block.kind = InstKind_Block; */
+/*     block.block.inst_refs = Array<InstRef>::create(this->arena); */
+/*     InstRef block_ref = this->add_inst(block); */
 
-    Block basic_block = {
-        .inst_refs = Array<InstRef>::create(this->arena),
-    };
+/*     auto other_node = func->block_nodes[other_ref.id]; */
+/*     ACE_ASSERT(other_node); */
 
-    BlockRef ref = {.id = (uint32_t)func->blocks.len};
+/*     Block basic_block = { */
+/*         .inst_refs = Array<InstRef>::create(this->arena), */
+/*     }; */
 
-    auto node = func->block_refs.insert_after(other_node, ref);
-    func->blocks.push_back(basic_block);
-    func->block_nodes.push_back(node);
+/*     BlockRef ref = {.id = (uint32_t)func->blocks.len}; */
 
-    return ref;
-}
+/*     auto node = func->block_refs.insert_after(other_node, ref); */
+/*     func->blocks.push_back(basic_block); */
+/*     func->block_nodes.push_back(node); */
 
-BlockRef Module::insert_block_before(FunctionRef func_ref, BlockRef other_ref)
-{
-    ZoneScoped;
+/*     return ref; */
+/* } */
 
-    auto func = &this->functions[func_ref.id];
+/* BlockRef Module::insert_block_before(FunctionRef func_ref, BlockRef
+ * other_ref) */
+/* { */
+/*     ZoneScoped; */
 
-    auto other_node = func->block_nodes[other_ref.id];
-    ACE_ASSERT(other_node);
+/*     auto func = &this->functions[func_ref.id]; */
 
-    Block basic_block = {
-        .inst_refs = Array<InstRef>::create(this->arena),
-    };
+/*     auto other_node = func->block_nodes[other_ref.id]; */
+/*     ACE_ASSERT(other_node); */
 
-    BlockRef ref = {(uint32_t)func->blocks.len};
+/*     Block basic_block = { */
+/*         .inst_refs = Array<InstRef>::create(this->arena), */
+/*     }; */
 
-    auto node = func->block_refs.insert_before(other_node, ref);
-    func->blocks.push_back(basic_block);
-    func->block_nodes.push_back(node);
+/*     BlockRef ref = {(uint32_t)func->blocks.len}; */
 
-    return ref;
-}
+/*     auto node = func->block_refs.insert_before(other_node, ref); */
+/*     func->blocks.push_back(basic_block); */
+/*     func->block_nodes.push_back(node); */
+
+/*     return ref; */
+/* } */
 
 Builder Builder::create(Module *module)
 {
@@ -657,123 +624,83 @@ Builder Builder::create(Module *module)
     };
 }
 
-void Builder::set_function(FunctionRef func_ref)
+void Builder::set_function(InstRef func_ref)
 {
     this->current_func_ref = func_ref;
 }
 
-void Builder::position_at_end(BlockRef block_ref)
+void Builder::position_at_end(InstRef block_ref)
 {
     this->current_block_ref = block_ref;
 }
 
-static InstRef push_instruction(Builder *builder, Inst inst)
+static InstRef builder_push_inst(Builder *builder, const Inst & inst)
 {
-    ZoneScoped;
+    InstRef inst_ref = builder->module->add_inst(inst);
 
-    Function *func = &builder->module->functions[builder->current_func_ref.id];
-    Block *block = &func->blocks[builder->current_block_ref.id];
+    Inst *block = &builder->module->insts[builder->current_block_ref.id];
+    block->block.inst_refs.push_back(inst_ref);
 
-    InstRef ref = {(uint32_t)func->insts.len};
-
-    func->insts.push_back(inst);
-    block->inst_refs.push_back(ref);
-
-    return ref;
+    return inst_ref;
 }
 
-InstRef Builder::insert_get_const(ConstRef const_ref)
+InstRef Builder::insert_imm_int(Type *type, uint64_t value)
 {
-    Const *constant = &this->module->consts[const_ref.id];
+    Inst inst = {};
+    inst.kind = InstKind_ImmediateInt;
+    inst.type = type;
+    inst.imm_int.u64 = value;
+
+    return builder_push_inst(this, inst);
+}
+
+InstRef Builder::insert_imm_float(Type *type, double value)
+{
+    Inst inst = {};
+    inst.kind = InstKind_ImmediateFloat;
+    inst.type = type;
+    inst.imm_float.f64 = value;
+
+    return builder_push_inst(this, inst);
+}
+
+InstRef Builder::insert_array_elem_ptr(InstRef accessed_ref, InstRef index_ref)
+{
+    Inst accessed_inst = accessed_ref.get(this->module);
+    ACE_ASSERT(accessed_inst.type->kind == TypeKind_Pointer);
+    ACE_ASSERT(accessed_inst.type->pointer.sub->kind == TypeKind_Array);
 
     Inst inst = {};
-    inst.kind = InstKind_GetConst;
-    inst.type = constant->type;
-    inst.get_const.const_ref = const_ref;
+    inst.kind = InstKind_ArrayElemPtr;
+    inst.type = this->module->create_pointer_type(
+        accessed_inst.type->pointer.sub->array.sub);
+    inst.array_elem_ptr.accessed_ref = accessed_ref;
+    inst.array_elem_ptr.index_ref = index_ref;
 
-    return push_instruction(this, inst);
+    return builder_push_inst(this, inst);
 }
 
-InstRef Builder::insert_global_addr(GlobalRef global_ref)
-{
-    ZoneScoped;
-
-    Global *global = &this->module->globals[global_ref.id];
-
-    Inst inst = {};
-    inst.kind = InstKind_GlobalAddr;
-    inst.type = this->module->create_pointer_type(global->type);
-    inst.global_addr = {global_ref};
-
-    return push_instruction(this, inst);
-}
-
-InstRef Builder::insert_global_load(GlobalRef global_ref)
-{
-    ZoneScoped;
-
-    Global *global = &this->module->globals[global_ref.id];
-
-    Inst inst = {};
-    inst.kind = InstKind_GlobalLoad;
-    inst.type = global->type;
-    inst.global_load = {global_ref};
-
-    return push_instruction(this, inst);
-}
-
-void Builder::insert_global_store(GlobalRef global_ref, InstRef inst_ref)
-{
-    ZoneScoped;
-
-    Function *func = &this->module->functions[this->current_func_ref.id];
-
-    Inst inst = {};
-    inst.kind = InstKind_GlobalStore;
-    inst.type = func->insts[inst_ref.id].type;
-    inst.global_store = {global_ref, inst_ref};
-
-    push_instruction(this, inst);
-}
-
-InstRef Builder::insert_stack_addr(StackSlotRef ss_ref)
-{
-    ZoneScoped;
-
-    Function *func = &this->module->functions[this->current_func_ref.id];
-    StackSlot *ss = &func->stack_slots[ss_ref.id];
-
-    Inst inst = {};
-    inst.kind = InstKind_StackAddr;
-    inst.type = this->module->create_pointer_type(ss->type);
-    inst.stack_addr.ss_ref = {ss_ref};
-
-    return push_instruction(this, inst);
-}
-
-InstRef Builder::insert_stack_load(StackSlotRef ss_ref)
-{
-    ZoneScoped;
-
-    Function *func = &this->module->functions[this->current_func_ref.id];
-
-    Inst inst = {};
-    inst.kind = InstKind_StackLoad;
-    inst.type = func->stack_slots[ss_ref.id].type;
-    inst.stack_load = {ss_ref};
-
-    return push_instruction(this, inst);
-}
-
-void Builder::insert_stack_store(StackSlotRef ss_ref, InstRef inst_ref)
+void Builder::insert_store(InstRef ptr_ref, InstRef value_ref)
 {
     ZoneScoped;
 
     Inst inst = {};
-    inst.kind = InstKind_StackStore;
-    inst.stack_store = {ss_ref, inst_ref};
+    inst.kind = InstKind_Store;
+    inst.store.ptr_ref = ptr_ref;
+    inst.store.value_ref = value_ref;
 
-    push_instruction(this, inst);
+    builder_push_inst(this, inst);
+}
+
+InstRef Builder::insert_load(InstRef ptr_ref)
+{
+    ZoneScoped;
+
+    Inst inst = {};
+    inst.kind = InstKind_Load;
+    inst.load.ptr_ref = ptr_ref;
+
+    return builder_push_inst(this, inst);
 }
 
 InstRef Builder::insert_ptr_cast(Type *dest_type, InstRef inst_ref)
@@ -787,25 +714,27 @@ InstRef Builder::insert_ptr_cast(Type *dest_type, InstRef inst_ref)
     inst.type = dest_type;
     inst.ptr_cast = {inst_ref};
 
-    return push_instruction(this, inst);
+    return builder_push_inst(this, inst);
 }
 
-InstRef Builder::insert_func_call(
-    FunctionRef func_ref, const Slice<InstRef> &parameters)
+InstRef
+Builder::insert_func_call(InstRef func_ref, const Slice<InstRef> &parameters)
 {
     ZoneScoped;
 
-    Function *called_function = &this->module->functions[func_ref.id];
+    Inst func_inst = func_ref.get(this->module);
+    ACE_ASSERT(func_inst.kind == InstKind_Function);
+    Function *called_function = func_inst.func;
 
     Inst inst = {};
     inst.kind = InstKind_FuncCall;
     inst.type = called_function->return_type;
     inst.func_call = {func_ref, this->module->arena->clone(parameters)};
 
-    return push_instruction(this, inst);
+    return builder_push_inst(this, inst);
 }
 
-void Builder::insert_jump(BlockRef block_ref)
+void Builder::insert_jump(InstRef block_ref)
 {
     ZoneScoped;
 
@@ -813,7 +742,7 @@ void Builder::insert_jump(BlockRef block_ref)
     inst.kind = InstKind_Jump;
     inst.jump = {block_ref};
 
-    push_instruction(this, inst);
+    builder_push_inst(this, inst);
 }
 
 void Builder::insert_return_value(InstRef inst_ref)
@@ -824,7 +753,7 @@ void Builder::insert_return_value(InstRef inst_ref)
     inst.kind = InstKind_ReturnValue;
     inst.return_value.inst_ref = inst_ref;
 
-    push_instruction(this, inst);
+    builder_push_inst(this, inst);
 }
 
 void Builder::insert_return_void()
@@ -834,5 +763,5 @@ void Builder::insert_return_void()
     Inst inst = {};
     inst.kind = InstKind_ReturnVoid;
 
-    push_instruction(this, inst);
+    builder_push_inst(this, inst);
 }

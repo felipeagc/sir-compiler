@@ -6,10 +6,7 @@
 namespace ace {
 
 struct Module;
-struct StackSlot;
 struct Inst;
-struct Block;
-struct Function;
 
 enum CallingConvention : uint8_t {
     CallingConvention_SystemV,
@@ -33,98 +30,11 @@ enum Endianness {
     Endianness_BigEndian,
 };
 
-struct FunctionRef {
-    uint32_t id;
-};
-
-struct BlockRef {
-    uint32_t id;
-};
-
 struct InstRef {
     uint32_t id;
-};
 
-struct StackSlotRef {
-    uint32_t id;
-};
-
-struct GlobalRef {
-    uint32_t id;
-};
-
-struct ConstRef {
-    uint32_t id;
-};
-
-enum InstKind {
-    InstKind_FunctionParameter,
-    InstKind_GetConst,
-    InstKind_ReturnVoid,
-    InstKind_ReturnValue,
-    InstKind_StackLoad,
-    InstKind_StackStore,
-    InstKind_StackAddr,
-    InstKind_Jump,
-    InstKind_FuncCall,
-    InstKind_GlobalAddr,
-    InstKind_GlobalLoad,
-    InstKind_GlobalStore,
-    InstKind_PtrCast,
-};
-
-struct Inst {
-    union {
-        struct {
-            uint32_t index;
-        } func_param;
-        struct {
-            ConstRef const_ref;
-        } get_const;
-        struct {
-            InstRef inst_ref;
-        } return_value;
-        struct {
-            StackSlotRef ss_ref;
-        } stack_load;
-        struct {
-            StackSlotRef ss_ref;
-            InstRef inst_ref;
-        } stack_store;
-        struct {
-            BlockRef block_ref;
-        } jump;
-        struct {
-            FunctionRef func_ref;
-            Slice<InstRef> parameters;
-        } func_call;
-        struct {
-            GlobalRef global_ref;
-        } global_addr;
-        struct {
-            StackSlotRef ss_ref;
-        } stack_addr;
-        struct {
-            GlobalRef global_ref;
-        } global_load;
-        struct {
-            GlobalRef global_ref;
-            InstRef inst_ref;
-        } global_store;
-        struct {
-            InstRef inst_ref;
-        } ptr_cast;
-    };
-    InstKind kind;
-    Type *type;
-};
-
-struct StackSlot {
-    Type *type;
-};
-
-struct Block {
-    Array<InstRef> inst_refs;
+    ACE_INLINE
+    Inst get(Module *module) const;
 };
 
 struct Function {
@@ -133,13 +43,9 @@ struct Function {
     Type *return_type;
     bool variadic;
 
-    Array<StackSlot> stack_slots;
-    Array<Block> blocks;
-    Array<Inst> insts;
+    Array<InstRef> stack_slots;
+    Array<InstRef> blocks;
     Array<InstRef> param_insts;
-
-    Array<List<BlockRef>::Node *> block_nodes;
-    List<BlockRef> block_refs;
 
     Linkage linkage;
     CallingConvention calling_convention;
@@ -150,32 +56,81 @@ enum GlobalFlags {
     GlobalFlags_Initialized = 1 << 1,
 };
 
-struct Global {
-    Type *type;
-    Slice<uint8_t> data;
-    uint32_t flags;
+enum InstKind {
+    InstKind_Unknown = 0,
+    InstKind_Global,
+    InstKind_StackSlot,
+    InstKind_Block,
+    InstKind_ImmediateInt,
+    InstKind_ImmediateFloat,
+    InstKind_Function,
+    InstKind_FunctionParameter,
+    InstKind_ReturnVoid,
+    InstKind_ReturnValue,
+    InstKind_Load,
+    InstKind_Store,
+    InstKind_Jump,
+    InstKind_FuncCall,
+    InstKind_PtrCast,
+    InstKind_ArrayElemPtr,
 };
 
-struct Const {
-    Type *type;
+struct Inst {
     union {
-        double f64;
-        uint64_t u64;
-        Slice<uint8_t> data;
+        Function *func;
+        struct {
+            Array<InstRef> inst_refs;
+        } block;
+        struct {
+            uint32_t index;
+        } func_param;
+        struct {
+            uint64_t u64;
+        } imm_int;
+        struct {
+            double f64;
+        } imm_float;
+        struct {
+            Slice<uint8_t> data;
+            uint32_t flags;
+        } global;
+        struct {
+            InstRef inst_ref;
+        } return_value;
+        struct {
+            InstRef block_ref;
+        } jump;
+        struct {
+            InstRef func_ref;
+            Slice<InstRef> parameters;
+        } func_call;
+        struct {
+            InstRef inst_ref;
+        } ptr_cast;
+        struct {
+            InstRef accessed_ref;
+            InstRef index_ref;
+        } array_elem_ptr;
+        struct {
+            InstRef ptr_ref;
+            InstRef value_ref;
+        } store;
+        struct {
+            InstRef ptr_ref;
+        } load;
     };
-
-    String to_string(Module *module);
+    InstKind kind;
+    Type *type;
 };
 
 struct Module {
     ArenaAllocator *arena;
-    Array<Function> functions;
-    Array<Global> globals;
-    Array<Const> consts;
-    StringMap<FunctionRef> function_map;
+    Array<Inst> insts;
+    Array<InstRef> globals;
+    Array<InstRef> functions;
+    StringMap<InstRef> function_map;
+    StringMap<InstRef> global_string_map;
     StringMap<Type *> type_map;
-    StringMap<ConstRef> const_map;
-    StringMap<GlobalRef> global_string_map;
     TargetArch target_arch;
     Endianness endianness;
 
@@ -188,8 +143,7 @@ struct Module {
     Type *f32_type;
     Type *f64_type;
 
-public:
-
+  public:
     static Module *create(TargetArch target_arch, Endianness endianness);
     void destroy();
 
@@ -199,12 +153,9 @@ public:
 
     Type *get_cached_type(Type *type);
 
-    ConstRef create_int_const(Type *type, uint64_t value);
-    ConstRef create_float_const(Type *type, double value);
+    InstRef add_inst(const Inst &inst);
 
-    ConstRef register_const(Const constant);
-
-    FunctionRef add_function(
+    InstRef add_function(
         String name,
         CallingConvention calling_convention,
         Linkage linkage,
@@ -212,47 +163,49 @@ public:
         Slice<Type *> param_types,
         Type *return_type);
 
-    GlobalRef add_global(Type *type, uint32_t flags, Slice<uint8_t> data);
-    GlobalRef add_global_string(const String &str);
+    InstRef add_global(Type *type, uint32_t flags, Slice<uint8_t> data);
+    InstRef add_global_string(const String &str);
 
-    StackSlotRef add_stack_slot(FunctionRef func_ref, Type *type);
+    InstRef add_stack_slot(InstRef func_ref, Type *type);
+    InstRef get_func_param(InstRef func_ref, uint32_t param_index);
 
-    InstRef get_func_param(FunctionRef func_ref, uint32_t param_index);
-
-    BlockRef insert_block_at_end(FunctionRef func_ref);
-    BlockRef insert_block_after(FunctionRef func_ref, BlockRef block_ref);
-    BlockRef insert_block_before(FunctionRef func_ref, BlockRef block_ref);
+    InstRef insert_block_at_end(InstRef func_ref);
+    /* InstRef insert_block_after(InstRef func_ref, InstRef block_ref); */
+    /* InstRef insert_block_before(InstRef func_ref, InstRef block_ref); */
 
     String print_alloc(Allocator *allocator);
 };
 
 struct Builder {
     Module *module;
-    FunctionRef current_func_ref;
-    BlockRef current_block_ref;
+    InstRef current_func_ref;
+    InstRef current_block_ref;
 
     static Builder create(Module *module);
 
-    void set_function(FunctionRef func_ref);
-    void position_at_end(BlockRef block_ref);
+    void set_function(InstRef func_ref);
+    void position_at_end(InstRef block_ref);
 
-    InstRef insert_get_const(ConstRef const_ref);
+    InstRef insert_imm_int(Type *type, uint64_t value);
+    InstRef insert_imm_float(Type *type, double value);
 
-    InstRef insert_global_addr(GlobalRef global_ref);
-    InstRef insert_global_load(GlobalRef global_ref);
-    void insert_global_store(GlobalRef global_ref, InstRef inst_ref);
+    InstRef insert_array_elem_ptr(InstRef accessed_ref, InstRef index_ref);
 
-    InstRef insert_stack_addr(StackSlotRef ss_ref);
-    InstRef insert_stack_load(StackSlotRef ss_ref);
-    void insert_stack_store(StackSlotRef ss_ref, InstRef inst_ref);
+    void insert_store(InstRef ptr_ref, InstRef value_ref);
+    InstRef insert_load(InstRef ptr_ref);
 
     InstRef insert_ptr_cast(Type *dest_type, InstRef inst_ref);
 
     InstRef
-    insert_func_call(FunctionRef func_ref, const Slice<InstRef> &parameters);
-    void insert_jump(BlockRef block_ref);
+    insert_func_call(InstRef func_ref, const Slice<InstRef> &parameters);
+    void insert_jump(InstRef block_ref);
     void insert_return_value(InstRef inst_ref);
     void insert_return_void();
 };
+
+inline Inst InstRef::get(Module *module) const
+{
+    return module->insts[this->id];
+}
 
 }; // namespace ace

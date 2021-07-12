@@ -1,11 +1,6 @@
 Frontend:
-- Implement frontend type cache
-- Analyze function declarations
 
 Backend:
-- Make stack slots regular instructions
-- Make stack slots have pointer type
-- Add global variables with pointer type
 
 Misc:
 - Implement hashmap growth

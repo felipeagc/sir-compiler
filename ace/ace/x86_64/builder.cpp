@@ -55,6 +55,7 @@ static int64_t REGISTERS[] = {
 enum MetaValueKind {
     MetaValueKind_None,
     MetaValueKind_Register,
+    MetaValueKind_RegisterMemIndirect,
     MetaValueKind_ImmInt,
     MetaValueKind_Stack,
     MetaValueKind_Global,
@@ -462,9 +463,10 @@ void X86_64AsmBuilder::encode_lea(
 
     case MetaValueKind_Register: {
         switch (source->kind) {
-        case MetaValueKind_None:
-        case MetaValueKind_Register:
-        case MetaValueKind_ImmInt: ACE_ASSERT(0);
+        case MetaValueKind_None:ACE_ASSERT(0);
+        case MetaValueKind_Register:ACE_ASSERT(0);
+        case MetaValueKind_ImmInt:ACE_ASSERT(0);
+        case MetaValueKind_RegisterMemIndirect: ACE_ASSERT(0);
 
         case MetaValueKind_Stack: {
             int64_t source_mem = FE_MEM(FE_BP, 0, 0, source->stack.offset);
@@ -505,6 +507,59 @@ void X86_64AsmBuilder::encode_lea(
                 REGISTERS[meta_func->get_scratch_int_register_index()];
 
             int64_t source_mem = FE_MEM(FE_BP, 0, 0, source->stack.offset);
+            this->encode(FE_LEA64rm, scratch_register, source_mem);
+            this->encode(FE_MOV64mr, dest_mem, scratch_register);
+            break;
+        }
+
+        case MetaValueKind_Global: {
+            int64_t scratch_register =
+                REGISTERS[meta_func->get_scratch_int_register_index()];
+
+            int64_t source_mem = FE_MEM(FE_IP, 0, 0, 0);
+
+            int64_t inst_len =
+                this->encode(FE_LEA64rm, scratch_register, source_mem);
+            ACE_ASSERT(inst_len > 4);
+
+            int64_t relocation_offset = this->get_code_offset() - 4;
+
+            this->encode(FE_MOV64mr, dest_mem, scratch_register);
+
+            this->obj_builder->add_data_relocation(
+                source->global.section_type,
+                source->global.offset,
+                relocation_offset,
+                4);
+            break;
+        }
+        }
+        break;
+    }
+
+    case MetaValueKind_RegisterMemIndirect: {
+        int64_t dest_mem = FE_MEM(REGISTERS[dest->reg.index], 0, 0, 0);
+
+        switch (source->kind) {
+        case MetaValueKind_None:
+        case MetaValueKind_Register:
+        case MetaValueKind_ImmInt: ACE_ASSERT(0);
+
+        case MetaValueKind_Stack: {
+            int64_t scratch_register =
+                REGISTERS[meta_func->get_scratch_int_register_index()];
+
+            int64_t source_mem = FE_MEM(FE_BP, 0, 0, source->stack.offset);
+            this->encode(FE_LEA64rm, scratch_register, source_mem);
+            this->encode(FE_MOV64mr, dest_mem, scratch_register);
+            break;
+        }
+
+        case MetaValueKind_RegisterMemIndirect: {
+            int64_t scratch_register =
+                REGISTERS[meta_func->get_scratch_int_register_index()];
+
+            int64_t source_mem = FE_MEM(REGISTERS[source->reg.index], 0, 0, 0);
             this->encode(FE_LEA64rm, scratch_register, source_mem);
             this->encode(FE_MOV64mr, dest_mem, scratch_register);
             break;
@@ -1212,6 +1267,21 @@ void X86_64AsmBuilder::generate_inst(
         meta_inst->value.type = inst->type;
         break;
     }
+    case InstKind_ArrayElemPtr: {
+        ACE_ASSERT(!"unimplemented");
+        break;
+    }
+    case InstKind_IndirectStore: {
+        MetaInst *meta_ptr =
+            &meta_func->insts[inst->indirect_store.ptr_ref.id];
+        MetaInst *meta_value =
+            &meta_func->insts[inst->indirect_store.value_ref.id];
+
+        this->encode_move(
+            func_ref, &meta_value->value, &meta_ptr->value);
+
+        break;
+    }
     case InstKind_GetConst: {
         MetaConst *meta_const =
             &this->meta_consts[inst->get_const.const_ref.id];
@@ -1528,6 +1598,7 @@ void X86_64AsmBuilder::generate_function(FunctionRef func_ref)
                 case InstKind_GetConst:
                 case InstKind_PtrCast: break;
 
+                case InstKind_ArrayElemPtr:
                 case InstKind_GlobalAddr:
                 case InstKind_StackAddr:
                 case InstKind_StackLoad:

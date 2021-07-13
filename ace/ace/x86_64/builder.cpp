@@ -902,7 +902,7 @@ void X86_64AsmBuilder::generate_inst(
     }
 
     case InstKind_PtrCast: {
-        ACE_ASSERT(0);
+        this->generate_inst(func_ref, inst.ptr_cast.inst_ref, dest_value);
         break;
     }
 

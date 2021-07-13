@@ -184,6 +184,7 @@ enum BuiltinFunction {
     BuiltinFunction_Unknown = 0,
     BuiltinFunction_Sizeof,
     BuiltinFunction_Alignof,
+    BuiltinFunction_PtrCast,
 };
 
 enum TypeKind {

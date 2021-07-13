@@ -155,6 +155,7 @@ Compiler Compiler::create()
 
     builtin_function_map.set("sizeof", BuiltinFunction_Sizeof);
     builtin_function_map.set("alignof", BuiltinFunction_Alignof);
+    builtin_function_map.set("ptrcast", BuiltinFunction_PtrCast);
 
     Compiler compiler = {
         .arena = arena,
@@ -649,14 +650,89 @@ ace::String Type::to_string(Compiler *compiler)
     return str;
 }
 
-uint32_t Type::align_of(Compiler *compiler)
+uint32_t Type::size_of(Compiler *compiler)
 {
-    (void)compiler;
+    switch (this->kind) {
+    case TypeKind_Unknown:
+    case TypeKind_Void:
+    case TypeKind_UntypedInt:
+    case TypeKind_UntypedFloat:
+    case TypeKind_Function:
+    case TypeKind_Type: {
+        return 0;
+    }
+    case TypeKind_Int: {
+        return this->int_.bits << 3;
+    }
+    case TypeKind_Float: {
+        return this->float_.bits << 3;
+    }
+    case TypeKind_Array: {
+        uint32_t subtype_size =
+            this->array.sub_type.get(compiler).size_of(compiler);
+        uint32_t subtype_alignment =
+            this->array.sub_type.get(compiler).align_of(compiler);
+        uint32_t stride = ACE_ROUND_UP(subtype_alignment, subtype_size);
+        return stride * this->array.size;
+    }
+    case TypeKind_Slice: {
+        return 16;
+    }
+    case TypeKind_Bool: {
+        return 1;
+    }
+    case TypeKind_Pointer: {
+        return 8;
+    }
+    case TypeKind_Struct: {
+        ACE_ASSERT(!"unimplemented");
+    }
+    case TypeKind_Tuple: {
+        ACE_ASSERT(!"unimplemented");
+    }
+    }
+
     return 0;
 }
 
-uint32_t Type::size_of(Compiler *compiler)
+uint32_t Type::align_of(Compiler *compiler)
 {
-    (void)compiler;
+    switch (this->kind) {
+    case TypeKind_Unknown:
+    case TypeKind_Void:
+    case TypeKind_UntypedInt:
+    case TypeKind_UntypedFloat:
+    case TypeKind_Function:
+    case TypeKind_Type: {
+        return 0;
+    }
+    case TypeKind_Int: {
+        return this->int_.bits << 3;
+    }
+    case TypeKind_Float: {
+        return this->float_.bits << 3;
+    }
+    case TypeKind_Array: {
+        uint32_t subtype_alignment =
+            this->array.sub_type.get(compiler).align_of(compiler);
+        return subtype_alignment;
+    }
+    case TypeKind_Slice: {
+        return 8;
+    }
+    case TypeKind_Bool: {
+        return 1;
+    }
+    case TypeKind_Pointer: {
+        return 8;
+    }
+    case TypeKind_Struct: {
+        ACE_ASSERT(!"unimplemented");
+    }
+    case TypeKind_Tuple: {
+        ACE_ASSERT(!"unimplemented");
+    }
+    }
     return 0;
 }
+

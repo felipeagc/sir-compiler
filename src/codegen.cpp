@@ -293,6 +293,20 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
 
             break;
         }
+        case BuiltinFunction_PtrCast: {
+            Expr param0 = expr.builtin_call.param_refs[0].get(compiler);
+
+            CodegenValue ptr_value =
+                codegen_expr(compiler, ctx, expr.builtin_call.param_refs[1]);
+
+            value = {
+                false,
+                ctx->module->make_ptr_cast(
+                    ctx->type_values[param0.as_type_ref.id],
+                    load_lvalue(ctx, ptr_value))};
+
+            break;
+        }
         }
 
         break;

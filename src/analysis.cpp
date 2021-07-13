@@ -343,6 +343,37 @@ static void analyze_expr(
 
             break;
         }
+        case BuiltinFunction_PtrCast: {
+            if (expr.builtin_call.param_refs.len != 2) {
+                compiler->add_error(
+                    expr.loc, "expected 2 parameters for @ptrcast");
+                break;
+            }
+
+            analyze_expr(
+                compiler,
+                state,
+                expr.builtin_call.param_refs[0],
+                compiler->type_type);
+
+            analyze_expr(compiler, state, expr.builtin_call.param_refs[1]);
+
+            Expr param0 = expr.builtin_call.param_refs[0].get(compiler);
+            Expr param1 = expr.builtin_call.param_refs[1].get(compiler);
+            if (param0.as_type_ref.get(compiler).kind != TypeKind_Pointer) {
+                compiler->add_error(param0.loc, "expected pointer type");
+                break;
+            }
+
+            if (param1.expr_type_ref.get(compiler).kind != TypeKind_Pointer) {
+                compiler->add_error(
+                    param1.loc, "expected expression of pointer type");
+                break;
+            }
+
+            expr.expr_type_ref = param0.as_type_ref;
+            break;
+        }
         }
 
         break;

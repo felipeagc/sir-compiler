@@ -803,51 +803,62 @@ void X86_64AsmBuilder::generate_inst(
     case InstKind_Block: break;
 
     case InstKind_Global: {
-        MetaValue *meta_inst = &this->meta_insts[inst_ref.id];
+        if (dest_value.kind == MetaValueKind_None) {
+            break;
+        }
 
-        ACE_ASSERT(dest_value.kind != MetaValueKind_None);
-        ACE_ASSERT(meta_inst->kind == MetaValueKind_Global);
-        this->encode_lea(*meta_inst, dest_value);
+        MetaValue meta_inst = this->meta_insts[inst_ref.id];
+
+        ACE_ASSERT(meta_inst.kind == MetaValueKind_Global);
+        this->encode_lea(meta_inst, dest_value);
 
         break;
     }
 
     case InstKind_StackSlot: {
-        MetaValue *meta_inst = &this->meta_insts[inst_ref.id];
+        if (dest_value.kind == MetaValueKind_None) {
+            break;
+        }
 
-        ACE_ASSERT(dest_value.kind != MetaValueKind_None);
-        ACE_ASSERT(meta_inst->kind == MetaValueKind_IRegisterMemory);
-        this->encode_lea(*meta_inst, dest_value);
+        MetaValue meta_inst = this->meta_insts[inst_ref.id];
+
+        ACE_ASSERT(meta_inst.kind == MetaValueKind_IRegisterMemory);
+        this->encode_lea(meta_inst, dest_value);
 
         break;
     }
 
     case InstKind_ImmediateInt: {
-        if (dest_value.kind != MetaValueKind_None) {
-            MetaValue source_value = create_imm_int_value(
-                inst.type->int_.bits >> 3, inst.imm_int.u64);
-            this->encode_move(
-                source_value.imm_int.bytes, source_value, dest_value);
+        if (dest_value.kind == MetaValueKind_None) {
+            break;
         }
+
+        MetaValue source_value =
+            create_imm_int_value(inst.type->int_.bits >> 3, inst.imm_int.u64);
+        this->encode_move(source_value.imm_int.bytes, source_value, dest_value);
+
         break;
     }
 
     case InstKind_ImmediateFloat: {
-        if (dest_value.kind != MetaValueKind_None) {
-            uint8_t data[8];
-            size_t byte_size = inst.type->float_.bits >> 3;
-
-            switch (byte_size) {
-            case 4: *((float *)data) = (float)inst.imm_float.f64; break;
-            case 8: *((double *)data) = (double)inst.imm_float.f64; break;
-            }
-
-            MetaValue source_value = generate_global(
-                GlobalFlags_Initialized | GlobalFlags_ReadOnly,
-                {&data[0], byte_size});
-
-            this->encode_move(byte_size, source_value, dest_value);
+        if (dest_value.kind == MetaValueKind_None) {
+            break;
         }
+
+        uint8_t data[8];
+        size_t byte_size = inst.type->float_.bits >> 3;
+
+        switch (byte_size) {
+        case 4: *((float *)data) = (float)inst.imm_float.f64; break;
+        case 8: *((double *)data) = (double)inst.imm_float.f64; break;
+        }
+
+        MetaValue source_value = generate_global(
+            GlobalFlags_Initialized | GlobalFlags_ReadOnly,
+            {&data[0], byte_size});
+
+        this->encode_move(byte_size, source_value, dest_value);
+
         break;
     }
 
@@ -857,14 +868,15 @@ void X86_64AsmBuilder::generate_inst(
     }
 
     case InstKind_ArrayElemPtr: {
-        ACE_ASSERT(dest_value.kind != MetaValueKind_None);
+        if (dest_value.kind == MetaValueKind_None) {
+            break;
+        }
 
         MetaValue ptr_value = create_int_register_value(8, RegisterIndex_RAX);
         this->generate_inst(
             func_ref, inst.array_elem_ptr.accessed_ref, ptr_value);
 
-        MetaValue index_value =
-            create_int_register_value(8, RegisterIndex_RCX);
+        MetaValue index_value = create_int_register_value(8, RegisterIndex_RCX);
         this->generate_inst(
             func_ref, inst.array_elem_ptr.index_ref, index_value);
 
@@ -895,7 +907,9 @@ void X86_64AsmBuilder::generate_inst(
     }
 
     case InstKind_Load: {
-        ACE_ASSERT(dest_value.kind != MetaValueKind_None);
+        if (dest_value.kind == MetaValueKind_None) {
+            break;
+        }
 
         size_t size = inst.type->size_of(this->module);
         switch (size) {
@@ -1019,40 +1033,44 @@ void X86_64AsmBuilder::generate_inst(
 
         this->encode_direct_call(inst.func_call.func_ref);
 
-        switch (called_func->calling_convention) {
-        case CallingConvention_SystemV: {
-            switch (called_func->return_type->kind) {
-            case TypeKind_Void: break;
+        if (dest_value.kind != MetaValueKind_None) {
+            // Move returned values to result location
 
-            case TypeKind_Int: {
-                MetaValue returned_value = create_int_register_value(
-                    called_func->return_type->int_.bits >> 3,
-                    RegisterIndex_RAX);
-                this->encode_move(
-                    returned_value.reg.bytes, returned_value, dest_value);
+            switch (called_func->calling_convention) {
+            case CallingConvention_SystemV: {
+                switch (called_func->return_type->kind) {
+                case TypeKind_Void: break;
+
+                case TypeKind_Int: {
+                    MetaValue returned_value = create_int_register_value(
+                        called_func->return_type->int_.bits >> 3,
+                        RegisterIndex_RAX);
+                    this->encode_move(
+                        returned_value.reg.bytes, returned_value, dest_value);
+                    break;
+                }
+
+                case TypeKind_Pointer: {
+                    MetaValue returned_value =
+                        create_int_register_value(8, RegisterIndex_RAX);
+                    this->encode_move(8, returned_value, dest_value);
+                    break;
+                }
+
+                case TypeKind_Float: {
+                    MetaValue returned_value = create_float_register_value(
+                        called_func->return_type->float_.bits >> 3,
+                        RegisterIndex_XMM0);
+                    this->encode_move(
+                        returned_value.reg.bytes, returned_value, dest_value);
+                    break;
+                }
+
+                default: ACE_ASSERT(!"unhandled return type");
+                }
                 break;
             }
-
-            case TypeKind_Pointer: {
-                MetaValue returned_value =
-                    create_int_register_value(8, RegisterIndex_RAX);
-                this->encode_move(8, returned_value, dest_value);
-                break;
             }
-
-            case TypeKind_Float: {
-                MetaValue returned_value = create_float_register_value(
-                    called_func->return_type->float_.bits >> 3,
-                    RegisterIndex_XMM0);
-                this->encode_move(
-                    returned_value.reg.bytes, returned_value, dest_value);
-                break;
-            }
-
-            default: ACE_ASSERT(!"unhandled return type");
-            }
-            break;
-        }
         }
 
         break;

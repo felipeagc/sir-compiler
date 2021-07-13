@@ -1,8 +1,8 @@
 def extern malloc(size: u64): *void;
 def extern free(ptr: *void);
-def extern printf(_: *u8, _: f64): void;
-def extern puts(_: *u8): void;
-def extern putchar(_: i32): void;
+def extern printf(_: *u8, _: f64): i32;
+def extern puts(_: *u8): i32;
+def extern putchar(_: i32): i32;
  
 def derp(str: *u8) {
 	puts(str);

@@ -320,6 +320,29 @@ static void analyze_expr(
 
             break;
         }
+        case BuiltinFunction_Alignof: {
+            if (expr.builtin_call.param_refs.len != 1) {
+                compiler->add_error(
+                    expr.loc, "expected 1 parameter for @alignof");
+                break;
+            }
+
+            analyze_expr(
+                compiler,
+                state,
+                expr.builtin_call.param_refs[0],
+                compiler->type_type);
+
+            if (expected_type_ref.id &&
+                (expected_type_ref.get(compiler).kind == TypeKind_Int ||
+                 expected_type_ref.get(compiler).kind == TypeKind_Float)) {
+                expr.expr_type_ref = expected_type_ref;
+            } else {
+                expr.expr_type_ref = compiler->untyped_int_type;
+            }
+
+            break;
+        }
         }
 
         break;

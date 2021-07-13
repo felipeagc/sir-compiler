@@ -43,6 +43,7 @@ def export main(argc: i32, argv: **u8) {
 	derp(msg);
 
 	int_size: i32 = @sizeof(i32);
+	int_size = @alignof(i32);
 
 	{
 		derp("hey");

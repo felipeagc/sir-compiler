@@ -154,6 +154,7 @@ Compiler Compiler::create()
     keyword_map.set("f64", TokenKind_F64);
 
     builtin_function_map.set("sizeof", BuiltinFunction_Sizeof);
+    builtin_function_map.set("alignof", BuiltinFunction_Alignof);
 
     Compiler compiler = {
         .arena = arena,

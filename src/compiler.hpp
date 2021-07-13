@@ -183,6 +183,7 @@ struct Token {
 enum BuiltinFunction {
     BuiltinFunction_Unknown = 0,
     BuiltinFunction_Sizeof,
+    BuiltinFunction_Alignof,
 };
 
 enum TypeKind {

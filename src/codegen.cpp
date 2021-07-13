@@ -282,6 +282,17 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
 
             break;
         }
+        case BuiltinFunction_Alignof: {
+            Expr param0 = expr.builtin_call.param_refs[0].get(compiler);
+            uint64_t size = param0.as_type_ref.get(compiler).align_of(compiler);
+
+            value = {
+                false,
+                ctx->module->make_imm_int(
+                    ctx->type_values[expr.expr_type_ref.id], size)};
+
+            break;
+        }
         }
 
         break;

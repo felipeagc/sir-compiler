@@ -29,6 +29,7 @@ def export main(argc: i32, argv: **u8) {
 	a := i32(123);
 	a = arr[0];
 	arr[0] = a;
+	arr[0] = a;
 	b := f64(123);
 	d := b;
 	c: *f64 = &b;
@@ -41,7 +42,7 @@ def export main(argc: i32, argv: **u8) {
 	msg = "hello 2";
 	derp(msg);
 
-	int_size := @sizeof(i32);
+	int_size: i32 = @sizeof(i32);
 
 	{
 		derp("hey");

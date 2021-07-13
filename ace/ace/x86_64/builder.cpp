@@ -56,32 +56,7 @@ static int64_t REGISTERS[] = {
     FE_XMM12, FE_XMM13, FE_XMM14, FE_XMM15,
 };
 
-struct FuncJumpPatch {
-    int64_t instruction;
-    size_t instruction_offset;
-    InstRef destination_block;
-};
-
-struct MetaFunction {
-    uint32_t stack_size;
-    Array<FuncJumpPatch> jump_patches;
-    bool registers_used[RegisterIndex_COUNT];
-    int32_t saved_register_stack_offset[RegisterIndex_COUNT];
-    Slice<RegisterIndex> callee_saved_registers;
-    SymbolRef symbol_ref{};
-
-    ACE_INLINE
-    RegisterIndex get_scratch_int_register_index()
-    {
-        return RegisterIndex_RAX;
-    }
-
-    ACE_INLINE
-    RegisterIndex get_scratch_float_register_index()
-    {
-        return RegisterIndex_XMM0;
-    }
-};
+struct MetaFunction;
 
 enum MetaValueKind {
     MetaValueKind_Unknown = 0,
@@ -121,6 +96,68 @@ struct MetaValue {
             size_t offset;
         } global;
     };
+};
+
+struct FuncJumpPatch {
+    int64_t instruction;
+    size_t instruction_offset;
+    InstRef destination_block;
+};
+
+struct MetaFunction {
+    uint32_t stack_size;
+    Array<FuncJumpPatch> jump_patches;
+    bool registers_used[RegisterIndex_COUNT];
+    int32_t saved_register_stack_offset[RegisterIndex_COUNT];
+    Slice<RegisterIndex> caller_saved_registers;
+    Slice<RegisterIndex> callee_saved_registers;
+    Array<RegisterIndex> temp_int_register_stack;
+    SymbolRef symbol_ref{};
+
+    MetaValue push_temporary_int_value(size_t size)
+    {
+        MetaValue value = {};
+
+        switch (size) {
+        case 1:
+        case 2:
+        case 4:
+        case 8: {
+            if (this->temp_int_register_stack.len > 0 && size) {
+                RegisterIndex reg_index = *this->temp_int_register_stack.last();
+                this->temp_int_register_stack.pop();
+
+                value.kind = MetaValueKind_IRegister;
+                value.reg.index = reg_index;
+                value.reg.bytes = size;
+            } else {
+                ACE_ASSERT(!"TODO: use stack space");
+            }
+            break;
+        }
+        default: {
+            ACE_ASSERT(!"TODO: use stack space");
+            break;
+        }
+        }
+
+        return value;
+    }
+
+    void pop_temporary_int_value(const MetaValue &value)
+    {
+        switch (value.kind) {
+        case MetaValueKind_IRegister: {
+            this->temp_int_register_stack.push_back(value.reg.index);
+            break;
+        }
+        case MetaValueKind_IRegisterMemory: {
+            this->temp_int_register_stack.push_back(value.regmem.base);
+            break;
+        }
+        default: break;
+        }
+    }
 };
 
 struct X86_64AsmBuilder : AsmBuilder {
@@ -387,7 +424,8 @@ void X86_64AsmBuilder::encode_lea(
 
         switch (source.kind) {
         case MetaValueKind_IRegisterMemory: {
-            int64_t scratch_register = REGISTERS[RegisterIndex_RAX];
+            int64_t scratch_register = REGISTERS[RegisterIndex_RDX];
+            this->encode(FE_PUSHr, scratch_register);
 
             int64_t source_mem = FE_MEM(
                 REGISTERS[source.regmem.base],
@@ -396,10 +434,14 @@ void X86_64AsmBuilder::encode_lea(
                 source.regmem.offset);
             this->encode(FE_LEA64rm, scratch_register, source_mem);
             this->encode(FE_MOV64mr, dest_mem, scratch_register);
+
+            this->encode(FE_POPr, scratch_register);
+
             break;
         }
         case MetaValueKind_Global: {
-            int64_t scratch_register = REGISTERS[RegisterIndex_RAX];
+            int64_t scratch_register = REGISTERS[RegisterIndex_RDX];
+            this->encode(FE_PUSHr, scratch_register);
 
             int64_t source_mem = FE_MEM(FE_IP, 0, 0, 0);
 
@@ -416,6 +458,8 @@ void X86_64AsmBuilder::encode_lea(
                 source.global.offset,
                 relocation_offset,
                 4);
+
+            this->encode(FE_POPr, scratch_register);
             break;
         }
         default: ACE_ASSERT(0);
@@ -637,7 +681,9 @@ void X86_64AsmBuilder::encode_move(
             break;
         }
         case MetaValueKind_Global: {
-            int64_t scratch_register = REGISTERS[RegisterIndex_RAX];
+            int64_t scratch_register = REGISTERS[RegisterIndex_RDX];
+            this->encode(FE_PUSHr, scratch_register);
+
             int64_t source_mem = FE_MEM(FE_IP, 0, 0, 0);
 
             int64_t x86_inst1;
@@ -675,10 +721,15 @@ void X86_64AsmBuilder::encode_move(
                 4);
 
             this->encode(x86_inst2, dest_mem, scratch_register);
+
+            this->encode(FE_POPr, scratch_register);
+
             break;
         }
         case MetaValueKind_IRegisterMemory: {
-            int64_t scratch_register = REGISTERS[RegisterIndex_RAX];
+            int64_t scratch_register = REGISTERS[RegisterIndex_RDX];
+            this->encode(FE_PUSHr, scratch_register);
+
             int64_t source_mem = FE_MEM(
                 REGISTERS[source.regmem.base],
                 source.regmem.scale,
@@ -709,6 +760,9 @@ void X86_64AsmBuilder::encode_move(
 
             this->encode(x86_inst1, scratch_register, source_mem);
             this->encode(x86_inst2, dest_mem, scratch_register);
+
+            this->encode(FE_POPr, scratch_register);
+
             break;
         }
         default: ACE_ASSERT(0); break;
@@ -728,7 +782,9 @@ MetaValue
 X86_64AsmBuilder::generate_inst_no_dest(InstRef func_ref, InstRef inst_ref)
 {
     ZoneScoped;
+    (void)func_ref;
 
+    /* MetaFunction *meta_func = this->meta_insts[func_ref.id].func; */
     Inst inst = inst_ref.get(this->module);
     MetaValue result_value = {MetaValueKind_None, {}};
 
@@ -745,7 +801,8 @@ X86_64AsmBuilder::generate_inst_no_dest(InstRef func_ref, InstRef inst_ref)
     case InstKind_FuncCall:
     case InstKind_ImmediateInt:
     case InstKind_ImmediateFloat:
-    case InstKind_PtrCast: break;
+    case InstKind_PtrCast:
+    case InstKind_ArrayElemPtr: break;
 
     case InstKind_StackSlot: {
         result_value = this->meta_insts[inst_ref.id];
@@ -755,31 +812,13 @@ X86_64AsmBuilder::generate_inst_no_dest(InstRef func_ref, InstRef inst_ref)
         result_value = this->meta_insts[inst_ref.id];
         break;
     }
-    case InstKind_ArrayElemPtr: {
-        MetaValue ptr_value =
-            generate_inst_no_dest(func_ref, inst.array_elem_ptr.accessed_ref);
-        if (ptr_value.kind != MetaValueKind_None) {
-            ACE_ASSERT(ptr_value.kind == MetaValueKind_IRegisterMemory);
-
-            MetaValue index_value =
-                create_int_register_value(8, RegisterIndex_RAX);
-            this->generate_inst(
-                func_ref, inst.array_elem_ptr.index_ref, index_value);
-
-            int32_t scale = inst.type->pointer.sub->size_of(this->module);
-
-            result_value = ptr_value;
-            result_value.regmem.index = RegisterIndex_RAX;
-            result_value.regmem.scale = scale;
-        }
-        break;
-    }
     }
 
     if (result_value.kind != MetaValueKind_None) {
         ACE_ASSERT(
             (result_value.kind == MetaValueKind_IRegisterMemory &&
-             result_value.regmem.base == RegisterIndex_RBP) ||
+             result_value.regmem.base == RegisterIndex_RBP &&
+             result_value.regmem.index == RegisterIndex_None) ||
             result_value.kind == MetaValueKind_Global);
     }
     return result_value;
@@ -876,14 +915,14 @@ void X86_64AsmBuilder::generate_inst(
         this->generate_inst(
             func_ref, inst.array_elem_ptr.accessed_ref, ptr_value);
 
-        MetaValue index_value = create_int_register_value(8, RegisterIndex_RCX);
+        MetaValue index_value = create_int_register_value(8, RegisterIndex_R11);
         this->generate_inst(
             func_ref, inst.array_elem_ptr.index_ref, index_value);
 
         int32_t scale = inst.type->pointer.sub->size_of(this->module);
 
         ptr_value = create_int_register_memory_value(
-            RegisterIndex_RAX, scale, RegisterIndex_RCX, 0);
+            RegisterIndex_RAX, scale, RegisterIndex_R11, 0);
 
         this->encode_lea(ptr_value, dest_value);
 
@@ -1160,6 +1199,8 @@ void X86_64AsmBuilder::generate_function(InstRef func_ref)
     *meta_func = {};
 
     meta_func->jump_patches = Array<FuncJumpPatch>::create(module->arena);
+    meta_func->temp_int_register_stack =
+        Array<RegisterIndex>::create(module->arena);
 
     switch (func->calling_convention) {
     case CallingConvention_SystemV: {
@@ -1171,8 +1212,25 @@ void X86_64AsmBuilder::generate_function(InstRef func_ref)
             RegisterIndex_R15,
         };
         meta_func->callee_saved_registers = {system_v_callee_saved};
+
+        static RegisterIndex system_v_caller_saved[] = {
+            RegisterIndex_RAX,
+            RegisterIndex_RCX,
+            RegisterIndex_RDX,
+            RegisterIndex_RSI,
+            RegisterIndex_RDI,
+            RegisterIndex_R8,
+            RegisterIndex_R9,
+            RegisterIndex_R11,
+        };
+        meta_func->caller_saved_registers = {system_v_caller_saved};
+
         break;
     }
+    }
+
+    for (RegisterIndex reg_index : meta_func->caller_saved_registers) {
+        meta_func->temp_int_register_stack.push_back(reg_index);
     }
 
     if (func->blocks.len == 0) {

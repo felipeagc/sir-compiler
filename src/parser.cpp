@@ -911,7 +911,8 @@ static Expr parse_func_call_expr(Compiler *compiler, TokenizerState *state)
     Token next_token = {};
     state->next_token(compiler, &next_token);
     while (next_token.kind == TokenKind_LBracket ||
-           next_token.kind == TokenKind_LParen) {
+           next_token.kind == TokenKind_LParen ||
+           next_token.kind == TokenKind_Dot) {
 
         switch (next_token.kind) {
         case TokenKind_LBracket: {
@@ -959,6 +960,21 @@ static Expr parse_func_call_expr(Compiler *compiler, TokenizerState *state)
             }
 
             state->consume_token(compiler, TokenKind_RParen);
+            break;
+        }
+        case TokenKind_Dot: {
+            state->consume_token(compiler, TokenKind_Dot);
+            state->consume_token(compiler, TokenKind_Mul);
+
+            Expr sub_expr = expr;
+            ExprRef sub_expr_ref = compiler->add_expr(sub_expr);
+
+            expr = {};
+            expr.loc = sub_expr.loc;
+            expr.kind = ExprKind_Unary;
+            expr.unary.op = UnaryOp_Dereference;
+            expr.unary.left_ref = sub_expr_ref;
+
             break;
         }
         default: ACE_ASSERT(0);

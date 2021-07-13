@@ -16,6 +16,11 @@ def export main(argc: i32, argv: **u8) {
 	putchar(arr[1]);
 	putchar(arr[2]);
 
+	arr_ptr := &arr;
+	putchar(arr_ptr.*[0]);
+	putchar(arr_ptr.*[1]);
+	putchar(arr_ptr.*[2]);
+
 	a := i32(123);
 	a = arr[0];
 	arr[0] = a;

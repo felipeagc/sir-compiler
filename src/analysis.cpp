@@ -296,7 +296,8 @@ static void analyze_expr(
 
     case ExprKind_Subscript: {
         analyze_expr(compiler, state, expr.subscript.left_ref);
-        analyze_expr(compiler, state, expr.subscript.right_ref, compiler->u64_type);
+        analyze_expr(
+            compiler, state, expr.subscript.right_ref, compiler->u64_type);
 
         Expr left_expr = expr.subscript.left_ref.get(compiler);
         Expr right_expr = expr.subscript.right_ref.get(compiler);
@@ -311,7 +312,8 @@ static void analyze_expr(
         Type index_type = index_type_ref.get(compiler);
         Type indexed_type = indexed_type_ref.get(compiler);
 
-        if (index_type.kind != TypeKind_Int && index_type.kind != TypeKind_UntypedInt) {
+        if (index_type.kind != TypeKind_Int &&
+            index_type.kind != TypeKind_UntypedInt) {
             compiler->add_error(
                 right_expr.loc, "subscript index is not an integer");
         }
@@ -323,8 +325,7 @@ static void analyze_expr(
                 "accessed expression in subscript is not an array");
         }
 
-        switch (indexed_type.kind)
-        {
+        switch (indexed_type.kind) {
         case TypeKind_Array: {
             expr.expr_type_ref = indexed_type.array.sub_type;
             break;
@@ -356,6 +357,7 @@ static void analyze_expr(
                     "'%.*s'",
                     (int)type_string.len,
                     type_string.ptr);
+                break;
             }
 
             if (subtype_ref.id) {
@@ -365,7 +367,24 @@ static void analyze_expr(
             break;
         }
         case UnaryOp_Dereference: {
-            compiler->add_error(expr.loc, "'.*' not implemented");
+            analyze_expr(compiler, state, expr.unary.left_ref);
+
+            TypeRef subtype_ref =
+                expr.unary.left_ref.get(compiler).expr_type_ref;
+            Type subtype = subtype_ref.get(compiler);
+
+            if (subtype.kind != TypeKind_Pointer) {
+                ace::String type_string = subtype.to_string(compiler);
+                compiler->add_error(
+                    expr.loc,
+                    "cannot dereference variable of type: '%.*s'",
+                    (int)type_string.len,
+                    type_string.ptr);
+                break;
+            }
+
+            expr.expr_type_ref = subtype.pointer.sub_type;
+
             break;
         }
         case UnaryOp_Negate: {

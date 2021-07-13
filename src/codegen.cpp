@@ -307,7 +307,11 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
             break;
         }
         case UnaryOp_Dereference: {
-            ACE_ASSERT(!"unimplemented");
+            CodegenValue operand_value = codegen_expr(compiler, ctx, expr.unary.left_ref);
+            ACE_ASSERT(operand_value.is_lvalue);
+
+            value = {true, ctx->module->make_load(operand_value.inst_ref)};
+
             break;
         }
         case UnaryOp_Negate: {
@@ -362,8 +366,8 @@ codegen_stmt(Compiler *compiler, CodegenContext *ctx, StmtRef stmt_ref)
 
         ACE_ASSERT(receiver_value.is_lvalue);
 
-        ctx->builder.insert_inst(
-            ctx->module->make_store(receiver_value.inst_ref, load_lvalue(ctx, value)));
+        ctx->builder.insert_inst(ctx->module->make_store(
+            receiver_value.inst_ref, load_lvalue(ctx, value)));
         break;
     }
 
@@ -427,13 +431,15 @@ codegen_decl(Compiler *compiler, CodegenContext *ctx, DeclRef decl_ref)
             linkage = ace::Linkage_External;
         }
 
-        value = {false, module->add_function(
-            decl.name,
-            ace::CallingConvention_SystemV,
-            linkage,
+        value = {
             false,
-            param_types,
-            return_type)};
+            module->add_function(
+                decl.name,
+                ace::CallingConvention_SystemV,
+                linkage,
+                false,
+                param_types,
+                return_type)};
 
         ctx->decl_values[decl_ref.id] = value;
 

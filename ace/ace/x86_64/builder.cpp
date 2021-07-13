@@ -777,7 +777,10 @@ X86_64AsmBuilder::generate_inst_no_dest(InstRef func_ref, InstRef inst_ref)
     }
 
     if (result_value.kind != MetaValueKind_None) {
-        ACE_ASSERT(result_value.kind == MetaValueKind_IRegisterMemory);
+        ACE_ASSERT(
+            (result_value.kind == MetaValueKind_IRegisterMemory &&
+             result_value.regmem.base == RegisterIndex_RBP) ||
+            result_value.kind == MetaValueKind_Global);
     }
     return result_value;
 }
@@ -856,34 +859,19 @@ void X86_64AsmBuilder::generate_inst(
     case InstKind_ArrayElemPtr: {
         ACE_ASSERT(dest_value.kind != MetaValueKind_None);
 
-        MetaValue ptr_value =
-            generate_inst_no_dest(func_ref, inst.array_elem_ptr.accessed_ref);
-        if (ptr_value.kind == MetaValueKind_None) {
-            ptr_value = create_int_register_value(8, RegisterIndex_RAX);
-            this->generate_inst(
-                func_ref, inst.array_elem_ptr.accessed_ref, ptr_value);
+        MetaValue ptr_value = create_int_register_value(8, RegisterIndex_RAX);
+        this->generate_inst(
+            func_ref, inst.array_elem_ptr.accessed_ref, ptr_value);
 
-            MetaValue index_value =
-                create_int_register_value(8, RegisterIndex_RCX);
-            this->generate_inst(
-                func_ref, inst.array_elem_ptr.index_ref, index_value);
+        MetaValue index_value =
+            create_int_register_value(8, RegisterIndex_RCX);
+        this->generate_inst(
+            func_ref, inst.array_elem_ptr.index_ref, index_value);
 
-            int32_t scale = inst.type->pointer.sub->size_of(this->module);
+        int32_t scale = inst.type->pointer.sub->size_of(this->module);
 
-            ptr_value = create_int_register_memory_value(
-                RegisterIndex_RAX, scale, RegisterIndex_RCX, 0);
-        } else {
-            MetaValue index_value =
-                create_int_register_value(8, RegisterIndex_RAX);
-            this->generate_inst(
-                func_ref, inst.array_elem_ptr.index_ref, index_value);
-
-            int32_t scale = inst.type->pointer.sub->size_of(this->module);
-
-            ACE_ASSERT(ptr_value.kind == MetaValueKind_IRegisterMemory);
-            ptr_value.regmem.index = RegisterIndex_RAX;
-            ptr_value.regmem.scale = scale;
-        }
+        ptr_value = create_int_register_memory_value(
+            RegisterIndex_RAX, scale, RegisterIndex_RCX, 0);
 
         this->encode_lea(ptr_value, dest_value);
 

@@ -1,3 +1,5 @@
+def extern malloc(size: u64): *void;
+def extern free(ptr: *void);
 def extern printf(_: *u8, _: f64): void;
 def extern puts(_: *u8): void;
 def extern putchar(_: i32): void;
@@ -15,6 +17,9 @@ def export main(argc: i32, argv: **u8) {
 	putchar(arr[0]);
 	putchar(arr[1]);
 	putchar(arr[2]);
+
+	first := &arr[0];
+	first.* = 49;
 
 	arr_ptr := &arr;
 	putchar(arr_ptr.*[0]);

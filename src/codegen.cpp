@@ -269,7 +269,21 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
     }
 
     case ExprKind_BuiltinCall: {
-        ACE_ASSERT(!"unimplemented analysis");
+        switch (expr.builtin_call.builtin) {
+        case BuiltinFunction_Unknown: ACE_ASSERT(0); break;
+        case BuiltinFunction_Sizeof: {
+            Expr param0 = expr.builtin_call.param_refs[0].get(compiler);
+            uint64_t size = param0.as_type_ref.get(compiler).size_of(compiler);
+
+            value = {
+                false,
+                ctx->module->make_imm_int(
+                    ctx->type_values[expr.expr_type_ref.id], size)};
+
+            break;
+        }
+        }
+
         break;
     }
 
@@ -312,7 +326,8 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
             break;
         }
         case UnaryOp_Dereference: {
-            CodegenValue operand_value = codegen_expr(compiler, ctx, expr.unary.left_ref);
+            CodegenValue operand_value =
+                codegen_expr(compiler, ctx, expr.unary.left_ref);
             ACE_ASSERT(operand_value.is_lvalue);
 
             value = {true, ctx->module->make_load(operand_value.inst_ref)};

@@ -295,7 +295,33 @@ static void analyze_expr(
     }
 
     case ExprKind_BuiltinCall: {
-        ACE_ASSERT(!"unimplemented analysis");
+        switch (expr.builtin_call.builtin) {
+        case BuiltinFunction_Unknown: ACE_ASSERT(0); break;
+        case BuiltinFunction_Sizeof: {
+            if (expr.builtin_call.param_refs.len != 1) {
+                compiler->add_error(
+                    expr.loc, "expected 1 parameter for @sizeof");
+                break;
+            }
+
+            analyze_expr(
+                compiler,
+                state,
+                expr.builtin_call.param_refs[0],
+                compiler->type_type);
+
+            if (expected_type_ref.id &&
+                (expected_type_ref.get(compiler).kind == TypeKind_Int ||
+                 expected_type_ref.get(compiler).kind == TypeKind_Float)) {
+                expr.expr_type_ref = expected_type_ref;
+            } else {
+                expr.expr_type_ref = compiler->untyped_int_type;
+            }
+
+            break;
+        }
+        }
+
         break;
     }
 

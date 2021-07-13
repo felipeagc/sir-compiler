@@ -783,6 +783,46 @@ static Expr parse_primary_expr(Compiler *compiler, TokenizerState *state)
 
         break;
     }
+    case TokenKind_BuiltinIdentifier: {
+        Token ident_token =
+            state->consume_token(compiler, TokenKind_BuiltinIdentifier);
+
+        state->consume_token(compiler, TokenKind_LParen);
+
+        BuiltinFunction builtin_func = BuiltinFunction_Unknown;
+        if (!compiler->builtin_function_map.get(
+                ident_token.str, &builtin_func)) {
+            compiler->add_error(
+                next_token.loc,
+                "invalid builtin function: '@%.*s'",
+                (int)ident_token.str.len,
+                ident_token.str.ptr);
+        }
+
+        expr.kind = ExprKind_BuiltinCall;
+        expr.loc = ident_token.loc;
+        expr.builtin_call.builtin = builtin_func;
+        expr.builtin_call.param_refs =
+            ace::Array<ExprRef>::create(compiler->arena);
+
+        state->next_token(compiler, &next_token);
+        while (next_token.kind != TokenKind_RParen) {
+            Expr param_expr = parse_expr(compiler, state);
+            ExprRef param_expr_ref = compiler->add_expr(param_expr);
+
+            expr.builtin_call.param_refs.push_back(param_expr_ref);
+
+            state->next_token(compiler, &next_token);
+            if (next_token.kind != TokenKind_RParen) {
+                state->consume_token(compiler, TokenKind_Comma);
+            }
+
+            state->next_token(compiler, &next_token);
+        }
+
+        state->consume_token(compiler, TokenKind_RParen);
+        break;
+    }
     default: {
         compiler->add_error(
             next_token.loc,
@@ -1488,4 +1528,8 @@ void parse_file(Compiler *compiler, File *file)
     }
 
     file->line_count = state.line + 1;
+
+    if (compiler->errors.len > 0) {
+        compiler->halt_compilation();
+    }
 }

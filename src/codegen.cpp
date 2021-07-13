@@ -268,6 +268,11 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
         break;
     }
 
+    case ExprKind_BuiltinCall: {
+        ACE_ASSERT(!"unimplemented analysis");
+        break;
+    }
+
     case ExprKind_Subscript: {
         CodegenValue indexed_ref =
             codegen_expr(compiler, ctx, expr.subscript.left_ref);

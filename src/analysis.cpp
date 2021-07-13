@@ -294,6 +294,11 @@ static void analyze_expr(
         break;
     }
 
+    case ExprKind_BuiltinCall: {
+        ACE_ASSERT(!"unimplemented analysis");
+        break;
+    }
+
     case ExprKind_Subscript: {
         analyze_expr(compiler, state, expr.subscript.left_ref);
         analyze_expr(

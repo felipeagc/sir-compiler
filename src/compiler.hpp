@@ -181,7 +181,8 @@ struct Token {
 };
 
 enum BuiltinFunction {
-
+    BuiltinFunction_Unknown = 0,
+    BuiltinFunction_Sizeof,
 };
 
 enum TypeKind {
@@ -312,6 +313,7 @@ enum ExprKind {
     ExprKind_SliceType,
     ExprKind_ArrayType,
     ExprKind_Subscript,
+    ExprKind_BuiltinCall,
     ExprKind_Unary,
     ExprKind_Binary,
 };
@@ -348,6 +350,10 @@ struct Expr {
             ExprRef func_expr_ref;
             ace::Array<ExprRef> param_refs;
         } func_call;
+        struct {
+            BuiltinFunction builtin;
+            ace::Array<ExprRef> param_refs;
+        } builtin_call;
         struct {
             ExprRef sub_expr_ref;
         } ptr_type;

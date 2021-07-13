@@ -153,6 +153,8 @@ Compiler Compiler::create()
     keyword_map.set("f32", TokenKind_F32);
     keyword_map.set("f64", TokenKind_F64);
 
+    builtin_function_map.set("sizeof", BuiltinFunction_Sizeof);
+
     Compiler compiler = {
         .arena = arena,
         .keyword_map = keyword_map,

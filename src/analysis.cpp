@@ -486,7 +486,64 @@ static void analyze_expr(
     }
 
     case ExprKind_Binary: {
-        compiler->add_error(expr.loc, "unimplemented binary expr");
+
+        switch (expr.binary.op) {
+        case BinaryOp_Unknown:
+        case BinaryOp_MAX: ACE_ASSERT(0); break;
+
+        case BinaryOp_Add:
+        case BinaryOp_Sub:
+        case BinaryOp_Mul:
+        case BinaryOp_Div:
+        case BinaryOp_Mod: {
+            analyze_expr(
+                compiler, state, expr.binary.left_ref, expected_type_ref);
+            analyze_expr(
+                compiler, state, expr.binary.right_ref, expected_type_ref);
+
+            Expr left = expr.binary.left_ref.get(compiler);
+            Expr right = expr.binary.right_ref.get(compiler);
+            if (left.expr_type_ref.id != right.expr_type_ref.id) {
+                compiler->add_error(
+                    expr.loc,
+                    "mismatched types for binary expression operands");
+                break;
+            }
+
+            Type type = left.expr_type_ref.get(compiler);
+            if (type.kind != TypeKind_Int && type.kind != TypeKind_Float) {
+                compiler->add_error(
+                    expr.loc, "binary expression expects numeric operands");
+                break;
+            }
+
+            expr.expr_type_ref = left.expr_type_ref;
+            break;
+        }
+        case BinaryOp_BitAnd:
+        case BinaryOp_BitOr:
+        case BinaryOp_BitXor: {
+            ACE_ASSERT(!"unimplemented binop analysis");
+            break;
+        }
+
+        case BinaryOp_Equal:
+        case BinaryOp_NotEqual:
+        case BinaryOp_Greater:
+        case BinaryOp_GreaterEqual:
+        case BinaryOp_Less:
+        case BinaryOp_LessEqual: {
+            ACE_ASSERT(!"unimplemented binop analysis");
+            break;
+        }
+
+        case BinaryOp_LShift:
+        case BinaryOp_RShift: {
+            ACE_ASSERT(!"unimplemented binop analysis");
+            break;
+        }
+        }
+
         break;
     }
     }
@@ -545,9 +602,14 @@ analyze_stmt(Compiler *compiler, AnalyzerState *state, StmtRef stmt_ref)
     }
 
     case StmtKind_Block: {
+        Scope *block_scope =
+            Scope::create(compiler, state->file, *state->scope_stack.last());
+
+        state->scope_stack.push_back(block_scope);
         for (StmtRef sub_stmt_ref : stmt.block.stmt_refs) {
             analyze_stmt(compiler, state, sub_stmt_ref);
         }
+        state->scope_stack.pop();
         break;
     }
 
@@ -682,9 +744,7 @@ analyze_decl(Compiler *compiler, AnalyzerState *state, DeclRef decl_ref)
 
         if (decl.decl_type_ref.id == 0) {
             compiler->add_error(
-                decl.loc,
-                "could not resolve type for local variable "
-                "declaration");
+                decl.loc, "could not resolve type for variable declaration");
             break;
         }
 
@@ -693,7 +753,7 @@ analyze_decl(Compiler *compiler, AnalyzerState *state, DeclRef decl_ref)
             ace::String type_string = decl_type.to_string(compiler);
             compiler->add_error(
                 decl.loc,
-                "cannot create stack variable of non-runtime type: "
+                "cannot create variable of non-runtime type: "
                 "'%.*s'",
                 (int)type_string.len,
                 type_string.ptr);
@@ -702,7 +762,54 @@ analyze_decl(Compiler *compiler, AnalyzerState *state, DeclRef decl_ref)
         break;
     }
     case DeclKind_GlobalVarDecl: {
-        compiler->add_error(decl.loc, "global var decl unimplemented");
+        Scope *scope = *state->scope_stack.last();
+        if (scope->lookup(decl.name).id != decl_ref.id) {
+            scope->add(compiler, decl_ref);
+        }
+
+        TypeRef var_type = {0};
+
+        if (decl.local_var_decl.type_expr.id > 0) {
+            analyze_expr(
+                compiler,
+                state,
+                decl.local_var_decl.type_expr,
+                compiler->type_type);
+            var_type = decl.local_var_decl.type_expr.get(compiler).as_type_ref;
+        }
+
+        if (decl.local_var_decl.value_expr.id > 0) {
+            analyze_expr(
+                compiler, state, decl.local_var_decl.value_expr, var_type);
+            if (var_type.id == 0) {
+                var_type =
+                    decl.local_var_decl.value_expr.get(compiler).expr_type_ref;
+            }
+
+            compiler->add_error(
+                decl.loc,
+                "global variable initializers are not yet implemented");
+        }
+
+        decl.decl_type_ref = var_type;
+
+        if (decl.decl_type_ref.id == 0) {
+            compiler->add_error(
+                decl.loc, "could not resolve type for variable declaration");
+            break;
+        }
+
+        if (!decl.decl_type_ref.is_runtime(compiler)) {
+            Type decl_type = decl.decl_type_ref.get(compiler);
+            ace::String type_string = decl_type.to_string(compiler);
+            compiler->add_error(
+                decl.loc,
+                "cannot create variable of non-runtime type: "
+                "'%.*s'",
+                (int)type_string.len,
+                type_string.ptr);
+        }
+
         break;
     }
     }

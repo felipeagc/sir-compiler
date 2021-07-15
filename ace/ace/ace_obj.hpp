@@ -5,13 +5,13 @@
 
 namespace ace {
 
-enum SymbolType {
+enum SymbolType : uint8_t {
     SymbolType_None,
     SymbolType_Function,
     SymbolType_Section,
 };
 
-enum SectionType {
+enum SectionType : uint8_t {
     SectionType_None,
     SectionType_Text,
     SectionType_Data,

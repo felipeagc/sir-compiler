@@ -1490,6 +1490,50 @@ parse_top_level_decl(Compiler *compiler, TokenizerState *state, File *file)
 
         break;
     }
+    case TokenKind_Global: {
+        state->consume_token(compiler, TokenKind_Global);
+
+        Token ident_tok = state->consume_token(compiler, TokenKind_Identifier);
+
+        state->consume_token(compiler, TokenKind_Colon);
+
+        ExprRef type_expr_ref = {0};
+        ExprRef value_expr_ref = {0};
+
+        state->next_token(compiler, &next_token);
+        if (next_token.kind != TokenKind_Equal) {
+            type_expr_ref = compiler->add_expr(parse_expr(compiler, state));
+
+            state->next_token(compiler, &next_token);
+            if (next_token.kind == TokenKind_Equal) {
+                state->consume_token(compiler, TokenKind_Equal);
+
+                value_expr_ref =
+                    compiler->add_expr(parse_expr(compiler, state));
+            }
+        } else {
+            state->consume_token(compiler, TokenKind_Equal);
+
+            value_expr_ref =
+                compiler->add_expr(parse_expr(compiler, state));
+        }
+
+        ACE_ASSERT(type_expr_ref.id > 0 || value_expr_ref.id > 0);
+
+        Decl var_decl = {};
+        var_decl.kind = DeclKind_GlobalVarDecl;
+        var_decl.loc = ident_tok.loc;
+        var_decl.name = ident_tok.str;
+        var_decl.local_var_decl.type_expr = type_expr_ref;
+        var_decl.local_var_decl.value_expr = value_expr_ref;
+
+        state->consume_token(compiler, TokenKind_Semicolon);
+
+        DeclRef var_decl_ref = compiler->add_decl(var_decl);
+        file->top_level_decls.push_back(var_decl_ref);
+
+        break;
+    }
     default: {
         compiler->add_error(
             next_token.loc,

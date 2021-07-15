@@ -130,6 +130,7 @@ Compiler Compiler::create()
     keyword_map.set("export", TokenKind_Export);
     keyword_map.set("inline", TokenKind_Inline);
     keyword_map.set("def", TokenKind_Def);
+    keyword_map.set("global", TokenKind_Global);
     keyword_map.set("macro", TokenKind_Macro);
     keyword_map.set("null", TokenKind_Null);
     keyword_map.set("true", TokenKind_True);

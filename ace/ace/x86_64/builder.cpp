@@ -189,7 +189,7 @@ struct X86_64AsmBuilder : AsmBuilder {
     void generate_function(InstRef global_ref);
     void generate_inst(InstRef func_ref, InstRef inst_ref);
 
-    MetaValue move_inst_rvalue(InstRef inst_ref, const MetaValue &dest_value);
+    void move_inst_rvalue(InstRef inst_ref, const MetaValue &dest_value);
 
     virtual void generate() override;
     virtual void destroy() override;
@@ -908,11 +908,9 @@ void X86_64AsmBuilder::encode_move(
     }
 }
 
-MetaValue X86_64AsmBuilder::move_inst_rvalue(
+void X86_64AsmBuilder::move_inst_rvalue(
     InstRef inst_ref, const MetaValue &dest_value)
 {
-    MetaValue value = dest_value;
-
     Inst inst = inst_ref.get(this->module);
     switch (inst.kind) {
     case InstKind_StackSlot: {
@@ -924,7 +922,7 @@ MetaValue X86_64AsmBuilder::move_inst_rvalue(
         break;
     }
     case InstKind_PtrCast: {
-        value = this->move_inst_rvalue(inst.ptr_cast.inst_ref, dest_value);
+        this->move_inst_rvalue(inst.ptr_cast.inst_ref, dest_value);
         break;
     }
     default: {
@@ -935,8 +933,6 @@ MetaValue X86_64AsmBuilder::move_inst_rvalue(
         break;
     }
     }
-
-    return value;
 }
 
 void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
@@ -985,8 +981,8 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
     }
 
     case InstKind_Binop: {
-        ACE_ASSERT(!"unimplemented");
-#if 0
+        MetaValue dest_value = this->meta_insts[inst_ref.id];
+
         size_t size = inst.type->size_of(this->module);
         MetaValue ax_value = create_int_register_value(size, RegisterIndex_RAX);
         MetaValue dx_value = create_int_register_value(size, RegisterIndex_RDX);
@@ -1005,8 +1001,9 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
             default: ACE_ASSERT(0); break;
             }
 
-            this->generate_inst(func_ref, inst.binop.left_ref, ax_value);
-            this->generate_inst(func_ref, inst.binop.right_ref, dx_value);
+            this->move_inst_rvalue(inst.binop.left_ref, ax_value);
+            this->move_inst_rvalue(inst.binop.right_ref, dx_value);
+
             this->encode(x86_inst, FE_AX, FE_DX);
             this->encode_move(size, ax_value, dest_value);
 
@@ -1028,8 +1025,8 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
             default: ACE_ASSERT(0); break;
             }
 
-            this->generate_inst(func_ref, inst.binop.left_ref, ax_value);
-            this->generate_inst(func_ref, inst.binop.right_ref, dx_value);
+            this->move_inst_rvalue(inst.binop.left_ref, ax_value);
+            this->move_inst_rvalue(inst.binop.right_ref, dx_value);
 
             if (size == 1) {
                 this->encode(x86_inst, FE_DX);
@@ -1042,7 +1039,6 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
             break;
         }
         }
-#endif
         break;
     }
 
@@ -1081,7 +1077,7 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
         case 8: {
             MetaValue stored_value =
                 create_int_register_value(value_size, RegisterIndex_RAX);
-            stored_value = this->move_inst_rvalue(inst.store.value_ref, stored_value);
+            this->move_inst_rvalue(inst.store.value_ref, stored_value);
 
             Inst ptr_inst = inst.store.ptr_ref.get(this->module);
 

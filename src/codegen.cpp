@@ -273,8 +273,6 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
         case BuiltinFunction_Sizeof: {
             Expr param0 = expr.builtin_call.param_refs[0].get(compiler);
             uint64_t size = param0.as_type_ref.get(compiler).size_of(compiler);
-            ace::String type_name = param0.as_type_ref.get(compiler).to_string(compiler);
-            printf("sizeof(%.*s) = %lu\n", (int)type_name.len, type_name.ptr, size);
 
             value = {
                 false,
@@ -392,22 +390,34 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
 
         case BinaryOp_Add: {
             switch (type.kind) {
-            case TypeKind_Int: {
-                op = ace::BinaryOperation_IAdd;
-                break;
-            }
-            case TypeKind_Float: {
-                ACE_ASSERT(!"unimplemented");
-                break;
-            }
+            case TypeKind_Int: op = ace::BinaryOperation_IAdd; break;
+            case TypeKind_Float: ACE_ASSERT(!"unimplemented"); break;
             default: ACE_ASSERT(0);
             }
 
             break;
         }
 
-        case BinaryOp_Sub:
-        case BinaryOp_Mul:
+        case BinaryOp_Sub: {
+            switch (type.kind) {
+            case TypeKind_Int: op = ace::BinaryOperation_ISub; break;
+            case TypeKind_Float: ACE_ASSERT(!"unimplemented"); break;
+            default: ACE_ASSERT(0);
+            }
+
+            break;
+        }
+
+        case BinaryOp_Mul: {
+            switch (type.kind) {
+            case TypeKind_Int: op = ace::BinaryOperation_IMul; break;
+            case TypeKind_Float: ACE_ASSERT(!"unimplemented"); break;
+            default: ACE_ASSERT(0);
+            }
+
+            break;
+        }
+
         case BinaryOp_Div:
         case BinaryOp_Mod: {
             ACE_ASSERT(!"unimplemented binop codegen");

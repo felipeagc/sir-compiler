@@ -65,15 +65,15 @@ def export main(argc: i32, argv: **u8) {
 
 	// test1();
 
-	// {
-	// 	a: i32 = 321 + 123;
-	// 	printf("a = %d", a);
-	// 	puts("");
+	{
+		a: i32 = 321 + 123;
+		printf("a = %d", a);
+		puts("");
 
-	// 	b: i32 = a + 1;
-	// 	printf("b = %d", b);
-	// 	puts("");
-	// }
+		b: i32 = a * 2 + 1;
+		printf("b = %d", b);
+		puts("");
+	}
 
 	my_global = argc;
 	printf("my_global: %d", my_global);
@@ -82,7 +82,7 @@ def export main(argc: i32, argv: **u8) {
 	arr: [12]i32;
 	arr[0] = 48;
 	arr[1] = 49;
-	// arr[1] = arr[0] + 2;
+	arr[1] = arr[0] + 2;
 	arr[2] = 10;
 
 	putchar(arr[0]);

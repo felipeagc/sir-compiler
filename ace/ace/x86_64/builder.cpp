@@ -189,6 +189,8 @@ struct X86_64AsmBuilder : AsmBuilder {
     void generate_function(InstRef global_ref);
     void generate_inst(InstRef func_ref, InstRef inst_ref);
 
+    MetaValue move_inst_rvalue(InstRef inst_ref, const MetaValue &dest_value);
+
     virtual void generate() override;
     virtual void destroy() override;
 };
@@ -906,6 +908,37 @@ void X86_64AsmBuilder::encode_move(
     }
 }
 
+MetaValue X86_64AsmBuilder::move_inst_rvalue(
+    InstRef inst_ref, const MetaValue &dest_value)
+{
+    MetaValue value = dest_value;
+
+    Inst inst = inst_ref.get(this->module);
+    switch (inst.kind) {
+    case InstKind_StackSlot: {
+        this->encode_lea(this->meta_insts[inst_ref.id], dest_value);
+        break;
+    }
+    case InstKind_Global: {
+        this->encode_lea(this->meta_insts[inst_ref.id], dest_value);
+        break;
+    }
+    case InstKind_PtrCast: {
+        value = this->move_inst_rvalue(inst.ptr_cast.inst_ref, dest_value);
+        break;
+    }
+    default: {
+        this->encode_move(
+            inst.type->size_of(this->module),
+            this->meta_insts[inst_ref.id],
+            dest_value);
+        break;
+    }
+    }
+
+    return value;
+}
+
 void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
 {
     ZoneScoped;
@@ -921,20 +954,6 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
     case InstKind_FunctionParameter: ACE_ASSERT(0); break;
     case InstKind_Global: ACE_ASSERT(0); break;
     case InstKind_StackSlot: ACE_ASSERT(0); break;
-
-    case InstKind_GlobalPtr: {
-        this->encode_lea(
-            this->meta_insts[inst.global_ptr.global_ref.id],
-            this->meta_insts[inst_ref.id]);
-        break;
-    }
-
-    case InstKind_StackPtr: {
-        this->encode_lea(
-            this->meta_insts[inst.stack_ptr.stack_slot_ref.id],
-            this->meta_insts[inst_ref.id]);
-        break;
-    }
 
     case InstKind_ImmediateInt: {
         this->meta_insts[inst_ref.id] =
@@ -1029,10 +1048,7 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
 
     case InstKind_ArrayElemPtr: {
         MetaValue ptr_value = create_int_register_value(8, RegisterIndex_RAX);
-        this->encode_move(
-            8,
-            this->meta_insts[inst.array_elem_ptr.accessed_ref.id],
-            ptr_value);
+        this->move_inst_rvalue(inst.array_elem_ptr.accessed_ref, ptr_value);
 
         size_t index_size = inst.array_elem_ptr.index_ref.get(this->module)
                                 .type->size_of(this->module);
@@ -1064,22 +1080,28 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
         case 4:
         case 8: {
             MetaValue stored_value =
-                create_int_register_value(value_size, RegisterIndex_RCX);
-            this->encode_move(
-                value_size, this->meta_insts[inst.store.value_ref.id], stored_value);
+                create_int_register_value(value_size, RegisterIndex_RAX);
+            stored_value = this->move_inst_rvalue(inst.store.value_ref, stored_value);
 
-            MetaValue ptr_value =
-                create_int_register_value(8, RegisterIndex_RAX);
-            this->encode_move(
-                8, this->meta_insts[inst.store.ptr_ref.id], ptr_value);
+            Inst ptr_inst = inst.store.ptr_ref.get(this->module);
 
-            MetaValue ptr_memory_value = create_int_register_memory_value(
-                RegisterIndex_RAX, 0, RegisterIndex_None, 0);
+            MetaValue ptr_value = {};
+            switch (ptr_inst.kind) {
+            case InstKind_Global:
+            case InstKind_StackSlot: {
+                ptr_value = this->meta_insts[inst.store.ptr_ref.id];
+                break;
+            }
+            default: {
+                ptr_value = create_int_register_value(8, RegisterIndex_RCX);
+                this->move_inst_rvalue(inst.store.ptr_ref, ptr_value);
+                ptr_value = create_int_register_memory_value(
+                    ptr_value.reg.index, 0, RegisterIndex_None, 0);
+                break;
+            }
+            }
 
-            this->encode_move(
-                value_size,
-                stored_value,
-                ptr_memory_value);
+            this->encode_move(value_size, stored_value, ptr_value);
             break;
         }
         default: {
@@ -1098,17 +1120,25 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
         case 2:
         case 4:
         case 8: {
-            MetaValue ptr_value =
-                create_int_register_value(8, RegisterIndex_RAX);
-            this->encode_move(
-                8, this->meta_insts[inst.load.ptr_ref.id], ptr_value);
-            MetaValue ptr_memory_value = create_int_register_memory_value(
-                RegisterIndex_RAX, 0, RegisterIndex_None, 0);
+            Inst ptr_inst = inst.load.ptr_ref.get(this->module);
 
-            this->encode_move(
-                size,
-                ptr_memory_value,
-                this->meta_insts[inst_ref.id]);
+            MetaValue ptr_value = {};
+            switch (ptr_inst.kind) {
+            case InstKind_Global:
+            case InstKind_StackSlot: {
+                ptr_value = this->meta_insts[inst.store.ptr_ref.id];
+                break;
+            }
+            default: {
+                ptr_value = create_int_register_value(8, RegisterIndex_RAX);
+                this->move_inst_rvalue(inst.store.ptr_ref, ptr_value);
+                ptr_value = create_int_register_memory_value(
+                    ptr_value.reg.index, 0, RegisterIndex_None, 0);
+                break;
+            }
+            }
+
+            this->encode_move(size, ptr_value, this->meta_insts[inst_ref.id]);
             break;
         }
         default: {
@@ -1194,10 +1224,11 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
                 }
                 }
 
-                this->encode_move(
-                    param_inst.type->size_of(this->module),
-                    this->meta_insts[param_inst_ref.id],
-                    dest_param_value);
+                this->move_inst_rvalue(param_inst_ref, dest_param_value);
+                /* this->encode_move( */
+                /*     param_inst.type->size_of(this->module), */
+                /*     this->meta_insts[param_inst_ref.id], */
+                /*     dest_param_value); */
             }
 
             if (called_func->variadic) {
@@ -1458,8 +1489,6 @@ void X86_64AsmBuilder::generate_function(InstRef func_ref)
             case InstKind_PtrCast: break;
 
             // Create stack space for these kinds:
-            case InstKind_StackPtr:
-            case InstKind_GlobalPtr:
             case InstKind_Binop:
             case InstKind_ArrayElemPtr:
             case InstKind_Load:

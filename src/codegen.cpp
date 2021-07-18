@@ -171,8 +171,7 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
 
             value = {
                 false,
-                ctx->builder.insert_global_ptr(
-                    ctx->module->add_global_string(expr.str_literal.str))};
+                ctx->module->add_global_string(expr.str_literal.str)};
 
             break;
         }
@@ -200,18 +199,12 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
         }
 
         case DeclKind_GlobalVarDecl: {
-            value = {
-                true,
-                ctx->builder.insert_global_ptr(
-                    ctx->decl_values[expr.ident.decl_ref.id].inst_ref)};
+            value = ctx->decl_values[expr.ident.decl_ref.id];
             break;
         }
 
         case DeclKind_LocalVarDecl: {
-            value = {
-                true,
-                ctx->builder.insert_stack_ptr(
-                    ctx->decl_values[expr.ident.decl_ref.id].inst_ref)};
+            value = ctx->decl_values[expr.ident.decl_ref.id];
             break;
         }
 
@@ -280,6 +273,8 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
         case BuiltinFunction_Sizeof: {
             Expr param0 = expr.builtin_call.param_refs[0].get(compiler);
             uint64_t size = param0.as_type_ref.get(compiler).size_of(compiler);
+            ace::String type_name = param0.as_type_ref.get(compiler).to_string(compiler);
+            printf("sizeof(%.*s) = %lu\n", (int)type_name.len, type_name.ptr, size);
 
             value = {
                 false,
@@ -605,7 +600,7 @@ codegen_decl(Compiler *compiler, CodegenContext *ctx, DeclRef decl_ref)
                 codegen_expr(compiler, ctx, decl.local_var_decl.value_expr);
 
             ctx->builder.insert_store(
-                ctx->builder.insert_stack_ptr(value.inst_ref),
+                value.inst_ref,
                 load_lvalue(ctx, assigned_value));
         }
 

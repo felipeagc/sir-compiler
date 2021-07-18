@@ -84,8 +84,6 @@ enum InstKind : uint8_t {
     InstKind_PtrCast,
     InstKind_ArrayElemPtr,
     InstKind_Binop,
-    InstKind_StackPtr,
-    InstKind_GlobalPtr,
 };
 
 struct Inst {

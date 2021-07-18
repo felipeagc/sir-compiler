@@ -70,28 +70,6 @@ print_instruction(Module *module, InstRef inst_ref, StringBuilder *sb)
         break;
     }
 
-    case InstKind_StackPtr: {
-        String type_string = inst.type->to_string(module);
-        sb->sprintf(
-            "%%r%u = stack_ptr %.*s %%r%u",
-            inst_ref.id,
-            (int)type_string.len,
-            type_string.ptr,
-            inst.stack_ptr.stack_slot_ref.id);
-        break;
-    }
-
-    case InstKind_GlobalPtr: {
-        String type_string = inst.type->to_string(module);
-        sb->sprintf(
-            "%%r%u = global_ptr %.*s %%r%u",
-            inst_ref.id,
-            (int)type_string.len,
-            type_string.ptr,
-            inst.global_ptr.global_ref.id);
-        break;
-    }
-
     case InstKind_PtrCast: {
         String type_string = inst.type->to_string(module);
         sb->sprintf(
@@ -142,8 +120,8 @@ print_instruction(Module *module, InstRef inst_ref, StringBuilder *sb)
     case InstKind_FuncCall: {
         sb->sprintf(
             "%%r%u = func_call %%r%u (",
-            inst.func_call.func_ref.id,
-            inst_ref.id);
+            inst_ref.id,
+            inst.func_call.func_ref.id);
         for (size_t i = 0; i < inst.func_call.parameters.len; ++i) {
             if (i > 0) sb->append(", ");
             InstRef param_inst_ref = inst.func_call.parameters[i];
@@ -764,30 +742,6 @@ InstRef Builder::insert_load(InstRef ptr_ref)
     inst.kind = InstKind_Load;
     inst.type = ptr_ref.get(this->module).type->pointer.sub;
     inst.load.ptr_ref = ptr_ref;
-
-    return builder_insert_inst(this, inst);
-}
-
-InstRef Builder::insert_stack_ptr(InstRef stack_slot_ref)
-{
-    ZoneScoped;
-
-    Inst inst = {};
-    inst.kind = InstKind_StackPtr;
-    inst.type = stack_slot_ref.get(this->module).type;
-    inst.global_ptr = {stack_slot_ref};
-
-    return builder_insert_inst(this, inst);
-}
-
-InstRef Builder::insert_global_ptr(InstRef global_ref)
-{
-    ZoneScoped;
-
-    Inst inst = {};
-    inst.kind = InstKind_GlobalPtr;
-    inst.type = global_ref.get(this->module).type;
-    inst.global_ptr = {global_ref};
 
     return builder_insert_inst(this, inst);
 }

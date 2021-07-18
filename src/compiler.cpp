@@ -663,10 +663,10 @@ uint32_t Type::size_of(Compiler *compiler)
         return 0;
     }
     case TypeKind_Int: {
-        return this->int_.bits << 3;
+        return this->int_.bits >> 3;
     }
     case TypeKind_Float: {
-        return this->float_.bits << 3;
+        return this->float_.bits >> 3;
     }
     case TypeKind_Array: {
         uint32_t subtype_size =
@@ -708,10 +708,10 @@ uint32_t Type::align_of(Compiler *compiler)
         return 0;
     }
     case TypeKind_Int: {
-        return this->int_.bits << 3;
+        return this->int_.bits >> 3;
     }
     case TypeKind_Float: {
-        return this->float_.bits << 3;
+        return this->float_.bits >> 3;
     }
     case TypeKind_Array: {
         uint32_t subtype_alignment =

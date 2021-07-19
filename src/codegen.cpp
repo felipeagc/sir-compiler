@@ -12,7 +12,7 @@ struct CodegenValue {
 };
 
 struct CodegenContext {
-    File *file;
+    FileRef file_ref;
     ace::Module *module;
     ace::Builder builder;
     ace::Array<ace::Type *> type_values;
@@ -639,13 +639,15 @@ codegen_decl(Compiler *compiler, CodegenContext *ctx, DeclRef decl_ref)
     }
 }
 
-void codegen_file(Compiler *compiler, File *file)
+void codegen_file(Compiler *compiler, FileRef file_ref)
 {
     ZoneScoped;
 
     CodegenContext ctx = {};
 
-    ctx.file = file;
+    File file = compiler->files[file_ref.id];
+
+    ctx.file_ref = file_ref;
     ctx.module = ace::Module::create(
         ace::TargetArch_X86_64, ace::Endianness_LittleEndian);
     ctx.builder = ace::Builder::create(ctx.module);
@@ -674,7 +676,7 @@ void codegen_file(Compiler *compiler, File *file)
 
     ctx.function_stack = ace::Array<ace::InstRef>::create(ctx.module->arena);
 
-    for (DeclRef decl_ref : ctx.file->top_level_decls) {
+    for (DeclRef decl_ref : file.top_level_decls) {
         codegen_decl(compiler, &ctx, decl_ref);
     }
 

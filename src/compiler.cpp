@@ -43,12 +43,12 @@ bool TypeRef::is_runtime(Compiler *compiler)
     return is_runtime;
 }
 
-Scope *Scope::create(Compiler *compiler, File *file, Scope *parent)
+Scope *Scope::create(Compiler *compiler, FileRef file_ref, Scope *parent)
 {
     Scope *scope = compiler->arena->alloc<Scope>();
     *scope = {};
 
-    scope->file = file;
+    scope->file_ref = file_ref;
     scope->parent = parent;
     scope->decl_refs = ace::StringMap<DeclRef>::create(compiler->arena, 32);
 
@@ -99,6 +99,11 @@ Compiler Compiler::create()
         ace::StringMap<BuiltinFunction>::create(arena, 32);
     ace::Array<Error> errors = ace::Array<Error>::create(arena);
     errors.reserve(64);
+
+    ace::Array<File> files =
+        ace::Array<File>::create(ace::MallocAllocator::get_instance());
+    files.reserve(64);
+    files.push_back({}); // 0th file
 
     const size_t expected_type_count = 2048;
     const size_t expected_decl_count = 2048;
@@ -164,6 +169,7 @@ Compiler Compiler::create()
         .builtin_function_map = builtin_function_map,
         .errors = errors,
 
+        .files = files,
         .type_map = type_map,
         .types = types,
         .decls = decls,
@@ -342,12 +348,13 @@ void Compiler::print_errors()
     ACE_ASSERT(this->errors.len > 0);
 
     for (Error &err : this->errors) {
-        if (err.loc.file) {
+        if (err.loc.file_ref.id) {
+            File *file = &this->files[err.loc.file_ref.id];
             fprintf(
                 stderr,
                 "error: %.*s:%u:%u: %.*s\n",
-                (int)err.loc.file->path.len,
-                err.loc.file->path.ptr,
+                (int)file->path.len,
+                file->path.ptr,
                 err.loc.line,
                 err.loc.col,
                 (int)err.message.len,
@@ -394,31 +401,35 @@ void Compiler::compile(ace::String path)
             this->halt_compilation();
         }
 
-        File *file = this->arena->alloc<File>();
-        *file = {
+        FileRef file_ref = this->add_file({});
+        this->files[file_ref.id] = {
             .path = path,
             .text = ace::String{file_content.ptr, file_content.len},
             .line_count = 0,
-            .scope = Scope::create(this, file),
+            .scope = Scope::create(this, file_ref),
             .top_level_decls = ace::Array<DeclRef>::create(this->arena),
         };
 
         timespec start_time, end_time;
         clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &start_time);
 
-        parse_file(this, file);
-        analyze_file(this, file);
-        codegen_file(this, file);
+        parse_file(this, file_ref);
+        analyze_file(this, file_ref);
+        codegen_file(this, file_ref);
 
         clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &end_time);
 
-        uint64_t secs = end_time.tv_sec - start_time.tv_sec;
-        uint64_t nsecs = end_time.tv_nsec - start_time.tv_nsec;
-        double time = (double)secs + ((double)nsecs / (double)1e9);
-        double total_line_count = (double)file->line_count;
+        {
+            File *file = &this->files[file_ref.id];
 
-        printf("Compilation time: %.3lf seconds\n", time);
-        printf("Lines per second: %.3lf lines/s\n", total_line_count / time);
+            uint64_t secs = end_time.tv_sec - start_time.tv_sec;
+            uint64_t nsecs = end_time.tv_nsec - start_time.tv_nsec;
+            double time = (double)secs + ((double)nsecs / (double)1e9);
+            double total_line_count = (double)file->line_count;
+
+            printf("Compilation time: %.3lf seconds\n", time);
+            printf("Lines per second: %.3lf lines/s\n", total_line_count / time);
+        }
     } catch (...) {
         if (this->errors.len == 0) {
             fprintf(
@@ -736,4 +747,3 @@ uint32_t Type::align_of(Compiler *compiler)
     }
     return 0;
 }
-

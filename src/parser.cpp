@@ -136,24 +136,24 @@ ACE_INLINE static bool is_num(char c)
 }
 
 struct TokenizerState {
-    File *file;
+    FileRef file_ref;
     uint32_t pos;
     uint32_t line;
     uint32_t col;
 
-    static TokenizerState create(File *file)
+    static TokenizerState create(FileRef file_ref)
     {
         TokenizerState state = {};
-        state.file = file;
+        state.file_ref = file_ref;
         state.pos = 0;
         state.line = 1;
         state.col = 1;
         return state;
     }
 
-    int64_t length_left(size_t offset = 0)
+    int64_t length_left(File *file, size_t offset = 0)
     {
-        return ((int64_t)this->file->text.len) - (int64_t)(this->pos + offset);
+        return ((int64_t)file->text.len) - (int64_t)(this->pos + offset);
     }
 
     Token consume_token(Compiler *compiler, TokenKind token_kind)
@@ -177,17 +177,18 @@ struct TokenizerState {
         ZoneScoped;
 
         Allocator *allocator = compiler->arena;
+        File file = compiler->files[this->file_ref.id];
         TokenizerState state = *this;
 
     begin:
         *token = Token{};
 
         // Skip whitespace
-        for (size_t i = state.pos; i < state.file->text.len; ++i) {
-            if (is_whitespace(state.file->text[i])) {
+        for (size_t i = state.pos; i < file.text.len; ++i) {
+            if (is_whitespace(file.text[i])) {
                 state.pos++;
                 state.col++;
-                if (state.file->text[i] == '\n') {
+                if (file.text[i] == '\n') {
                     state.line++;
                     state.col = 1;
                 }
@@ -199,31 +200,30 @@ struct TokenizerState {
         token->loc.line = state.line;
         token->loc.col = state.col;
         token->loc.len = 1;
-        token->loc.file = state.file;
+        token->loc.file_ref = state.file_ref;
 
-        if (state.length_left() <= 0) {
+        if (state.length_left(&file) <= 0) {
             token->kind = TokenKind_EOF;
             return state;
         }
 
-        char c = state.file->text[state.pos];
+        char c = file.text[state.pos];
         switch (c) {
         case '\"': {
             // String
             state.pos++;
 
-            const char *string = &state.file->text[state.pos];
+            const char *string = &file.text[state.pos];
 
             size_t content_length = 0;
-            while (state.length_left(content_length) > 0 &&
-                   state.file->text[state.pos + content_length] != '\"') {
+            while (state.length_left(&file, content_length) > 0 &&
+                   file.text[state.pos + content_length] != '\"') {
                 content_length++;
             }
 
             state.pos += content_length;
 
-            if (state.length_left() > 0 &&
-                state.file->text[state.pos] == '\"') {
+            if (state.length_left(&file) > 0 && file.text[state.pos] == '\"') {
                 state.pos++;
             } else {
                 token->kind = TokenKind_Error;
@@ -266,8 +266,8 @@ struct TokenizerState {
         case '=': {
             state.pos++;
             token->kind = TokenKind_Equal;
-            if (state.length_left() > 0) {
-                switch (state.file->text[state.pos]) {
+            if (state.length_left(&file) > 0) {
+                switch (file.text[state.pos]) {
                 case '=':
                     state.pos++;
                     token->kind = TokenKind_EqualEqual;
@@ -285,8 +285,8 @@ struct TokenizerState {
         case '+': {
             state.pos++;
             token->kind = TokenKind_Add;
-            if (state.length_left() > 0) {
-                switch (state.file->text[state.pos]) {
+            if (state.length_left(&file) > 0) {
+                switch (file.text[state.pos]) {
                 case '=':
                     state.pos++;
                     token->kind = TokenKind_AddEqual;
@@ -300,7 +300,7 @@ struct TokenizerState {
         case '-': {
             state.pos++;
             token->kind = TokenKind_Sub;
-            if (state.length_left() > 0 && state.file->text[state.pos] == '=') {
+            if (state.length_left(&file) > 0 && file.text[state.pos] == '=') {
                 state.pos++;
                 token->kind = TokenKind_SubEqual;
             }
@@ -310,7 +310,7 @@ struct TokenizerState {
         case '*': {
             state.pos++;
             token->kind = TokenKind_Mul;
-            if (state.length_left() > 0 && state.file->text[state.pos] == '=') {
+            if (state.length_left(&file) > 0 && file.text[state.pos] == '=') {
                 state.pos++;
                 token->kind = TokenKind_MulEqual;
             }
@@ -320,16 +320,16 @@ struct TokenizerState {
         case '/': {
             state.pos++;
             token->kind = TokenKind_Div;
-            if (state.length_left() > 0) {
-                switch (state.file->text[state.pos]) {
+            if (state.length_left(&file) > 0) {
+                switch (file.text[state.pos]) {
                 case '=':
                     state.pos++;
                     token->kind = TokenKind_DivEqual;
                     break;
                 case '/':
                     state.pos++;
-                    while (state.length_left() > 0 &&
-                           state.file->text[state.pos] != '\n') {
+                    while (state.length_left(&file) > 0 &&
+                           file.text[state.pos] != '\n') {
                         state.pos++;
                     }
                     goto begin;
@@ -343,7 +343,7 @@ struct TokenizerState {
         case '%': {
             state.pos++;
             token->kind = TokenKind_Mod;
-            if (state.length_left() > 0 && state.file->text[state.pos] == '=') {
+            if (state.length_left(&file) > 0 && file.text[state.pos] == '=') {
                 state.pos++;
                 token->kind = TokenKind_ModEqual;
             }
@@ -353,8 +353,8 @@ struct TokenizerState {
         case '|': {
             state.pos++;
             token->kind = TokenKind_BitOr;
-            if (state.length_left() > 0) {
-                switch (state.file->text[state.pos]) {
+            if (state.length_left(&file) > 0) {
+                switch (file.text[state.pos]) {
                 case '=':
                     state.pos++;
                     token->kind = TokenKind_BitOrEqual;
@@ -372,8 +372,8 @@ struct TokenizerState {
         case '&': {
             state.pos++;
             token->kind = TokenKind_BitAnd;
-            if (state.length_left() > 0) {
-                switch (state.file->text[state.pos]) {
+            if (state.length_left(&file) > 0) {
+                switch (file.text[state.pos]) {
                 case '=':
                     state.pos++;
                     token->kind = TokenKind_BitAndEqual;
@@ -391,7 +391,7 @@ struct TokenizerState {
         case '^': {
             state.pos++;
             token->kind = TokenKind_BitXor;
-            if (state.length_left() > 0 && state.file->text[state.pos] == '=') {
+            if (state.length_left(&file) > 0 && file.text[state.pos] == '=') {
                 state.pos++;
                 token->kind = TokenKind_BitXorEqual;
             }
@@ -401,7 +401,7 @@ struct TokenizerState {
         case '~': {
             state.pos++;
             token->kind = TokenKind_BitNot;
-            if (state.length_left() > 0 && state.file->text[state.pos] == '=') {
+            if (state.length_left(&file) > 0 && file.text[state.pos] == '=') {
                 state.pos++;
                 token->kind = TokenKind_BitNotEqual;
             }
@@ -411,7 +411,7 @@ struct TokenizerState {
         case '!': {
             state.pos++;
             token->kind = TokenKind_Not;
-            if (state.length_left() > 0 && state.file->text[state.pos] == '=') {
+            if (state.length_left(&file) > 0 && file.text[state.pos] == '=') {
                 state.pos++;
                 token->kind = TokenKind_NotEqual;
             }
@@ -421,8 +421,8 @@ struct TokenizerState {
         case '<': {
             state.pos++;
             token->kind = TokenKind_Less;
-            if (state.length_left() > 0) {
-                switch (state.file->text[state.pos]) {
+            if (state.length_left(&file) > 0) {
+                switch (file.text[state.pos]) {
                 case '=':
                     state.pos++;
                     token->kind = TokenKind_LessEqual;
@@ -430,8 +430,8 @@ struct TokenizerState {
                 case '<':
                     state.pos++;
                     token->kind = TokenKind_LShift;
-                    if (state.length_left() > 0 &&
-                        state.file->text[state.pos] == '=') {
+                    if (state.length_left(&file) > 0 &&
+                        file.text[state.pos] == '=') {
                         token->kind = TokenKind_LShiftEqual;
                     }
                     break;
@@ -444,8 +444,8 @@ struct TokenizerState {
         case '>': {
             state.pos++;
             token->kind = TokenKind_Greater;
-            if (state.length_left() > 0) {
-                switch (state.file->text[state.pos]) {
+            if (state.length_left(&file) > 0) {
+                switch (file.text[state.pos]) {
                 case '=':
                     state.pos++;
                     token->kind = TokenKind_GreaterEqual;
@@ -453,8 +453,8 @@ struct TokenizerState {
                 case '>':
                     state.pos++;
                     token->kind = TokenKind_RShift;
-                    if (state.length_left() > 0 &&
-                        state.file->text[state.pos] == '=') {
+                    if (state.length_left(&file) > 0 &&
+                        file.text[state.pos] == '=') {
                         token->kind = TokenKind_RShiftEqual;
                     }
                     break;
@@ -467,7 +467,7 @@ struct TokenizerState {
         case ':': {
             state.pos++;
             token->kind = TokenKind_Colon;
-            if (state.length_left() > 0 && state.file->text[state.pos] == ':') {
+            if (state.length_left(&file) > 0 && file.text[state.pos] == ':') {
                 state.pos++;
                 token->kind = TokenKind_ColonColon;
             }
@@ -494,13 +494,12 @@ struct TokenizerState {
             if (is_alpha(c)) {
                 // Identifier
                 size_t ident_length = 0;
-                while (
-                    state.length_left(ident_length) > 0 &&
-                    is_alpha_num(state.file->text[state.pos + ident_length])) {
+                while (state.length_left(&file, ident_length) > 0 &&
+                       is_alpha_num(file.text[state.pos + ident_length])) {
                     ident_length++;
                 }
 
-                const char *ident_start = &state.file->text[state.pos];
+                const char *ident_start = &file.text[state.pos];
                 String ident_str = String{ident_start, ident_length};
 
                 if (!compiler->keyword_map.get(ident_str, &token->kind)) {
@@ -509,76 +508,70 @@ struct TokenizerState {
                 }
 
                 state.pos += ident_length;
-            } else if (c == '@' && is_alpha(state.file->text[state.pos + 1])) {
+            } else if (c == '@' && is_alpha(file.text[state.pos + 1])) {
                 // Builtin Identifier
                 state.pos++;
                 size_t ident_length = 0;
-                while (
-                    state.length_left(ident_length) > 0 &&
-                    is_alpha_num(state.file->text[state.pos + ident_length])) {
+                while (state.length_left(&file, ident_length) > 0 &&
+                       is_alpha_num(file.text[state.pos + ident_length])) {
                     ident_length++;
                 }
 
-                const char *ident_start = &state.file->text[state.pos];
+                const char *ident_start = &file.text[state.pos];
 
                 token->kind = TokenKind_BuiltinIdentifier;
                 token->str = allocator->null_terminate(
                     String{ident_start, ident_length});
                 state.pos += ident_length;
             } else if (is_num(c)) {
-                if (state.length_left() >= 3 &&
-                    state.file->text[state.pos] == '0' &&
-                    state.file->text[state.pos + 1] == 'x' &&
-                    is_hex(state.file->text[state.pos + 2])) {
+                if (state.length_left(&file) >= 3 &&
+                    file.text[state.pos] == '0' &&
+                    file.text[state.pos + 1] == 'x' &&
+                    is_hex(file.text[state.pos + 2])) {
                     token->kind = TokenKind_IntLiteral;
                     state.pos += 2;
 
                     size_t number_length = 0;
-                    while (
-                        state.length_left(number_length) > 0 &&
-                        is_hex(state.file->text[state.pos + number_length])) {
+                    while (state.length_left(&file, number_length) > 0 &&
+                           is_hex(file.text[state.pos + number_length])) {
                         number_length++;
                     }
 
                     const char *int_str = allocator->null_terminate(
-                        String{&state.file->text[state.pos], number_length});
+                        String{&file.text[state.pos], number_length});
                     state.pos += number_length;
                     token->int_ = strtol(int_str, NULL, 16);
                 } else {
                     token->kind = TokenKind_IntLiteral;
 
                     size_t number_length = 0;
-                    while (
-                        state.length_left(number_length) > 0 &&
-                        is_num(state.file->text[state.pos + number_length])) {
+                    while (state.length_left(&file, number_length) > 0 &&
+                           is_num(file.text[state.pos + number_length])) {
                         number_length++;
                     }
 
-                    if (state.length_left(number_length) > 1 &&
-                        state.file->text[state.pos + number_length] == '.' &&
-                        is_num(
-                            state.file->text[state.pos + number_length + 1])) {
+                    if (state.length_left(&file, number_length) > 1 &&
+                        file.text[state.pos + number_length] == '.' &&
+                        is_num(file.text[state.pos + number_length + 1])) {
                         token->kind = TokenKind_FloatLiteral;
                         number_length++;
                     }
 
-                    while (
-                        state.length_left(number_length) > 0 &&
-                        is_num(state.file->text[state.pos + number_length])) {
+                    while (state.length_left(&file, number_length) > 0 &&
+                           is_num(file.text[state.pos + number_length])) {
                         number_length++;
                     }
 
                     switch (token->kind) {
                     case TokenKind_IntLiteral: {
-                        const char *int_str = allocator->null_terminate(String{
-                            &state.file->text[state.pos], number_length});
+                        const char *int_str = allocator->null_terminate(
+                            String{&file.text[state.pos], number_length});
                         token->int_ = strtol(int_str, NULL, 10);
                         break;
                     }
                     case TokenKind_FloatLiteral: {
-                        const char *float_str =
-                            allocator->null_terminate(String{
-                                &state.file->text[state.pos], number_length});
+                        const char *float_str = allocator->null_terminate(
+                            String{&file.text[state.pos], number_length});
                         token->float_ = strtod(float_str, NULL);
                         break;
                     }
@@ -590,7 +583,7 @@ struct TokenizerState {
             } else {
                 token->kind = TokenKind_Error;
                 token->str = allocator->sprintf(
-                    "unknown token: '%c'", state.file->text[state.pos]);
+                    "unknown token: '%c'", file.text[state.pos]);
                 state.pos++;
             }
             break;
@@ -1363,8 +1356,10 @@ static Stmt parse_stmt(Compiler *compiler, TokenizerState *state)
     return stmt;
 }
 
-static void
-parse_top_level_decl(Compiler *compiler, TokenizerState *state, File *file)
+static void parse_top_level_decl(
+    Compiler *compiler,
+    TokenizerState *state,
+    ace::Array<DeclRef> *top_level_decls)
 {
     ZoneScoped;
 
@@ -1486,7 +1481,7 @@ parse_top_level_decl(Compiler *compiler, TokenizerState *state, File *file)
         }
 
         DeclRef func_decl_ref = compiler->add_decl(func_decl);
-        file->top_level_decls.push_back(func_decl_ref);
+        top_level_decls->push_back(func_decl_ref);
 
         break;
     }
@@ -1514,8 +1509,7 @@ parse_top_level_decl(Compiler *compiler, TokenizerState *state, File *file)
         } else {
             state->consume_token(compiler, TokenKind_Equal);
 
-            value_expr_ref =
-                compiler->add_expr(parse_expr(compiler, state));
+            value_expr_ref = compiler->add_expr(parse_expr(compiler, state));
         }
 
         ACE_ASSERT(type_expr_ref.id > 0 || value_expr_ref.id > 0);
@@ -1530,7 +1524,7 @@ parse_top_level_decl(Compiler *compiler, TokenizerState *state, File *file)
         state->consume_token(compiler, TokenKind_Semicolon);
 
         DeclRef var_decl_ref = compiler->add_decl(var_decl);
-        file->top_level_decls.push_back(var_decl_ref);
+        top_level_decls->push_back(var_decl_ref);
 
         break;
     }
@@ -1545,13 +1539,14 @@ parse_top_level_decl(Compiler *compiler, TokenizerState *state, File *file)
     }
 }
 
-void parse_file(Compiler *compiler, File *file)
+void parse_file(Compiler *compiler, FileRef file_ref)
 {
     ZoneScoped;
 
-    file->top_level_decls.reserve(512);
+    File file = compiler->files[file_ref.id];
+    file.top_level_decls.reserve(512);
 
-    TokenizerState state = TokenizerState::create(file);
+    TokenizerState state = TokenizerState::create(file_ref);
     while (1) {
         Token token = {};
         state.next_token(compiler, &token);
@@ -1568,10 +1563,12 @@ void parse_file(Compiler *compiler, File *file)
             break;
         }
 
-        parse_top_level_decl(compiler, &state, file);
+        parse_top_level_decl(compiler, &state, &file.top_level_decls);
     }
 
-    file->line_count = state.line + 1;
+    file.line_count = state.line + 1;
+
+    compiler->files[file_ref.id] = file;
 
     if (compiler->errors.len > 0) {
         compiler->halt_compilation();

@@ -11,6 +11,10 @@ struct Decl;
 
 struct Type;
 
+struct FileRef {
+    uint32_t id;
+};
+
 struct DeclRef {
     uint32_t id;
 
@@ -38,12 +42,12 @@ struct TypeRef {
 };
 
 struct Scope {
-    File *file;
+    FileRef file_ref;
     Scope *parent;
     ace::StringMap<DeclRef> decl_refs;
 
     static Scope *
-    create(Compiler *compiler, File *file, Scope *parent = nullptr);
+    create(Compiler *compiler, FileRef file_ref, Scope *parent = nullptr);
     void add(Compiler *compiler, DeclRef decl_ref);
     DeclRef lookup(const ace::String &name);
 };
@@ -58,7 +62,7 @@ struct File {
 };
 
 struct Location {
-    File *file;
+    FileRef file_ref;
     uint32_t offset;
     uint32_t len;
     uint32_t line;
@@ -475,6 +479,7 @@ struct Compiler {
     ace::StringMap<BuiltinFunction> builtin_function_map;
     ace::Array<Error> errors;
 
+    ace::Array<File> files;
     ace::StringMap<TypeRef> type_map;
     ace::Array<Type> types;
     ace::Array<Decl> decls;
@@ -514,6 +519,14 @@ struct Compiler {
     void add_error(const Location &loc, const char *fmt, ...);
     void halt_compilation();
     void print_errors();
+
+    ACE_INLINE
+    FileRef add_file(const File &file)
+    {
+        FileRef ref = {(uint32_t)this->files.len};
+        this->files.push_back(file);
+        return ref;
+    }
 
     ACE_INLINE
     ExprRef add_expr(const Expr &expr)
@@ -563,9 +576,9 @@ struct Compiler {
     void compile(ace::String path);
 };
 
-void parse_file(Compiler *compiler, File *file);
-void analyze_file(Compiler *compiler, File *file);
-void codegen_file(Compiler *compiler, File *file);
+void parse_file(Compiler *compiler, FileRef file_ref);
+void analyze_file(Compiler *compiler, FileRef file_ref);
+void codegen_file(Compiler *compiler, FileRef file_ref);
 
 inline Decl DeclRef::get(Compiler *compiler) const
 {

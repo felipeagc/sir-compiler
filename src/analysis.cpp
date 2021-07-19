@@ -2,7 +2,7 @@
 #include <Tracy.hpp>
 
 struct AnalyzerState {
-    File *file;
+    FileRef file_ref;
     ace::Array<Scope *> scope_stack;
 };
 
@@ -603,7 +603,7 @@ analyze_stmt(Compiler *compiler, AnalyzerState *state, StmtRef stmt_ref)
 
     case StmtKind_Block: {
         Scope *block_scope =
-            Scope::create(compiler, state->file, *state->scope_stack.last());
+            Scope::create(compiler, state->file_ref, *state->scope_stack.last());
 
         state->scope_stack.push_back(block_scope);
         for (StmtRef sub_stmt_ref : stmt.block.stmt_refs) {
@@ -661,7 +661,7 @@ analyze_decl(Compiler *compiler, AnalyzerState *state, DeclRef decl_ref)
     }
     case DeclKind_Function: {
         decl.func.scope =
-            Scope::create(compiler, state->file, *state->scope_stack.last());
+            Scope::create(compiler, state->file_ref, *state->scope_stack.last());
 
         for (ExprRef return_type_expr_ref : decl.func.return_type_expr_refs) {
             analyze_expr(
@@ -817,28 +817,32 @@ analyze_decl(Compiler *compiler, AnalyzerState *state, DeclRef decl_ref)
     compiler->decls[decl_ref.id] = decl;
 }
 
-void analyze_file(Compiler *compiler, File *file)
+void analyze_file(Compiler *compiler, FileRef file_ref)
 {
     ZoneScoped;
 
+    File file = compiler->files[file_ref.id];
+
     AnalyzerState state = {};
-    state.file = file;
+    state.file_ref = file_ref;
     state.scope_stack = ace::Array<Scope *>::create(compiler->arena);
 
-    state.scope_stack.push_back(file->scope);
+    state.scope_stack.push_back(file.scope);
 
     // Register top level symbols
-    for (DeclRef decl_ref : file->top_level_decls) {
-        file->scope->add(compiler, decl_ref);
+    for (DeclRef decl_ref : file.top_level_decls) {
+        file.scope->add(compiler, decl_ref);
     }
 
-    for (DeclRef decl_ref : state.file->top_level_decls) {
+    for (DeclRef decl_ref : file.top_level_decls) {
         analyze_decl(compiler, &state, decl_ref);
     }
 
     state.scope_stack.pop();
 
     ACE_ASSERT(state.scope_stack.len == 0);
+
+    compiler->files[file_ref.id] = file;
 
     if (compiler->errors.len > 0) {
         compiler->halt_compilation();

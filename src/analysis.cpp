@@ -238,24 +238,44 @@ static void analyze_expr(
         switch (func_type.kind) {
         case TypeKind_Function: {
             // Actual function call
-            if (func_type.func.param_types.len !=
-                expr.func_call.param_refs.len) {
-                compiler->add_error(
-                    expr.loc,
-                    "expected '%zu' parameters for function call, instead got "
-                    "'%zu'",
-                    func_type.func.param_types.len,
-                    expr.func_call.param_refs.len);
-                break;
+            if (func_type.func.vararg) {
+                if (func_type.func.param_types.len >
+                    expr.func_call.param_refs.len) {
+                    compiler->add_error(
+                        expr.loc,
+                        "expected at least '%zu' parameters for variadic "
+                        "function call, instead got '%zu'",
+                        func_type.func.param_types.len,
+                        expr.func_call.param_refs.len);
+                    break;
+                }
+            } else {
+                if (func_type.func.param_types.len !=
+                    expr.func_call.param_refs.len) {
+                    compiler->add_error(
+                        expr.loc,
+                        "expected '%zu' parameters for function call, instead "
+                        "got "
+                        "'%zu'",
+                        func_type.func.param_types.len,
+                        expr.func_call.param_refs.len);
+                    break;
+                }
             }
 
-            for (size_t i = 0; i < expr.func_call.param_refs.len; ++i) {
+            for (size_t i = 0; i < func_type.func.param_types.len; ++i) {
                 TypeRef param_expected_type = func_type.func.param_types[i];
                 analyze_expr(
                     compiler,
                     state,
                     expr.func_call.param_refs[i],
                     param_expected_type);
+            }
+
+            for (size_t i = func_type.func.param_types.len;
+                 i < expr.func_call.param_refs.len;
+                 ++i) {
+                analyze_expr(compiler, state, expr.func_call.param_refs[i]);
             }
 
             expr.expr_type_ref = func_type.func.return_type;
@@ -602,8 +622,8 @@ analyze_stmt(Compiler *compiler, AnalyzerState *state, StmtRef stmt_ref)
     }
 
     case StmtKind_Block: {
-        Scope *block_scope =
-            Scope::create(compiler, state->file_ref, *state->scope_stack.last());
+        Scope *block_scope = Scope::create(
+            compiler, state->file_ref, *state->scope_stack.last());
 
         state->scope_stack.push_back(block_scope);
         for (StmtRef sub_stmt_ref : stmt.block.stmt_refs) {
@@ -660,8 +680,8 @@ analyze_decl(Compiler *compiler, AnalyzerState *state, DeclRef decl_ref)
         break;
     }
     case DeclKind_Function: {
-        decl.func.scope =
-            Scope::create(compiler, state->file_ref, *state->scope_stack.last());
+        decl.func.scope = Scope::create(
+            compiler, state->file_ref, *state->scope_stack.last());
 
         for (ExprRef return_type_expr_ref : decl.func.return_type_expr_refs) {
             analyze_expr(
@@ -698,8 +718,8 @@ analyze_decl(Compiler *compiler, AnalyzerState *state, DeclRef decl_ref)
             decl.func.scope->add(compiler, param_decl_ref);
         }
 
-        decl.decl_type_ref =
-            compiler->create_func_type(return_type, param_types);
+        decl.decl_type_ref = compiler->create_func_type(
+            return_type, param_types, decl.func.flags & FunctionFlags_VarArg);
 
         state->scope_stack.push_back(decl.func.scope);
         for (StmtRef stmt_ref : decl.func.body_stmts) {

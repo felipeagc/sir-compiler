@@ -139,6 +139,7 @@ enum TokenKind {
     TokenKind_Extern,
     TokenKind_Export,
     TokenKind_Inline,
+    TokenKind_VarArg,
     TokenKind_Def,
     TokenKind_Macro,
     TokenKind_Struct,
@@ -239,6 +240,7 @@ struct Type {
         struct {
             TypeRef return_type;
             ace::Slice<TypeRef> param_types;
+            bool vararg;
         } func;
     };
 
@@ -267,6 +269,7 @@ enum FunctionFlags {
     FunctionFlags_Inline = 1 << 0,
     FunctionFlags_Extern = 1 << 1,
     FunctionFlags_Exported = 1 << 2,
+    FunctionFlags_VarArg = 1 << 3,
 };
 
 enum UnaryOp {
@@ -513,8 +516,8 @@ struct Compiler {
     TypeRef create_tuple_type(ace::Slice<TypeRef> fields);
     TypeRef create_array_type(TypeRef sub, size_t size);
     TypeRef create_slice_type(TypeRef sub);
-    TypeRef
-    create_func_type(TypeRef return_type, ace::Slice<TypeRef> param_types);
+    TypeRef create_func_type(
+        TypeRef return_type, ace::Slice<TypeRef> param_types, bool vararg);
 
     ACE_PRINTF_FORMATTING(3, 4)
     void add_error(const Location &loc, const char *fmt, ...);

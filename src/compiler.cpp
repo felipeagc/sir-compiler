@@ -135,6 +135,7 @@ Compiler Compiler::create()
     exprs.push_back({}); // 0th expr
 
     keyword_map.set("extern", TokenKind_Extern);
+    keyword_map.set("vararg", TokenKind_VarArg);
     keyword_map.set("export", TokenKind_Export);
     keyword_map.set("inline", TokenKind_Inline);
     keyword_map.set("def", TokenKind_Def);
@@ -505,12 +506,13 @@ TypeRef Compiler::create_slice_type(TypeRef sub)
 }
 
 TypeRef
-Compiler::create_func_type(TypeRef return_type, ace::Slice<TypeRef> param_types)
+Compiler::create_func_type(TypeRef return_type, ace::Slice<TypeRef> param_types, bool vararg)
 {
     Type type = {};
     type.kind = TypeKind_Function;
     type.func.return_type = return_type;
     type.func.param_types = param_types;
+    type.func.vararg = vararg;
     return this->get_cached_type(type);
 }
 
@@ -634,7 +636,11 @@ ace::String Type::to_string(Compiler *compiler)
         ace::StringBuilder sb =
             ace::StringBuilder::create(ace::MallocAllocator::get_instance());
 
-        sb.append("@func(");
+        if (!this->func.vararg) {
+            sb.append("@func(");
+        } else {
+            sb.append("@func_vararg(");
+        }
 
         Type *return_type = &compiler->types[this->func.return_type.id];
         sb.append(return_type->to_string(compiler));

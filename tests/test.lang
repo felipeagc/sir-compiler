@@ -1,11 +1,11 @@
 def extern malloc(size: u64): *void;
 def extern free(ptr: *void);
-def extern printf(_: *u8, _: i32): i32;
+def extern vararg printf(_: *u8): i32;
 def extern puts(_: *u8): i32;
 def extern putchar(_: i32): i32;
  
 def derp(str: *u8) {
-	puts(str);
+	printf(str);
 }
 
 global my_global: i32;
@@ -19,12 +19,9 @@ global my_global4: i64;
 // 	arr[0] = 1;
 // 	arr[arr[0]] = 3;
 // 
-// 	// printf("arr[0] = %lu", arr[0]);
-// 	// puts("");
-// 	// printf("arr[arr[0]] = %lu", arr[arr[0]]);
-// 	// puts("");
-// 	// printf("arr[1] = %lu", arr[1]);
-// 	// puts("");
+// 	// printf("arr[0] = %lu\n", arr[0]);
+// 	// printf("arr[arr[0]] = %lu\n", arr[arr[0]]);
+// 	// printf("arr[1] = %lu\n", arr[1]);
 // }
 
 def export main(argc: i32, argv: **u8) {
@@ -35,7 +32,7 @@ def export main(argc: i32, argv: **u8) {
 	// putchar(text[0]);
 	// putchar(text[1]);
 	// putchar(10);
-	// puts("hello");
+	// printf("hello\n");
 
 	{
 		a := i32(1);
@@ -67,17 +64,14 @@ def export main(argc: i32, argv: **u8) {
 
 	{
 		a: i32 = 321 + 123;
-		printf("a = %d", a);
-		puts("");
+		printf("a = %d\n", a);
 
 		b: i32 = a * 2 + 1;
-		printf("b = %d", b);
-		puts("");
+		printf("b = %d\n", b);
 	}
 
 	my_global = argc;
-	printf("my_global: %d", my_global);
-	puts("");
+	printf("my_global: %d\n", my_global);
 
 	arr: [12]i32;
 	arr[0] = 48;
@@ -108,24 +102,22 @@ def export main(argc: i32, argv: **u8) {
 	c = &d;
 	c = &f64(321);
 
-	msg: *u8 = "hello 1";
+	msg: *u8 = "hello 1\n";
 	derp(msg);
-	msg = "hello 2";
+	msg = "hello 2\n";
 	derp(msg);
 
 	alloc_ptr := @ptrcast(*i32, malloc(@sizeof(i32)));
 	alloc_ptr.* = 321;
-	printf("alloc_ptr.* = %d", alloc_ptr.*);
-	puts("");
+	printf("alloc_ptr.* = %d\n", alloc_ptr.*);
 	alloc_ptr.* = 123;
-	printf("alloc_ptr.* = %d", alloc_ptr.*);
-	puts("");
+	printf("alloc_ptr.* = %d\n", alloc_ptr.*);
 
 	free(@ptrcast(*void, alloc_ptr));
 
 	{
-		derp("hey");
-		puts("hello, world!");
+		derp("hey\n");
+		printf("hello, world!\n");
 	}
 }
 
@@ -143,7 +135,7 @@ def export main(argc: i32, argv: **u8) {
 // 	int := i32(50);
 // 
 // 	msg: *u8 = "hello";
-// 	puts("hello");
+// 	printf("hello\n");
 // 	putchar(48);
 // 	putchar(49);
 // 	putchar(int);

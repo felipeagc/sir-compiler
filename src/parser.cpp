@@ -68,6 +68,7 @@ const char *token_kind_to_string(TokenKind kind)
     case TokenKind_Const: return "const";
     case TokenKind_Extern: return "extern";
     case TokenKind_Export: return "export";
+    case TokenKind_VarArg: return "vararg";
     case TokenKind_Global: return "global";
     case TokenKind_Inline: return "inline";
     case TokenKind_Macro: return "macro";
@@ -1465,6 +1466,12 @@ static void parse_top_level_decl(
             break;
         }
         default: break;
+        }
+
+        state->next_token(compiler, &next_token);
+        if (next_token.kind == TokenKind_VarArg) {
+            state->consume_token(compiler, TokenKind_VarArg);
+            func_decl.func.flags |= FunctionFlags_VarArg;
         }
 
         Token ident_token =

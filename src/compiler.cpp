@@ -100,6 +100,9 @@ Compiler Compiler::create()
     ace::Array<Error> errors = ace::Array<Error>::create(arena);
     errors.reserve(64);
 
+    ace::StringBuilder sb =
+        ace::StringBuilder::create(ace::MallocAllocator::get_instance());
+
     ace::Array<File> files =
         ace::Array<File>::create(ace::MallocAllocator::get_instance());
     files.reserve(64);
@@ -168,6 +171,7 @@ Compiler Compiler::create()
         .keyword_map = keyword_map,
         .builtin_function_map = builtin_function_map,
         .errors = errors,
+        .sb = sb,
 
         .files = files,
         .type_map = type_map,
@@ -318,6 +322,7 @@ void Compiler::destroy()
     this->type_map.destroy();
     this->types.destroy();
 
+    this->sb.destroy();
     this->errors.destroy();
     this->builtin_function_map.destroy();
     this->keyword_map.destroy();
@@ -428,7 +433,8 @@ void Compiler::compile(ace::String path)
             double total_line_count = (double)file->line_count;
 
             printf("Compilation time: %.3lf seconds\n", time);
-            printf("Lines per second: %.3lf lines/s\n", total_line_count / time);
+            printf(
+                "Lines per second: %.3lf lines/s\n", total_line_count / time);
         }
     } catch (...) {
         if (this->errors.len == 0) {
@@ -590,7 +596,7 @@ ace::String Type::to_string(Compiler *compiler)
 
         sb.append(")");
 
-        this->str = sb.build(compiler->arena);
+        this->str = sb.build_null_terminated(compiler->arena);
 
         sb.destroy();
         break;
@@ -619,7 +625,7 @@ ace::String Type::to_string(Compiler *compiler)
 
         sb.append(")");
 
-        this->str = sb.build(compiler->arena);
+        this->str = sb.build_null_terminated(compiler->arena);
 
         sb.destroy();
         break;
@@ -652,7 +658,7 @@ ace::String Type::to_string(Compiler *compiler)
         sb.append(")");
         sb.append(")");
 
-        this->str = sb.build(compiler->arena);
+        this->str = sb.build_null_terminated(compiler->arena);
 
         sb.destroy();
         break;

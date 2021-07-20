@@ -63,7 +63,7 @@ String Type::to_string(Module *module)
 
         sb.append(")");
 
-        this->str = sb.build(module->arena);
+        this->str = sb.build_null_terminated(module->arena);
 
         sb.destroy();
         break;

@@ -395,7 +395,7 @@ String Module::print_alloc(Allocator *allocator)
         print_function(this, func_ref, &sb);
     }
 
-    String result = sb.build(allocator);
+    String result = sb.build_null_terminated(allocator);
     sb.destroy();
     return result;
 }

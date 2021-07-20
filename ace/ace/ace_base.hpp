@@ -620,7 +620,12 @@ struct StringBuilder {
         this->array.destroy();
     }
 
-    String build(Allocator *allocator)
+    ACE_INLINE
+    void reset() {
+        this->array.len = 0;
+    }
+
+    String build_null_terminated(Allocator *allocator)
     {
         ZoneScoped;
 

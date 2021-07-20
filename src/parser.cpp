@@ -108,6 +108,24 @@ const char *token_kind_to_string(TokenKind kind)
     return "<unknown>";
 }
 
+static ace::String token_to_string(Compiler *compiler, const Token &token)
+{
+    switch (token.kind) {
+    case TokenKind_Error:
+        return compiler->arena->sprintf(
+            "error: %.*s", (int)token.str.len, token.str.ptr);
+    case TokenKind_StringLiteral:
+        return compiler->arena->sprintf(
+            "string literal: \"%.*s\"", (int)token.str.len, token.str.ptr);
+    case TokenKind_Identifier:
+        return compiler->arena->sprintf(
+            "identifier: \"%.*s\"", (int)token.str.len, token.str.ptr);
+    default: return token_kind_to_string(token.kind);
+    }
+
+    return "";
+}
+
 ACE_INLINE static bool is_whitespace(char c)
 {
     return c == ' ' || c == '\t' || c == '\r' || c == '\n';
@@ -161,10 +179,21 @@ struct TokenizerState {
         Token token = {};
         *this = this->next_token(compiler, &token);
         if (token.kind != token_kind) {
+            if (token.kind == TokenKind_Error) {
+                compiler->add_error(
+                    token.loc,
+                    "unexpected token: %.*s",
+                    (int)token.str.len,
+                    token.str.ptr);
+                compiler->halt_compilation();
+            }
+
+            ace::String token_string = token_to_string(compiler, token);
             compiler->add_error(
                 token.loc,
-                "unexpected token: '%s', expecting '%s'",
-                token_kind_to_string(token.kind),
+                "unexpected token: '%.*s', expecting '%s'",
+                (int)token_string.len,
+                token_string.ptr,
                 token_kind_to_string(token_kind));
             compiler->halt_compilation();
         }
@@ -213,27 +242,60 @@ struct TokenizerState {
             // String
             state.pos++;
 
-            const char *string = &file.text[state.pos];
+            bool closed = false;
 
-            size_t content_length = 0;
-            while (state.length_left(&file, content_length) > 0 &&
-                   file.text[state.pos + content_length] != '\"') {
-                content_length++;
+            compiler->sb.reset();
+            size_t i = state.pos;
+            for (; i < file.text.len; ++i) {
+                if (file.text[i] == '\"') {
+                    closed = true;
+                    i++;
+                    break;
+                }
+
+                if (file.text[i] == '\\') {
+                    if (i + 1 >= file.text.len) {
+                        token->kind = TokenKind_Error;
+                        token->str = allocator->clone("invalid string literal");
+                        break;
+                    }
+                    ++i;
+
+                    char actual_char = file.text[i];
+                    switch (file.text[i]) {
+                    case 'n': actual_char = '\n'; break;
+                    case 'r': actual_char = '\r'; break;
+                    case 't': actual_char = '\t'; break;
+                    case '0': actual_char = '\0'; break;
+                    case '\"': actual_char = '\"'; break;
+                    case '\'': actual_char = '\''; break;
+                    case '\\': actual_char = '\\'; break;
+                    default: {
+                        compiler->sb.append('\\');
+                        break;
+                    }
+                    }
+
+                    compiler->sb.append(actual_char);
+                    continue;
+                }
+
+                compiler->sb.append(file.text[i]);
             }
 
-            state.pos += content_length;
+            state.pos = i;
 
-            if (state.length_left(&file) > 0 && file.text[state.pos] == '\"') {
-                state.pos++;
-            } else {
+            if (!closed) {
                 token->kind = TokenKind_Error;
-                token->str = allocator->clone("unclosed string");
+                token->str = allocator->clone("unclosed string literal");
+            }
+
+            if (token->kind == TokenKind_Error) {
                 break;
             }
 
             token->kind = TokenKind_StringLiteral;
-            token->str =
-                allocator->null_terminate(String{string, content_length});
+            token->str = compiler->sb.build_null_terminated(compiler->arena);
 
             break;
         }
@@ -817,10 +879,12 @@ static Expr parse_primary_expr(Compiler *compiler, TokenizerState *state)
         break;
     }
     default: {
+        ace::String token_string = token_to_string(compiler, next_token);
         compiler->add_error(
             next_token.loc,
-            "unexpected token: '%s', expecting primary expression",
-            token_kind_to_string(next_token.kind));
+            "unexpected token: '%.*s', expecting primary expression",
+            (int)token_string.len,
+            token_string.ptr);
         compiler->halt_compilation();
         break;
     }
@@ -852,10 +916,12 @@ static Expr parse_func_expr(Compiler *compiler, TokenizerState *state)
         break;
     }
     default: {
+        ace::String token_string = token_to_string(compiler, next_token);
         compiler->add_error(
             next_token.loc,
-            "unexpected token: '%s', expecting function literal",
-            token_kind_to_string(next_token.kind));
+            "unexpected token: '%.*s', expecting function literal",
+            (int)token_string.len,
+            token_string.ptr);
         compiler->halt_compilation();
         break;
     }
@@ -1529,10 +1595,12 @@ static void parse_top_level_decl(
         break;
     }
     default: {
+        ace::String token_string = token_to_string(compiler, next_token);
         compiler->add_error(
             next_token.loc,
-            "unexpected token: '%s', expecting top level declaration",
-            token_kind_to_string(next_token.kind));
+            "unexpected token: '%.*s', expecting top level declaration",
+            (int)token_string.len,
+            token_string.ptr);
         compiler->halt_compilation();
         break;
     }

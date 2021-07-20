@@ -478,6 +478,7 @@ struct Compiler {
     ace::StringMap<TokenKind> keyword_map;
     ace::StringMap<BuiltinFunction> builtin_function_map;
     ace::Array<Error> errors;
+    ace::StringBuilder sb;
 
     ace::Array<File> files;
     ace::StringMap<TypeRef> type_map;

@@ -1329,6 +1329,23 @@ static Stmt parse_stmt(Compiler *compiler, TokenizerState *state)
         }
         break;
     }
+    case TokenKind_While: {
+        Token while_token = state->consume_token(compiler, TokenKind_While);
+        stmt.kind = StmtKind_While;
+        stmt.loc = while_token.loc;
+        stmt.while_ = {};
+
+        state->consume_token(compiler, TokenKind_LParen);
+
+        stmt.while_.cond_expr_ref =
+            compiler->add_expr(parse_expr(compiler, state));
+
+        state->consume_token(compiler, TokenKind_RParen);
+
+        stmt.while_.true_stmt_ref =
+            compiler->add_stmt(parse_stmt(compiler, state));
+        break;
+    }
     case TokenKind_LCurly: {
         Token lcurly_token = state->consume_token(compiler, TokenKind_LCurly);
 

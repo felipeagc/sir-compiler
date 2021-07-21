@@ -429,6 +429,10 @@ struct Stmt {
             StmtRef false_stmt_ref;
         } if_;
         struct {
+            ExprRef cond_expr_ref;
+            StmtRef true_stmt_ref;
+        } while_;
+        struct {
             ExprRef assigned_expr_ref;
             ExprRef value_expr_ref;
         } assign;

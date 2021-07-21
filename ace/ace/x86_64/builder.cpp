@@ -974,6 +974,12 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
         break;
     }
 
+    case InstKind_ImmediateBool: {
+        this->meta_insts[inst_ref.id] =
+            create_imm_int_value(1, inst.imm_bool.value ? 1 : 0);
+        break;
+    }
+
     case InstKind_PtrCast: {
         this->meta_insts[inst_ref.id] =
             this->meta_insts[inst.ptr_cast.inst_ref.id];
@@ -1337,6 +1343,35 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
 
         break;
     }
+    case InstKind_Branch: {
+        MetaValue al_value = create_int_register_value(1, RegisterIndex_RAX);
+
+        this->encode_move(
+            1, this->meta_insts[inst.branch.cond_inst_ref.id], al_value);
+
+        this->encode(
+            FE_TEST8rr,
+            REGISTERS[al_value.reg.index],
+            REGISTERS[al_value.reg.index]);
+
+        FuncJumpPatch true_patch = {
+            .instruction = FE_JNZ | FE_JMPL,
+            .instruction_offset = this->get_code_offset(),
+            .destination_block = inst.branch.true_block_ref,
+        };
+        meta_func->jump_patches.push_back(true_patch);
+        this->encode(FE_JNZ | FE_JMPL, -true_patch.instruction_offset);
+
+        FuncJumpPatch false_patch = {
+            .instruction = FE_JMP | FE_JMPL,
+            .instruction_offset = this->get_code_offset(),
+            .destination_block = inst.branch.false_block_ref,
+        };
+        meta_func->jump_patches.push_back(false_patch);
+        this->encode(FE_JMP | FE_JMPL, -false_patch.instruction_offset);
+
+        break;
+    }
     }
 }
 
@@ -1476,12 +1511,14 @@ void X86_64AsmBuilder::generate_function(InstRef func_ref)
             // Contain no data for spilling:
             case InstKind_Store:
             case InstKind_Jump:
+            case InstKind_Branch:
             case InstKind_ReturnVoid:
             case InstKind_ReturnValue: break;
 
             // Data already stored somewhere else:
             case InstKind_ImmediateInt:
             case InstKind_ImmediateFloat:
+            case InstKind_ImmediateBool:
             case InstKind_PtrCast: break;
 
             // Create stack space for these kinds:

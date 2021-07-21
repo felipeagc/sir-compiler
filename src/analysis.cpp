@@ -649,7 +649,14 @@ analyze_stmt(Compiler *compiler, AnalyzerState *state, StmtRef stmt_ref)
     }
 
     case StmtKind_If: {
-        compiler->add_error(stmt.loc, "unimplemented if stmt");
+        TypeRef bool_type = compiler->bool_type;
+        analyze_expr(compiler, state, stmt.if_.cond_expr_ref, bool_type);
+        
+        analyze_stmt(compiler, state, stmt.if_.true_stmt_ref);
+        if (stmt.if_.false_stmt_ref.id) {
+            analyze_stmt(compiler, state, stmt.if_.false_stmt_ref);
+        }
+
         break;
     }
 

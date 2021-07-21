@@ -73,6 +73,7 @@ enum InstKind : uint8_t {
     InstKind_Block,
     InstKind_ImmediateInt,
     InstKind_ImmediateFloat,
+    InstKind_ImmediateBool,
     InstKind_Function,
     InstKind_FunctionParameter,
     InstKind_ReturnVoid,
@@ -80,6 +81,7 @@ enum InstKind : uint8_t {
     InstKind_Load,
     InstKind_Store,
     InstKind_Jump,
+    InstKind_Branch,
     InstKind_FuncCall,
     InstKind_PtrCast,
     InstKind_ArrayElemPtr,
@@ -102,6 +104,9 @@ struct Inst {
             double f64;
         } imm_float;
         struct {
+            bool value;
+        } imm_bool;
+        struct {
             Slice<uint8_t> data;
             uint32_t flags;
         } global;
@@ -111,6 +116,11 @@ struct Inst {
         struct {
             InstRef block_ref;
         } jump;
+        struct {
+            InstRef cond_inst_ref;
+            InstRef true_block_ref;
+            InstRef false_block_ref;
+        } branch;
         struct {
             InstRef func_ref;
             Slice<InstRef> parameters;
@@ -208,6 +218,7 @@ struct Builder {
 
     InstRef insert_imm_int(Type *type, uint64_t value);
     InstRef insert_imm_float(Type *type, double value);
+    InstRef insert_imm_bool(bool value);
 
     InstRef insert_array_elem_ptr(InstRef accessed_ref, InstRef index_ref);
 
@@ -225,6 +236,7 @@ struct Builder {
     InstRef
     insert_func_call(InstRef func_ref, const Slice<InstRef> &parameters);
     void insert_jump(InstRef block_ref);
+    void insert_branch(InstRef cond_ref, InstRef true_block_ref, InstRef false_block_ref);
     void insert_return_value(InstRef inst_ref);
     void insert_return_void();
 };

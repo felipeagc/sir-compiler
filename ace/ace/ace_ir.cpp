@@ -70,6 +70,17 @@ print_instruction(Module *module, InstRef inst_ref, StringBuilder *sb)
         break;
     }
 
+    case InstKind_ImmediateBool: {
+        String type_string = inst.type->to_string(module);
+        sb->sprintf(
+            "%%r%u = imm_bool %.*s %s",
+            inst_ref.id,
+            (int)type_string.len,
+            type_string.ptr,
+            inst.imm_bool.value ? "true" : "false");
+        break;
+    }
+
     case InstKind_PtrCast: {
         String type_string = inst.type->to_string(module);
         sb->sprintf(
@@ -176,6 +187,14 @@ print_instruction(Module *module, InstRef inst_ref, StringBuilder *sb)
     }
     case InstKind_Jump: {
         sb->sprintf("jump %%r%u", inst.jump.block_ref.id);
+        break;
+    }
+    case InstKind_Branch: {
+        sb->sprintf(
+            "branch %%r%u %%b%u %%b%u",
+            inst.branch.cond_inst_ref.id,
+            inst.branch.true_block_ref.id,
+            inst.branch.false_block_ref.id);
         break;
     }
     }
@@ -704,6 +723,18 @@ InstRef Builder::insert_imm_float(Type *type, double value)
     return builder_insert_inst(this, inst);
 }
 
+InstRef Builder::insert_imm_bool(bool value)
+{
+    ZoneScoped;
+
+    Inst inst = {};
+    inst.kind = InstKind_ImmediateBool;
+    inst.type = this->module->bool_type;
+    inst.imm_bool.value = value;
+
+    return builder_insert_inst(this, inst);
+}
+
 InstRef Builder::insert_array_elem_ptr(InstRef accessed_ref, InstRef index_ref)
 {
     ZoneScoped;
@@ -799,6 +830,23 @@ void Builder::insert_jump(InstRef block_ref)
     Inst inst = {};
     inst.kind = InstKind_Jump;
     inst.jump = {block_ref};
+
+    builder_insert_inst(this, inst);
+}
+
+void Builder::insert_branch(
+    InstRef cond_ref, InstRef true_block_ref, InstRef false_block_ref)
+{
+    ZoneScoped;
+
+    ACE_ASSERT(true_block_ref.get(this->module).kind == InstKind_Block);
+    ACE_ASSERT(false_block_ref.get(this->module).kind == InstKind_Block);
+
+    Inst inst = {};
+    inst.kind = InstKind_Branch;
+    inst.branch.cond_inst_ref = cond_ref;
+    inst.branch.true_block_ref = true_block_ref;
+    inst.branch.false_block_ref = false_block_ref;
 
     builder_insert_inst(this, inst);
 }

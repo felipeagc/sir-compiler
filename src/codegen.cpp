@@ -115,7 +115,7 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
     case ExprKind_ArrayType: break;
 
     case ExprKind_BoolLiteral: {
-        ACE_ASSERT(!"unimplemented");
+        value = {false, ctx->builder.insert_imm_bool(expr.bool_literal.bool_)};
         break;
     }
 
@@ -170,8 +170,7 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
             ACE_ASSERT(type.pointer.sub_type.id == compiler->u8_type.id);
 
             value = {
-                false,
-                ctx->module->add_global_string(expr.str_literal.str)};
+                false, ctx->module->add_global_string(expr.str_literal.str)};
 
             break;
         }
@@ -503,7 +502,27 @@ codegen_stmt(Compiler *compiler, CodegenContext *ctx, StmtRef stmt_ref)
     }
 
     case StmtKind_If: {
-        ACE_ASSERT(!"unimplemented");
+        ace::InstRef cond_value = load_lvalue(
+            ctx, codegen_expr(compiler, ctx, stmt.if_.cond_expr_ref));
+
+        auto current_func = ctx->builder.current_func_ref;
+
+        auto true_block = ctx->module->insert_block_at_end(current_func);
+        auto false_block = ctx->module->insert_block_at_end(current_func);
+        auto merge_block = ctx->module->insert_block_at_end(current_func);
+
+        ctx->builder.insert_branch(cond_value, true_block, false_block);
+
+        ctx->builder.position_at_end(true_block);
+        codegen_stmt(compiler, ctx, stmt.if_.true_stmt_ref);
+        ctx->builder.insert_jump(merge_block);
+
+        ctx->builder.position_at_end(false_block);
+        codegen_stmt(compiler, ctx, stmt.if_.false_stmt_ref);
+        ctx->builder.insert_jump(merge_block);
+
+        ctx->builder.position_at_end(merge_block);
+
         break;
     }
 
@@ -610,8 +629,7 @@ codegen_decl(Compiler *compiler, CodegenContext *ctx, DeclRef decl_ref)
                 codegen_expr(compiler, ctx, decl.local_var_decl.value_expr);
 
             ctx->builder.insert_store(
-                value.inst_ref,
-                load_lvalue(ctx, assigned_value));
+                value.inst_ref, load_lvalue(ctx, assigned_value));
         }
 
         break;

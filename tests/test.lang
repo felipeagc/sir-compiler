@@ -119,6 +119,12 @@ def export main(argc: i32, argv: **u8) {
 		derp("hey\n");
 		printf("hello, world!\n");
 	}
+
+	if (true) {
+		printf("true\n");
+	} else {
+		printf("false\n");
+	}
 }
 
 // def export main() {

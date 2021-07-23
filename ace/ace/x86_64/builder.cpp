@@ -1001,18 +1001,16 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
         size_t operand_size =
             inst.binop.left_ref.get(this->module).type->size_of(this->module);
 
-        MetaValue ax_value =
-            create_int_register_value(operand_size, RegisterIndex_RAX);
-        MetaValue dx_value =
-            create_int_register_value(operand_size, RegisterIndex_RDX);
-        MetaValue cx_value =
-            create_int_register_value(operand_size, RegisterIndex_RCX);
-
         switch (inst.binop.op) {
         case BinaryOperation_Unknown:
         case BinaryOperation_MAX: ACE_ASSERT(0); break;
 
         case BinaryOperation_IAdd: {
+            MetaValue ax_value =
+                create_int_register_value(operand_size, RegisterIndex_RAX);
+            MetaValue dx_value =
+                create_int_register_value(operand_size, RegisterIndex_RDX);
+
             int64_t x86_inst = 0;
             switch (operand_size) {
             case 1: x86_inst = FE_ADD8rr; break;
@@ -1032,6 +1030,11 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
         }
 
         case BinaryOperation_ISub: {
+            MetaValue ax_value =
+                create_int_register_value(operand_size, RegisterIndex_RAX);
+            MetaValue dx_value =
+                create_int_register_value(operand_size, RegisterIndex_RDX);
+
             int64_t x86_inst = 0;
             switch (operand_size) {
             case 1: x86_inst = FE_SUB8rr; break;
@@ -1051,6 +1054,11 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
         }
 
         case BinaryOperation_IMul: {
+            MetaValue ax_value =
+                create_int_register_value(operand_size, RegisterIndex_RAX);
+            MetaValue dx_value =
+                create_int_register_value(operand_size, RegisterIndex_RDX);
+
             int64_t x86_inst = 0;
             switch (operand_size) {
             case 1: x86_inst = FE_IMUL8r; break;
@@ -1075,6 +1083,11 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
         }
 
         case BinaryOperation_SDiv: {
+            MetaValue ax_value =
+                create_int_register_value(operand_size, RegisterIndex_RAX);
+            MetaValue cx_value =
+                create_int_register_value(operand_size, RegisterIndex_RCX);
+
             switch (operand_size) {
             case 1: {
                 this->move_inst_rvalue(inst.binop.left_ref, ax_value);
@@ -1139,6 +1152,11 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
         }
 
         case BinaryOperation_UDiv: {
+            MetaValue ax_value =
+                create_int_register_value(operand_size, RegisterIndex_RAX);
+            MetaValue cx_value =
+                create_int_register_value(operand_size, RegisterIndex_RCX);
+
             switch (operand_size) {
             case 1: {
                 this->move_inst_rvalue(inst.binop.left_ref, ax_value);
@@ -1247,6 +1265,11 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
         case BinaryOperation_SGE:
         case BinaryOperation_SLT:
         case BinaryOperation_SLE: {
+            MetaValue ax_value =
+                create_int_register_value(operand_size, RegisterIndex_RAX);
+            MetaValue dx_value =
+                create_int_register_value(operand_size, RegisterIndex_RDX);
+
             this->move_inst_rvalue(inst.binop.left_ref, ax_value);
             this->move_inst_rvalue(inst.binop.right_ref, dx_value);
 
@@ -1310,23 +1333,21 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
             break;
         }
 
-        case BinaryOperation_Shl:
-        case BinaryOperation_AShr:
-        case BinaryOperation_LShr: {
-            ACE_ASSERT(!"unimplemented");
-            break;
-        }
-
         case BinaryOperation_And:
         case BinaryOperation_Or:
         case BinaryOperation_Xor: {
+            MetaValue ax_value =
+                create_int_register_value(operand_size, RegisterIndex_RAX);
+            MetaValue dx_value =
+                create_int_register_value(operand_size, RegisterIndex_RDX);
+
             this->move_inst_rvalue(inst.binop.left_ref, ax_value);
             this->move_inst_rvalue(inst.binop.right_ref, dx_value);
 
             int64_t x86_inst = 0;
 
             switch (inst.binop.op) {
-            case BinaryOperation_And:
+            case BinaryOperation_And: {
                 switch (operand_size) {
                 case 1: x86_inst = FE_AND8rr; break;
                 case 2: x86_inst = FE_AND16rr; break;
@@ -1335,7 +1356,8 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
                 default: ACE_ASSERT(0); break;
                 }
                 break;
-            case BinaryOperation_Or:
+            }
+            case BinaryOperation_Or: {
                 switch (operand_size) {
                 case 1: x86_inst = FE_OR8rr; break;
                 case 2: x86_inst = FE_OR16rr; break;
@@ -1344,7 +1366,8 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
                 default: ACE_ASSERT(0); break;
                 }
                 break;
-            case BinaryOperation_Xor:
+            }
+            case BinaryOperation_Xor: {
                 switch (operand_size) {
                 case 1: x86_inst = FE_XOR8rr; break;
                 case 2: x86_inst = FE_XOR16rr; break;
@@ -1353,10 +1376,68 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
                 default: ACE_ASSERT(0); break;
                 }
                 break;
+            }
             default: ACE_ASSERT(0); break;
             }
 
             this->encode(x86_inst, FE_AX, FE_DX);
+            this->encode_move(size, ax_value, dest_value);
+            break;
+            break;
+        }
+
+        case BinaryOperation_Shl:
+        case BinaryOperation_AShr:
+        case BinaryOperation_LShr: {
+            MetaValue ax_value = create_int_register_value(
+                inst.binop.left_ref.get(this->module)
+                    .type->size_of(this->module),
+                RegisterIndex_RAX);
+            MetaValue cx_value = create_int_register_value(
+                inst.binop.right_ref.get(this->module)
+                    .type->size_of(this->module),
+                RegisterIndex_RCX);
+
+            this->move_inst_rvalue(inst.binop.left_ref, ax_value);
+            this->move_inst_rvalue(inst.binop.right_ref, cx_value);
+
+            int64_t x86_inst = 0;
+
+            switch (inst.binop.op) {
+            case BinaryOperation_Shl: {
+                switch (operand_size) {
+                case 1: x86_inst = FE_SHL8rr; break;
+                case 2: x86_inst = FE_SHL16rr; break;
+                case 4: x86_inst = FE_SHL32rr; break;
+                case 8: x86_inst = FE_SHL64rr; break;
+                default: ACE_ASSERT(0); break;
+                }
+                break;
+            }
+            case BinaryOperation_AShr: {
+                switch (operand_size) {
+                case 1: x86_inst = FE_SAR8rr; break;
+                case 2: x86_inst = FE_SAR16rr; break;
+                case 4: x86_inst = FE_SAR32rr; break;
+                case 8: x86_inst = FE_SAR64rr; break;
+                default: ACE_ASSERT(0); break;
+                }
+                break;
+            }
+            case BinaryOperation_LShr: {
+                switch (operand_size) {
+                case 1: x86_inst = FE_SHR8rr; break;
+                case 2: x86_inst = FE_SHR16rr; break;
+                case 4: x86_inst = FE_SHR32rr; break;
+                case 8: x86_inst = FE_SHR64rr; break;
+                default: ACE_ASSERT(0); break;
+                }
+                break;
+            }
+            default: ACE_ASSERT(0); break;
+            }
+
+            this->encode(x86_inst, FE_AX, FE_CX);
             this->encode_move(size, ax_value, dest_value);
             break;
         }

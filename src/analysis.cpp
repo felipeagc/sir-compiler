@@ -543,7 +543,38 @@ static void analyze_expr(
         case BinaryOp_BitAnd:
         case BinaryOp_BitOr:
         case BinaryOp_BitXor: {
-            ACE_ASSERT(!"unimplemented binop analysis");
+            analyze_expr(compiler, state, expr.binary.left_ref);
+            analyze_expr(compiler, state, expr.binary.right_ref);
+            Expr left = expr.binary.left_ref.get(compiler);
+            Expr right = expr.binary.right_ref.get(compiler);
+
+            if (left.expr_type_ref.id != right.expr_type_ref.id) {
+                compiler->add_error(
+                    expr.loc,
+                    "mismatched types for bitwise expression operands");
+                break;
+            }
+
+            Type type = left.expr_type_ref.get(compiler);
+            if (type.kind == TypeKind_UntypedInt ||
+                type.kind == TypeKind_UntypedFloat) {
+                ace::String type_string = type.to_string(compiler);
+                compiler->add_error(
+                    expr.loc,
+                    "bitwise expression expects runtime numeric types, "
+                    "instead got '%.*s'",
+                    (int)type_string.len,
+                    type_string.ptr);
+                break;
+            }
+
+            if (type.kind != TypeKind_Int) {
+                compiler->add_error(
+                    expr.loc, "bitwise expression expects numeric operands");
+                break;
+            }
+
+            expr.expr_type_ref = left.expr_type_ref;
             break;
         }
 
@@ -553,13 +584,79 @@ static void analyze_expr(
         case BinaryOp_GreaterEqual:
         case BinaryOp_Less:
         case BinaryOp_LessEqual: {
-            ACE_ASSERT(!"unimplemented binop analysis");
+            analyze_expr(compiler, state, expr.binary.left_ref);
+            analyze_expr(compiler, state, expr.binary.right_ref);
+            Expr left = expr.binary.left_ref.get(compiler);
+            Expr right = expr.binary.right_ref.get(compiler);
+
+            if (left.expr_type_ref.id != right.expr_type_ref.id) {
+                compiler->add_error(
+                    expr.loc, "mismatched types for comparison operands");
+                break;
+            }
+
+            Type type = left.expr_type_ref.get(compiler);
+            if (type.kind == TypeKind_UntypedInt ||
+                type.kind == TypeKind_UntypedFloat) {
+                ace::String type_string = type.to_string(compiler);
+                compiler->add_error(
+                    expr.loc,
+                    "comparison expression expects runtime numeric types, "
+                    "instead got '%.*s'",
+                    (int)type_string.len,
+                    type_string.ptr);
+                break;
+            }
+
+            if (type.kind != TypeKind_Int && type.kind != TypeKind_Float) {
+                compiler->add_error(
+                    expr.loc, "comparison expression expects numeric operands");
+                break;
+            }
+
+            expr.expr_type_ref = compiler->bool_type;
             break;
         }
 
         case BinaryOp_LShift:
         case BinaryOp_RShift: {
-            ACE_ASSERT(!"unimplemented binop analysis");
+            analyze_expr(compiler, state, expr.binary.left_ref);
+            analyze_expr(compiler, state, expr.binary.right_ref);
+            Expr left = expr.binary.left_ref.get(compiler);
+            Expr right = expr.binary.right_ref.get(compiler);
+
+            Type left_type = left.expr_type_ref.get(compiler);
+            if (left_type.kind != TypeKind_Int) {
+                ace::String type_string = left_type.to_string(compiler);
+                compiler->add_error(
+                    left.loc,
+                    "bit shift expects runtime numeric types, instead "
+                    "got '%.*s'",
+                    (int)type_string.len,
+                    type_string.ptr);
+                break;
+            }
+
+            Type right_type = right.expr_type_ref.get(compiler);
+            if (right_type.kind != TypeKind_Int) {
+                ace::String type_string = right_type.to_string(compiler);
+                compiler->add_error(
+                    right.loc,
+                    "bit shift expects runtime numeric types, instead "
+                    "got '%.*s'",
+                    (int)type_string.len,
+                    type_string.ptr);
+                break;
+            }
+
+            if (right_type.int_.is_signed) {
+                compiler->add_error(
+                    right.loc,
+                    "right side of bit shift operation needs to be unsigned");
+                break;
+            }
+
+            expr.expr_type_ref = left.expr_type_ref;
             break;
         }
         }

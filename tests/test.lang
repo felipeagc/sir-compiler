@@ -120,14 +120,30 @@ def export main(argc: i32, argv: **u8) {
 		printf("hello, world!\n");
 	}
 
-	if (true) {
+	// my_bool := i32(1) == i32(2);
+	if (i32(1) == i32(2)) {
+		printf("EQUAL\n");
+	} else {
+		printf("NOT EQUAL\n");
+	}
+
+	if (false) {
 		printf("true\n");
 	} else {
 		printf("false\n");
-	}
 
-	while (true) {
-		printf("true\n");
+		if (false) {
+			printf("yo\n");
+		} else {
+			printf("no\n");
+		}
+		
+		printf("continuation\n");
+
+		// while (true) {
+		// 	printf("true\n");
+		// }
+
 	}
 }
 

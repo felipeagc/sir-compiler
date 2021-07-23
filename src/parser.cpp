@@ -1150,11 +1150,20 @@ static Expr parse_binary_expr(Compiler *compiler, TokenizerState *state)
     case TokenKind_Mul:
     case TokenKind_Div:
     case TokenKind_Mod:
+
     case TokenKind_BitOr:
     case TokenKind_BitXor:
     case TokenKind_BitAnd:
+
     case TokenKind_LShift:
-    case TokenKind_RShift: break;
+    case TokenKind_RShift:
+
+    case TokenKind_EqualEqual:
+    case TokenKind_NotEqual:
+    case TokenKind_Greater:
+    case TokenKind_GreaterEqual:
+    case TokenKind_Less:
+    case TokenKind_LessEqual: break;
     default: return expr;
     }
 

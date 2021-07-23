@@ -33,6 +33,18 @@ static ace::InstRef load_lvalue(CodegenContext *ctx, const CodegenValue &value)
     return value.inst_ref;
 }
 
+static ace::InstRef value_into_bool(CodegenContext *ctx, ace::InstRef inst_ref)
+{
+    ace::Type *type = inst_ref.get(ctx->module).type;
+    if (type->kind == ace::TypeKind_Int) {
+        return ctx->builder.insert_binop(
+            ace::BinaryOperation_INE,
+            inst_ref,
+            ctx->builder.insert_imm_int(type, 0));
+    }
+    return inst_ref;
+}
+
 static ace::Type *
 get_ir_type(Compiler *compiler, ace::Module *module, const Type &type)
 {
@@ -381,68 +393,157 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
 
         ace::BinaryOperation op = {};
 
-        Type type = expr.expr_type_ref.get(compiler);
+        Expr left = expr.binary.left_ref.get(compiler);
+        Type operand_type = left.expr_type_ref.get(compiler);
 
         switch (expr.binary.op) {
         case BinaryOp_Unknown:
         case BinaryOp_MAX: ACE_ASSERT(0); break;
 
         case BinaryOp_Add: {
-            switch (type.kind) {
+            switch (operand_type.kind) {
             case TypeKind_Int: op = ace::BinaryOperation_IAdd; break;
-            case TypeKind_Float: ACE_ASSERT(!"unimplemented"); break;
+            case TypeKind_Float: op = ace::BinaryOperation_FAdd; break;
             default: ACE_ASSERT(0);
             }
-
             break;
         }
 
         case BinaryOp_Sub: {
-            switch (type.kind) {
+            switch (operand_type.kind) {
             case TypeKind_Int: op = ace::BinaryOperation_ISub; break;
-            case TypeKind_Float: ACE_ASSERT(!"unimplemented"); break;
+            case TypeKind_Float: op = ace::BinaryOperation_FSub; break;
             default: ACE_ASSERT(0);
             }
-
             break;
         }
 
         case BinaryOp_Mul: {
-            switch (type.kind) {
+            switch (operand_type.kind) {
             case TypeKind_Int: op = ace::BinaryOperation_IMul; break;
-            case TypeKind_Float: ACE_ASSERT(!"unimplemented"); break;
+            case TypeKind_Float: op = ace::BinaryOperation_FMul; break;
             default: ACE_ASSERT(0);
             }
-
             break;
         }
 
-        case BinaryOp_Div:
+        case BinaryOp_Div: {
+            switch (operand_type.kind) {
+            case TypeKind_Int:
+                op = (operand_type.int_.is_signed) ? ace::BinaryOperation_SDiv
+                                                   : ace::BinaryOperation_UDiv;
+                break;
+            case TypeKind_Float: op = ace::BinaryOperation_FDiv; break;
+            default: ACE_ASSERT(0);
+            }
+            break;
+        }
         case BinaryOp_Mod: {
-            ACE_ASSERT(!"unimplemented binop codegen");
+            switch (operand_type.kind) {
+            case TypeKind_Int:
+                op = (operand_type.int_.is_signed) ? ace::BinaryOperation_SRem
+                                                   : ace::BinaryOperation_URem;
+                break;
+            case TypeKind_Float: op = ace::BinaryOperation_FRem; break;
+            default: ACE_ASSERT(0);
+            }
             break;
         }
 
-        case BinaryOp_BitAnd:
-        case BinaryOp_BitOr:
-        case BinaryOp_BitXor: {
-            ACE_ASSERT(!"unimplemented binop codegen");
+        case BinaryOp_Equal: {
+            switch (operand_type.kind) {
+            case TypeKind_Int: op = ace::BinaryOperation_IEQ; break;
+            case TypeKind_Float: op = ace::BinaryOperation_FEQ; break;
+            default: ACE_ASSERT(0);
+            }
             break;
         }
 
-        case BinaryOp_Equal:
-        case BinaryOp_NotEqual:
-        case BinaryOp_Greater:
-        case BinaryOp_GreaterEqual:
-        case BinaryOp_Less:
+        case BinaryOp_NotEqual: {
+            switch (operand_type.kind) {
+            case TypeKind_Int: op = ace::BinaryOperation_INE; break;
+            case TypeKind_Float: op = ace::BinaryOperation_FNE; break;
+            default: ACE_ASSERT(0);
+            }
+            break;
+        }
+
+        case BinaryOp_Greater: {
+            switch (operand_type.kind) {
+            case TypeKind_Int:
+                op = (operand_type.int_.is_signed) ? ace::BinaryOperation_SGT
+                                                   : ace::BinaryOperation_UGT;
+                break;
+            case TypeKind_Float: op = ace::BinaryOperation_FGT; break;
+            default: ACE_ASSERT(0);
+            }
+            break;
+        }
+
+        case BinaryOp_GreaterEqual: {
+            switch (operand_type.kind) {
+            case TypeKind_Int:
+                op = (operand_type.int_.is_signed) ? ace::BinaryOperation_SGE
+                                                   : ace::BinaryOperation_UGE;
+                break;
+            case TypeKind_Float: op = ace::BinaryOperation_FGE; break;
+            default: ACE_ASSERT(0);
+            }
+            break;
+        }
+
+        case BinaryOp_Less: {
+            switch (operand_type.kind) {
+            case TypeKind_Int:
+                op = (operand_type.int_.is_signed) ? ace::BinaryOperation_SLT
+                                                   : ace::BinaryOperation_ULT;
+                break;
+            case TypeKind_Float: op = ace::BinaryOperation_FLT; break;
+            default: ACE_ASSERT(0);
+            }
+            break;
+        }
+
         case BinaryOp_LessEqual: {
-            ACE_ASSERT(!"unimplemented binop codegen");
+            switch (operand_type.kind) {
+            case TypeKind_Int:
+                op = (operand_type.int_.is_signed) ? ace::BinaryOperation_SLE
+                                                   : ace::BinaryOperation_ULE;
+                break;
+            case TypeKind_Float: op = ace::BinaryOperation_FLE; break;
+            default: ACE_ASSERT(0);
+            }
             break;
         }
 
-        case BinaryOp_LShift:
+        case BinaryOp_LShift: {
+            ACE_ASSERT(operand_type.kind == TypeKind_Int);
+            op = ace::BinaryOperation_Shl;
+            break;
+        }
+
         case BinaryOp_RShift: {
-            ACE_ASSERT(!"unimplemented binop codegen");
+            ACE_ASSERT(operand_type.kind == TypeKind_Int);
+            op = (operand_type.int_.is_signed) ? ace::BinaryOperation_AShr
+                                               : ace::BinaryOperation_LShr;
+            break;
+        }
+
+        case BinaryOp_BitAnd: {
+            ACE_ASSERT(operand_type.kind == TypeKind_Int);
+            op = ace::BinaryOperation_And;
+            break;
+        }
+
+        case BinaryOp_BitOr: {
+            ACE_ASSERT(operand_type.kind == TypeKind_Int);
+            op = ace::BinaryOperation_Or;
+            break;
+        }
+
+        case BinaryOp_BitXor: {
+            ACE_ASSERT(operand_type.kind == TypeKind_Int);
+            op = ace::BinaryOperation_Xor;
             break;
         }
         }
@@ -504,6 +605,7 @@ codegen_stmt(Compiler *compiler, CodegenContext *ctx, StmtRef stmt_ref)
     case StmtKind_If: {
         ace::InstRef cond_value = load_lvalue(
             ctx, codegen_expr(compiler, ctx, stmt.if_.cond_expr_ref));
+        cond_value = value_into_bool(ctx, cond_value);
 
         auto current_func = ctx->builder.current_func_ref;
 

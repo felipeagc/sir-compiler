@@ -62,6 +62,42 @@ enum BinaryOperation {
     BinaryOperation_IAdd,
     BinaryOperation_ISub,
     BinaryOperation_IMul,
+    BinaryOperation_SDiv,
+    BinaryOperation_UDiv,
+    BinaryOperation_SRem,
+    BinaryOperation_URem,
+
+    BinaryOperation_FAdd,
+    BinaryOperation_FSub,
+    BinaryOperation_FMul,
+    BinaryOperation_FDiv,
+    BinaryOperation_FRem,
+
+    BinaryOperation_IEQ,
+    BinaryOperation_INE,
+    BinaryOperation_UGT,
+    BinaryOperation_UGE,
+    BinaryOperation_ULT,
+    BinaryOperation_ULE,
+    BinaryOperation_SGT,
+    BinaryOperation_SGE,
+    BinaryOperation_SLT,
+    BinaryOperation_SLE,
+
+    BinaryOperation_FEQ,
+    BinaryOperation_FNE,
+    BinaryOperation_FGT,
+    BinaryOperation_FGE,
+    BinaryOperation_FLT,
+    BinaryOperation_FLE,
+
+    BinaryOperation_Shl,
+    BinaryOperation_AShr,
+    BinaryOperation_LShr,
+
+    BinaryOperation_And,
+    BinaryOperation_Or,
+    BinaryOperation_Xor,
 
     BinaryOperation_MAX,
 };

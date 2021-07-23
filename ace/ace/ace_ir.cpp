@@ -25,10 +25,47 @@ String ace::linkage_to_string(Linkage linkage)
 const char *binop_to_string(BinaryOperation op)
 {
     switch (op) {
+    case BinaryOperation_Unknown:
+    case BinaryOperation_MAX: break;
     case BinaryOperation_IAdd: return "iadd";
     case BinaryOperation_ISub: return "isub";
     case BinaryOperation_IMul: return "imul";
-    default: break;
+    case BinaryOperation_UDiv: return "udiv";
+    case BinaryOperation_SDiv: return "sdiv";
+    case BinaryOperation_URem: return "urem";
+    case BinaryOperation_SRem: return "srem";
+
+    case BinaryOperation_FAdd: return "fadd";
+    case BinaryOperation_FSub: return "fsub";
+    case BinaryOperation_FMul: return "fmul";
+    case BinaryOperation_FDiv: return "fdiv";
+    case BinaryOperation_FRem: return "frem";
+
+    case BinaryOperation_IEQ: return "ieq";
+    case BinaryOperation_INE: return "ine";
+    case BinaryOperation_UGT: return "ugt";
+    case BinaryOperation_UGE: return "uge";
+    case BinaryOperation_ULT: return "ult";
+    case BinaryOperation_ULE: return "ule";
+    case BinaryOperation_SGT: return "sgt";
+    case BinaryOperation_SGE: return "sge";
+    case BinaryOperation_SLT: return "slt";
+    case BinaryOperation_SLE: return "sle";
+
+    case BinaryOperation_FEQ: return "feq";
+    case BinaryOperation_FNE: return "fne";
+    case BinaryOperation_FGT: return "fgt";
+    case BinaryOperation_FGE: return "fge";
+    case BinaryOperation_FLT: return "flt";
+    case BinaryOperation_FLE: return "fle";
+
+    case BinaryOperation_Shl: return "shl";
+    case BinaryOperation_AShr: return "ashr";
+    case BinaryOperation_LShr: return "lshr";
+
+    case BinaryOperation_And: return "and";
+    case BinaryOperation_Or: return "or";
+    case BinaryOperation_Xor: return "xor";
     }
 
     return "<unknown op>";
@@ -757,6 +794,11 @@ void Builder::insert_store(InstRef ptr_ref, InstRef value_ref)
 {
     ZoneScoped;
 
+    ACE_ASSERT(ptr_ref.get(this->module).type->kind == TypeKind_Pointer);
+    ACE_ASSERT(
+        ptr_ref.get(this->module).type->pointer.sub ==
+        value_ref.get(this->module).type);
+
     Inst inst = {};
     inst.kind = InstKind_Store;
     inst.store.ptr_ref = ptr_ref;
@@ -798,7 +840,65 @@ Builder::insert_binop(BinaryOperation op, InstRef left_ref, InstRef right_ref)
 
     Inst inst = {};
     inst.kind = InstKind_Binop;
-    inst.type = left_ref.get(this->module).type;
+    switch (op) {
+    case BinaryOperation_Unknown:
+    case BinaryOperation_MAX: ACE_ASSERT(0); break;
+
+    case BinaryOperation_IAdd:
+    case BinaryOperation_ISub:
+    case BinaryOperation_IMul:
+    case BinaryOperation_SDiv:
+    case BinaryOperation_UDiv:
+    case BinaryOperation_SRem:
+    case BinaryOperation_URem:
+
+    case BinaryOperation_FAdd:
+    case BinaryOperation_FSub:
+    case BinaryOperation_FMul:
+    case BinaryOperation_FDiv:
+    case BinaryOperation_FRem: {
+        inst.type = left_ref.get(this->module).type;
+        break;
+    }
+
+    case BinaryOperation_IEQ:
+    case BinaryOperation_INE:
+    case BinaryOperation_UGT:
+    case BinaryOperation_UGE:
+    case BinaryOperation_ULT:
+    case BinaryOperation_ULE:
+    case BinaryOperation_SGT:
+    case BinaryOperation_SGE:
+    case BinaryOperation_SLT:
+    case BinaryOperation_SLE:
+
+    case BinaryOperation_FEQ:
+    case BinaryOperation_FNE:
+    case BinaryOperation_FGT:
+    case BinaryOperation_FGE:
+    case BinaryOperation_FLT:
+    case BinaryOperation_FLE: {
+        inst.type = this->module->bool_type;
+        break;
+    }
+
+    case BinaryOperation_Shl:
+    case BinaryOperation_AShr:
+    case BinaryOperation_LShr: {
+        inst.type = left_ref.get(this->module).type;
+        break;
+    }
+
+    case BinaryOperation_And:
+    case BinaryOperation_Or:
+    case BinaryOperation_Xor: {
+        inst.type = left_ref.get(this->module).type;
+        break;
+    }
+    }
+
+    ACE_ASSERT(inst.type);
+
     inst.binop.op = op;
     inst.binop.left_ref = left_ref;
     inst.binop.right_ref = right_ref;
@@ -839,6 +939,7 @@ void Builder::insert_branch(
 {
     ZoneScoped;
 
+    ACE_ASSERT(cond_ref.get(this->module).type->kind == TypeKind_Bool);
     ACE_ASSERT(true_block_ref.get(this->module).kind == InstKind_Block);
     ACE_ASSERT(false_block_ref.get(this->module).kind == InstKind_Block);
 

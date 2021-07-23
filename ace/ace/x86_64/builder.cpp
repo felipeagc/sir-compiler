@@ -168,6 +168,7 @@ struct X86_64AsmBuilder : AsmBuilder {
     Array<MetaValue> meta_insts;
 
     size_t get_code_offset();
+    size_t encode_raw(const Slice<uint8_t> &bytes);
     size_t encode(
         uint64_t mnem, FeOp op0 = 0, FeOp op1 = 0, FeOp op2 = 0, FeOp op3 = 0);
     size_t encode_at(
@@ -298,6 +299,15 @@ ACE_INLINE
 size_t X86_64AsmBuilder::get_code_offset()
 {
     return this->obj_builder->get_section_size(SectionType_Text);
+}
+
+ACE_INLINE
+size_t X86_64AsmBuilder::encode_raw(const Slice<uint8_t> &bytes)
+{
+    ZoneScoped;
+
+    this->obj_builder->add_to_section(SectionType_Text, bytes);
+    return bytes.len;
 }
 
 ACE_INLINE
@@ -990,8 +1000,13 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
         MetaValue dest_value = this->meta_insts[inst_ref.id];
 
         size_t size = inst.type->size_of(this->module);
-        MetaValue ax_value = create_int_register_value(size, RegisterIndex_RAX);
-        MetaValue dx_value = create_int_register_value(size, RegisterIndex_RDX);
+        size_t operand_size =
+            inst.binop.left_ref.get(this->module).type->size_of(this->module);
+
+        MetaValue ax_value =
+            create_int_register_value(operand_size, RegisterIndex_RAX);
+        MetaValue dx_value =
+            create_int_register_value(operand_size, RegisterIndex_RDX);
 
         switch (inst.binop.op) {
         case BinaryOperation_Unknown:
@@ -999,7 +1014,7 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
 
         case BinaryOperation_IAdd: {
             int64_t x86_inst = 0;
-            switch (size) {
+            switch (operand_size) {
             case 1: x86_inst = FE_ADD8rr; break;
             case 2: x86_inst = FE_ADD16rr; break;
             case 4: x86_inst = FE_ADD32rr; break;
@@ -1023,7 +1038,7 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
 
         case BinaryOperation_IMul: {
             int64_t x86_inst = 0;
-            switch (size) {
+            switch (operand_size) {
             case 1: x86_inst = FE_IMUL8r; break;
             case 2: x86_inst = FE_IMUL16rr; break;
             case 4: x86_inst = FE_IMUL32rr; break;
@@ -1042,6 +1057,138 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
                 this->encode_move(size, ax_value, dest_value);
             }
 
+            break;
+        }
+
+        case BinaryOperation_SDiv: {
+            ACE_ASSERT(!"unimplemented");
+            break;
+        }
+
+        case BinaryOperation_UDiv: {
+            ACE_ASSERT(!"unimplemented");
+            break;
+        }
+
+        case BinaryOperation_SRem: {
+            ACE_ASSERT(!"unimplemented");
+            break;
+        }
+
+        case BinaryOperation_URem: {
+            ACE_ASSERT(!"unimplemented");
+            break;
+        }
+
+        case BinaryOperation_FAdd: {
+            ACE_ASSERT(!"unimplemented");
+            break;
+        }
+
+        case BinaryOperation_FSub: {
+            ACE_ASSERT(!"unimplemented");
+            break;
+        }
+
+        case BinaryOperation_FMul: {
+            ACE_ASSERT(!"unimplemented");
+            break;
+        }
+
+        case BinaryOperation_FDiv: {
+            ACE_ASSERT(!"unimplemented");
+            break;
+        }
+
+        case BinaryOperation_FRem: {
+            ACE_ASSERT(!"unimplemented");
+            break;
+        }
+
+        case BinaryOperation_IEQ:
+        case BinaryOperation_INE:
+        case BinaryOperation_UGT:
+        case BinaryOperation_UGE:
+        case BinaryOperation_ULT:
+        case BinaryOperation_ULE:
+        case BinaryOperation_SGT:
+        case BinaryOperation_SGE:
+        case BinaryOperation_SLT:
+        case BinaryOperation_SLE: {
+            this->move_inst_rvalue(inst.binop.left_ref, ax_value);
+            this->move_inst_rvalue(inst.binop.right_ref, dx_value);
+
+            int64_t x86_inst = 0;
+            switch (operand_size) {
+            case 1: x86_inst = FE_CMP8rr; break;
+            case 2: x86_inst = FE_CMP16rr; break;
+            case 4: x86_inst = FE_CMP32rr; break;
+            case 8: x86_inst = FE_CMP64rr; break;
+            default: ACE_ASSERT(0); break;
+            }
+
+            this->encode(x86_inst, FE_AX, FE_DX);
+
+            switch (inst.binop.op) {
+            case BinaryOperation_IEQ:
+                this->encode_raw({0x0f, 0x94, 0xc0}); // sete al
+                break;
+            case BinaryOperation_INE:
+                this->encode_raw({0x0f, 0x95, 0xc0}); // setne al
+                break;
+            case BinaryOperation_UGT:
+                this->encode_raw({0x0f, 0x97, 0xc0}); // seta al
+                break;
+            case BinaryOperation_UGE:
+                this->encode_raw({0x0f, 0x93, 0xc0}); // setae al
+                break;
+            case BinaryOperation_ULT:
+                this->encode_raw({0x0f, 0x92, 0xc0}); // setb al
+                break;
+            case BinaryOperation_ULE:
+                this->encode_raw({0x0f, 0x96, 0xc0}); // setbe al
+                break;
+            case BinaryOperation_SGT:
+                this->encode_raw({0x0f, 0x9f, 0xc0}); // setg al
+                break;
+            case BinaryOperation_SGE:
+                this->encode_raw({0x0f, 0x9d, 0xc0}); // setge al
+                break;
+            case BinaryOperation_SLT:
+                this->encode_raw({0x0f, 0x9c, 0xc0}); // setl al
+                break;
+            case BinaryOperation_SLE:
+                this->encode_raw({0x0f, 0x9e, 0xc0}); // setle al
+                break;
+            default: ACE_ASSERT(0); break;
+            }
+
+            this->encode(FE_AND8ri, FE_AX, 1);
+            this->encode_move(size, ax_value, dest_value);
+            break;
+        }
+
+        case BinaryOperation_FEQ:
+        case BinaryOperation_FNE:
+        case BinaryOperation_FGT:
+        case BinaryOperation_FGE:
+        case BinaryOperation_FLT:
+        case BinaryOperation_FLE: {
+            ACE_ASSERT(!"unimplemented");
+            break;
+        }
+
+        case BinaryOperation_Shl:
+        case BinaryOperation_AShr:
+        case BinaryOperation_LShr: {
+            ACE_ASSERT(!"unimplemented");
+            break;
+        }
+
+        case BinaryOperation_And:
+        case BinaryOperation_Or:
+        case BinaryOperation_Xor: {
+            ACE_ASSERT(!"unimplemented");
             break;
         }
         }

@@ -507,21 +507,34 @@ codegen_stmt(Compiler *compiler, CodegenContext *ctx, StmtRef stmt_ref)
 
         auto current_func = ctx->builder.current_func_ref;
 
-        auto true_block = ctx->module->insert_block_at_end(current_func);
-        auto false_block = ctx->module->insert_block_at_end(current_func);
-        auto merge_block = ctx->module->insert_block_at_end(current_func);
+        if (stmt.if_.false_stmt_ref.id == 0) {
+            auto true_block = ctx->module->insert_block_at_end(current_func);
+            auto merge_block = ctx->module->insert_block_at_end(current_func);
 
-        ctx->builder.insert_branch(cond_value, true_block, false_block);
+            ctx->builder.insert_branch(cond_value, true_block, merge_block);
 
-        ctx->builder.position_at_end(true_block);
-        codegen_stmt(compiler, ctx, stmt.if_.true_stmt_ref);
-        ctx->builder.insert_jump(merge_block);
+            ctx->builder.position_at_end(true_block);
+            codegen_stmt(compiler, ctx, stmt.if_.true_stmt_ref);
+            ctx->builder.insert_jump(merge_block);
 
-        ctx->builder.position_at_end(false_block);
-        codegen_stmt(compiler, ctx, stmt.if_.false_stmt_ref);
-        ctx->builder.insert_jump(merge_block);
+            ctx->builder.position_at_end(merge_block);
+        } else {
+            auto true_block = ctx->module->insert_block_at_end(current_func);
+            auto false_block = ctx->module->insert_block_at_end(current_func);
+            auto merge_block = ctx->module->insert_block_at_end(current_func);
 
-        ctx->builder.position_at_end(merge_block);
+            ctx->builder.insert_branch(cond_value, true_block, false_block);
+
+            ctx->builder.position_at_end(true_block);
+            codegen_stmt(compiler, ctx, stmt.if_.true_stmt_ref);
+            ctx->builder.insert_jump(merge_block);
+
+            ctx->builder.position_at_end(false_block);
+            codegen_stmt(compiler, ctx, stmt.if_.false_stmt_ref);
+            ctx->builder.insert_jump(merge_block);
+
+            ctx->builder.position_at_end(merge_block);
+        }
 
         break;
     }
@@ -549,7 +562,6 @@ codegen_stmt(Compiler *compiler, CodegenContext *ctx, StmtRef stmt_ref)
 
         break;
     }
-
     }
 }
 

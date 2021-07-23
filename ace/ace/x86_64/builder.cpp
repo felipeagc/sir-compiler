@@ -1320,7 +1320,44 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
         case BinaryOperation_And:
         case BinaryOperation_Or:
         case BinaryOperation_Xor: {
-            ACE_ASSERT(!"unimplemented");
+            this->move_inst_rvalue(inst.binop.left_ref, ax_value);
+            this->move_inst_rvalue(inst.binop.right_ref, dx_value);
+
+            int64_t x86_inst = 0;
+
+            switch (inst.binop.op) {
+            case BinaryOperation_And:
+                switch (operand_size) {
+                case 1: x86_inst = FE_AND8rr; break;
+                case 2: x86_inst = FE_AND16rr; break;
+                case 4: x86_inst = FE_AND32rr; break;
+                case 8: x86_inst = FE_AND64rr; break;
+                default: ACE_ASSERT(0); break;
+                }
+                break;
+            case BinaryOperation_Or:
+                switch (operand_size) {
+                case 1: x86_inst = FE_OR8rr; break;
+                case 2: x86_inst = FE_OR16rr; break;
+                case 4: x86_inst = FE_OR32rr; break;
+                case 8: x86_inst = FE_OR64rr; break;
+                default: ACE_ASSERT(0); break;
+                }
+                break;
+            case BinaryOperation_Xor:
+                switch (operand_size) {
+                case 1: x86_inst = FE_XOR8rr; break;
+                case 2: x86_inst = FE_XOR16rr; break;
+                case 4: x86_inst = FE_XOR32rr; break;
+                case 8: x86_inst = FE_XOR64rr; break;
+                default: ACE_ASSERT(0); break;
+                }
+                break;
+            default: ACE_ASSERT(0); break;
+            }
+
+            this->encode(x86_inst, FE_AX, FE_DX);
+            this->encode_move(size, ax_value, dest_value);
             break;
         }
         }

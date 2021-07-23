@@ -348,9 +348,7 @@ size_t X86_64AsmBuilder::encode_direct_call(InstRef func_ref)
 {
     ZoneScoped;
 
-    uint8_t code[] = {0xe8, 0x00, 0x00, 0x00, 0x00};
-    Slice<uint8_t> code_slice = code;
-    this->obj_builder->add_to_section(SectionType_Text, code_slice);
+    size_t inst_len = this->encode_raw({0xe8, 0x00, 0x00, 0x00, 0x00});
 
     size_t curr_offset = this->get_code_offset();
 
@@ -359,7 +357,7 @@ size_t X86_64AsmBuilder::encode_direct_call(InstRef func_ref)
     obj_builder->add_procedure_relocation(
         meta_inst->func->symbol_ref, curr_offset - 4, 4);
 
-    return code_slice.len;
+    return inst_len;
 }
 
 void X86_64AsmBuilder::encode_function_ending(InstRef func_ref)
@@ -1131,34 +1129,34 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
 
             switch (inst.binop.op) {
             case BinaryOperation_IEQ:
-                this->encode_raw({0x0f, 0x94, 0xc0}); // sete al
+                this->encode(FE_SETZ8r, FE_AX); // sete
                 break;
             case BinaryOperation_INE:
-                this->encode_raw({0x0f, 0x95, 0xc0}); // setne al
+                this->encode(FE_SETNZ8r, FE_AX); // setne
                 break;
             case BinaryOperation_UGT:
-                this->encode_raw({0x0f, 0x97, 0xc0}); // seta al
+                this->encode(FE_SETA8r, FE_AX); // seta
                 break;
             case BinaryOperation_UGE:
-                this->encode_raw({0x0f, 0x93, 0xc0}); // setae al
+                this->encode(FE_SETNC8r, FE_AX); // setae
                 break;
             case BinaryOperation_ULT:
-                this->encode_raw({0x0f, 0x92, 0xc0}); // setb al
+                this->encode(FE_SETC8r, FE_AX); // setb
                 break;
             case BinaryOperation_ULE:
-                this->encode_raw({0x0f, 0x96, 0xc0}); // setbe al
+                this->encode(FE_SETBE8r, FE_AX); // setbe
                 break;
             case BinaryOperation_SGT:
-                this->encode_raw({0x0f, 0x9f, 0xc0}); // setg al
+                this->encode(FE_SETG8r, FE_AX); // setg
                 break;
             case BinaryOperation_SGE:
-                this->encode_raw({0x0f, 0x9d, 0xc0}); // setge al
+                this->encode(FE_SETGE8r, FE_AX); // setge
                 break;
             case BinaryOperation_SLT:
-                this->encode_raw({0x0f, 0x9c, 0xc0}); // setl al
+                this->encode(FE_SETL8r, FE_AX); // setl
                 break;
             case BinaryOperation_SLE:
-                this->encode_raw({0x0f, 0x9e, 0xc0}); // setle al
+                this->encode(FE_SETLE8r, FE_AX); // setle
                 break;
             default: ACE_ASSERT(0); break;
             }

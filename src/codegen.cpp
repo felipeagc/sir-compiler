@@ -642,9 +642,6 @@ codegen_stmt(Compiler *compiler, CodegenContext *ctx, StmtRef stmt_ref)
     }
 
     case StmtKind_While: {
-        ace::InstRef cond_value = load_lvalue(
-            ctx, codegen_expr(compiler, ctx, stmt.while_.cond_expr_ref));
-
         auto current_func = ctx->builder.current_func_ref;
 
         auto cond_block = ctx->module->insert_block_at_end(current_func);
@@ -652,8 +649,11 @@ codegen_stmt(Compiler *compiler, CodegenContext *ctx, StmtRef stmt_ref)
         auto merge_block = ctx->module->insert_block_at_end(current_func);
 
         ctx->builder.insert_jump(cond_block);
-
         ctx->builder.position_at_end(cond_block);
+
+        ace::InstRef cond_value = load_lvalue(
+            ctx, codegen_expr(compiler, ctx, stmt.while_.cond_expr_ref));
+
         ctx->builder.insert_branch(cond_value, true_block, merge_block);
 
         ctx->builder.position_at_end(true_block);

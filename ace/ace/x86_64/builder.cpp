@@ -1221,12 +1221,144 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
         }
 
         case BinaryOperation_SRem: {
-            ACE_ASSERT(!"unimplemented");
+            MetaValue ax_value =
+                create_int_register_value(operand_size, RegisterIndex_RAX);
+            MetaValue dx_value =
+                create_int_register_value(operand_size, RegisterIndex_RDX);
+            MetaValue cx_value =
+                create_int_register_value(operand_size, RegisterIndex_RCX);
+
+            switch (operand_size) {
+            case 1: {
+                this->move_inst_rvalue(inst.binop.left_ref, ax_value);
+                this->encode(FE_MOVSXr32r8, FE_AX, FE_AX);
+                break;
+            }
+            case 2: {
+                this->move_inst_rvalue(inst.binop.left_ref, ax_value);
+                this->encode(FE_MOVSXr32r16, FE_AX, FE_AX);
+                break;
+            }
+            case 4:
+            case 8: {
+                this->move_inst_rvalue(inst.binop.left_ref, ax_value);
+                break;
+            }
+            default: ACE_ASSERT(0); break;
+            }
+
+            int64_t sep_inst = 0;
+            switch (operand_size) {
+            case 1:
+            case 2:
+            case 4: sep_inst = FE_C_SEP32; break;
+            case 8: sep_inst = FE_C_SEP64; break;
+            default: ACE_ASSERT(0); break;
+            }
+            this->encode(sep_inst, FE_AX);
+
+            int64_t div_inst = 0;
+            switch (operand_size) {
+            case 1:
+            case 2:
+            case 4: div_inst = FE_IDIV32r; break;
+            case 8: div_inst = FE_IDIV64r; break;
+            default: ACE_ASSERT(0); break;
+            }
+
+            switch (operand_size) {
+            case 1: {
+                this->move_inst_rvalue(inst.binop.right_ref, cx_value);
+                this->encode(FE_MOVSXr32r8, FE_CX, FE_CX);
+                break;
+            }
+            case 2: {
+                this->move_inst_rvalue(inst.binop.right_ref, cx_value);
+                this->encode(FE_MOVSXr32r16, FE_CX, FE_CX);
+                break;
+            }
+            case 4:
+            case 8: {
+                this->move_inst_rvalue(inst.binop.right_ref, cx_value);
+                break;
+            }
+            default: ACE_ASSERT(0); break;
+            }
+
+            this->encode(div_inst, FE_CX);
+
+            this->encode_move(size, dx_value, dest_value);
             break;
         }
 
         case BinaryOperation_URem: {
-            ACE_ASSERT(!"unimplemented");
+            MetaValue ax_value =
+                create_int_register_value(operand_size, RegisterIndex_RAX);
+            MetaValue dx_value =
+                create_int_register_value(operand_size, RegisterIndex_RDX);
+            MetaValue cx_value =
+                create_int_register_value(operand_size, RegisterIndex_RCX);
+
+            switch (operand_size) {
+            case 1: {
+                this->move_inst_rvalue(inst.binop.left_ref, ax_value);
+                this->encode(FE_MOVZXr32r8, FE_AX, FE_AX);
+                break;
+            }
+            case 2: {
+                this->move_inst_rvalue(inst.binop.left_ref, ax_value);
+                this->encode(FE_MOVZXr32r16, FE_AX, FE_AX);
+                break;
+            }
+            case 4:
+            case 8: {
+                this->move_inst_rvalue(inst.binop.left_ref, ax_value);
+                break;
+            }
+            default: ACE_ASSERT(0); break;
+            }
+
+            switch (operand_size) {
+            case 1:
+            case 2: {
+                this->encode(FE_C_SEP32, FE_AX);
+                break;
+            }
+            default: break;
+            }
+
+            int64_t div_inst = 0;
+            switch (operand_size) {
+            case 1: div_inst = FE_IDIV32r; break;
+            case 2: div_inst = FE_IDIV32r; break;
+            case 4: div_inst = FE_DIV32r; break;
+            case 8: div_inst = FE_DIV64r; break;
+            default: ACE_ASSERT(0); break;
+            }
+
+            switch (operand_size) {
+            case 1: {
+                this->move_inst_rvalue(inst.binop.right_ref, cx_value);
+                this->encode(FE_MOVZXr32r8, FE_CX, FE_CX);
+                break;
+            }
+            case 2: {
+                this->move_inst_rvalue(inst.binop.right_ref, cx_value);
+                this->encode(FE_MOVZXr32r16, FE_CX, FE_CX);
+                break;
+            }
+            case 4:
+            case 8: {
+                this->encode(FE_XOR32rr, FE_DX, FE_DX);
+                this->move_inst_rvalue(inst.binop.right_ref, cx_value);
+                break;
+            }
+            default: ACE_ASSERT(0); break;
+            }
+
+            this->encode(div_inst, FE_CX);
+
+            this->encode_move(size, dx_value, dest_value);
             break;
         }
 

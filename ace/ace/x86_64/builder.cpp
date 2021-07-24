@@ -994,6 +994,11 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
         break;
     }
 
+    case InstKind_IntCast: {
+        ACE_ASSERT(!"unimplemented int cast");
+        break;
+    }
+
     case InstKind_Binop: {
         MetaValue dest_value = this->meta_insts[inst_ref.id];
 
@@ -2051,6 +2056,7 @@ void X86_64AsmBuilder::generate_function(InstRef func_ref)
             case InstKind_PtrCast: break;
 
             // Create stack space for these kinds:
+            case InstKind_IntCast:
             case InstKind_Binop:
             case InstKind_ArrayElemPtr:
             case InstKind_Load:

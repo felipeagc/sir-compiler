@@ -603,25 +603,34 @@ static void analyze_expr(
         case BinaryOp_BitAnd:
         case BinaryOp_BitOr:
         case BinaryOp_BitXor: {
+            size_t error_checkpoint = compiler->get_error_checkpoint();
+
             analyze_expr(compiler, state, expr.binary.left_ref);
-            analyze_expr(compiler, state, expr.binary.right_ref);
-
             Expr left = expr.binary.left_ref.get(compiler);
-            Expr right = expr.binary.right_ref.get(compiler);
-
             Type left_type = left.expr_type_ref.get(compiler);
-            Type right_type = right.expr_type_ref.get(compiler);
 
-            if (left_type.kind == TypeKind_UntypedInt ||
+            if (left_type.kind == TypeKind_Unknown ||
+                left_type.kind == TypeKind_UntypedInt ||
                 left_type.kind == TypeKind_UntypedFloat) {
+                compiler->restore_error_checkpoint(error_checkpoint);
+
                 analyze_expr(
                     compiler, state, expr.binary.left_ref, expected_type_ref);
                 left = expr.binary.left_ref.get(compiler);
                 left_type = left.expr_type_ref.get(compiler);
             }
 
-            if (right_type.kind == TypeKind_UntypedInt ||
+            error_checkpoint = compiler->get_error_checkpoint();
+
+            analyze_expr(compiler, state, expr.binary.right_ref);
+            Expr right = expr.binary.right_ref.get(compiler);
+            Type right_type = right.expr_type_ref.get(compiler);
+
+            if (right_type.kind == TypeKind_Unknown ||
+                right_type.kind == TypeKind_UntypedInt ||
                 right_type.kind == TypeKind_UntypedFloat) {
+                compiler->restore_error_checkpoint(error_checkpoint);
+
                 analyze_expr(
                     compiler, state, expr.binary.right_ref, expected_type_ref);
                 right = expr.binary.right_ref.get(compiler);

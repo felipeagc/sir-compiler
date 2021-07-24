@@ -129,6 +129,17 @@ print_instruction(Module *module, InstRef inst_ref, StringBuilder *sb)
         break;
     }
 
+    case InstKind_IntCast: {
+        String type_string = inst.type->to_string(module);
+        sb->sprintf(
+            "%%r%u = int_cast %.*s %%r%u",
+            inst_ref.id,
+            (int)type_string.len,
+            type_string.ptr,
+            inst.int_cast.inst_ref.id);
+        break;
+    }
+
     case InstKind_Load: {
         String type_string = inst.type->to_string(module);
         sb->sprintf(
@@ -829,6 +840,20 @@ InstRef Builder::insert_ptr_cast(Type *dest_type, InstRef inst_ref)
     inst.kind = InstKind_PtrCast;
     inst.type = dest_type;
     inst.ptr_cast = {inst_ref};
+
+    return builder_insert_inst(this, inst);
+}
+
+InstRef Builder::insert_int_cast(Type *dest_type, InstRef inst_ref)
+{
+    ZoneScoped;
+
+    ACE_ASSERT(dest_type->kind == TypeKind_Int);
+
+    Inst inst = {};
+    inst.kind = InstKind_IntCast;
+    inst.type = dest_type;
+    inst.int_cast = {inst_ref};
 
     return builder_insert_inst(this, inst);
 }

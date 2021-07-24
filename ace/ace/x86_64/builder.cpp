@@ -994,8 +994,112 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
         break;
     }
 
-    case InstKind_IntCast: {
-        ACE_ASSERT(!"unimplemented int cast");
+    case InstKind_ZExt: {
+        MetaValue dest_value = this->meta_insts[inst_ref.id];
+
+        ace::Type *source_type = inst.trunc.inst_ref.get(this->module).type;
+        ace::Type *dest_type = inst.type;
+
+        MetaValue source_ax_value = create_int_register_value(
+            source_type->size_of(this->module), RegisterIndex_RAX);
+        MetaValue ext_ax_value = create_int_register_value(
+            dest_type->size_of(this->module), RegisterIndex_RAX);
+
+        this->move_inst_rvalue(inst.trunc.inst_ref, source_ax_value);
+
+        size_t source_bytes = source_type->int_.bits >> 3;
+        size_t dest_bytes = dest_type->int_.bits >> 3;
+
+        int64_t x86_inst = 0;
+        switch (dest_bytes) {
+        case 2: x86_inst = FE_MOVZXr16r8; break;
+        case 4: {
+            switch (source_bytes) {
+            case 1: x86_inst = FE_MOVZXr32r8; break;
+            case 2: x86_inst = FE_MOVZXr32r16; break;
+            default: ACE_ASSERT(0); break;
+            }
+            break;
+        }
+        case 8: {
+            switch (source_bytes) {
+            case 1: x86_inst = FE_MOVZXr64r8; break;
+            case 2: x86_inst = FE_MOVZXr64r16; break;
+            case 4: break;
+            default: ACE_ASSERT(0); break;
+            }
+            break;
+        }
+        default: ACE_ASSERT(0); break;
+        }
+
+        if (x86_inst) {
+            this->encode(x86_inst, FE_AX, FE_AX);
+        }
+
+        this->encode_move(dest_type->int_.bits >> 3, ext_ax_value, dest_value);
+        break;
+    }
+
+    case InstKind_SExt: {
+        MetaValue dest_value = this->meta_insts[inst_ref.id];
+
+        ace::Type *source_type = inst.trunc.inst_ref.get(this->module).type;
+        ace::Type *dest_type = inst.type;
+
+        MetaValue source_ax_value = create_int_register_value(
+            source_type->size_of(this->module), RegisterIndex_RAX);
+        MetaValue ext_ax_value = create_int_register_value(
+            dest_type->size_of(this->module), RegisterIndex_RAX);
+
+        this->move_inst_rvalue(inst.trunc.inst_ref, source_ax_value);
+
+        size_t source_bytes = source_type->int_.bits >> 3;
+        size_t dest_bytes = dest_type->int_.bits >> 3;
+
+        int64_t x86_inst = 0;
+        switch (dest_bytes) {
+        case 2: x86_inst = FE_MOVSXr16r8; break;
+        case 4: {
+            switch (source_bytes) {
+            case 1: x86_inst = FE_MOVSXr32r8; break;
+            case 2: x86_inst = FE_MOVSXr32r16; break;
+            default: ACE_ASSERT(0); break;
+            }
+            break;
+        }
+        case 8: {
+            switch (source_bytes) {
+            case 1: x86_inst = FE_MOVSXr64r8; break;
+            case 2: x86_inst = FE_MOVSXr64r16; break;
+            case 4: x86_inst = FE_MOVSXr64r32; break;
+            default: ACE_ASSERT(0); break;
+            }
+            break;
+        }
+        default: ACE_ASSERT(0); break;
+        }
+
+        this->encode(x86_inst, FE_AX, FE_AX);
+        this->encode_move(dest_type->int_.bits >> 3, ext_ax_value, dest_value);
+        break;
+    }
+
+    case InstKind_Trunc: {
+        MetaValue dest_value = this->meta_insts[inst_ref.id];
+
+        ace::Type *source_type = inst.trunc.inst_ref.get(this->module).type;
+        ace::Type *dest_type = inst.type;
+
+        MetaValue source_ax_value = create_int_register_value(
+            source_type->size_of(this->module), RegisterIndex_RAX);
+
+        MetaValue trunc_ax_value = create_int_register_value(
+            dest_type->size_of(this->module), RegisterIndex_RAX);
+        this->move_inst_rvalue(inst.trunc.inst_ref, source_ax_value);
+        this->encode_move(
+            dest_type->int_.bits >> 3, trunc_ax_value, dest_value);
+
         break;
     }
 
@@ -2056,7 +2160,9 @@ void X86_64AsmBuilder::generate_function(InstRef func_ref)
             case InstKind_PtrCast: break;
 
             // Create stack space for these kinds:
-            case InstKind_IntCast:
+            case InstKind_ZExt:
+            case InstKind_SExt:
+            case InstKind_Trunc:
             case InstKind_Binop:
             case InstKind_ArrayElemPtr:
             case InstKind_Load:

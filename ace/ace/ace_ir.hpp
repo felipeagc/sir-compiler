@@ -120,7 +120,9 @@ enum InstKind : uint8_t {
     InstKind_Branch,
     InstKind_FuncCall,
     InstKind_PtrCast,
-    InstKind_IntCast,
+    InstKind_ZExt,
+    InstKind_SExt,
+    InstKind_Trunc,
     InstKind_ArrayElemPtr,
     InstKind_Binop,
 };
@@ -166,9 +168,6 @@ struct Inst {
             InstRef inst_ref;
         } ptr_cast;
         struct {
-            InstRef inst_ref;
-        } int_cast;
-        struct {
             InstRef accessed_ref;
             InstRef index_ref;
         } array_elem_ptr;
@@ -190,6 +189,15 @@ struct Inst {
         struct {
             InstRef global_ref;
         } global_ptr;
+        struct {
+            InstRef inst_ref;
+        } zext;
+        struct {
+            InstRef inst_ref;
+        } sext;
+        struct {
+            InstRef inst_ref;
+        } trunc;
     };
     InstKind kind;
     Type *type;
@@ -270,7 +278,9 @@ struct Builder {
     InstRef insert_stack_ptr(InstRef stack_slot_ref);
     InstRef insert_global_ptr(InstRef global_ref);
     InstRef insert_ptr_cast(Type *dest_type, InstRef inst_ref);
-    InstRef insert_int_cast(Type *dest_type, InstRef inst_ref);
+    InstRef insert_zext(Type *dest_type, InstRef inst_ref);
+    InstRef insert_sext(Type *dest_type, InstRef inst_ref);
+    InstRef insert_trunc(Type *dest_type, InstRef inst_ref);
 
     InstRef insert_binop(BinaryOperation op, InstRef left_ref, InstRef right_ref);
 

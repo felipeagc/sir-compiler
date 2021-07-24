@@ -236,6 +236,8 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
 
         switch (func_type.kind) {
         case TypeKind_Function: {
+            // Actual function call
+
             ace::Slice<ace::InstRef> params =
                 compiler->arena->alloc<ace::InstRef>(
                     expr.func_call.param_refs.len);
@@ -267,8 +269,50 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
         }
 
         case TypeKind_Type: {
+            // Type cast
+
             ACE_ASSERT(expr.func_call.param_refs.len == 1);
-            value = codegen_expr(compiler, ctx, expr.func_call.param_refs[0]);
+
+            Expr param_expr = expr.func_call.param_refs[0].get(compiler);
+
+            Type dest_type = expr.expr_type_ref.get(compiler);
+            Type source_type = param_expr.expr_type_ref.get(compiler);
+
+            ace::InstRef source_value = load_lvalue(
+                ctx, codegen_expr(compiler, ctx, expr.func_call.param_refs[0]));
+
+            if (param_expr.expr_type_ref.id == expr.expr_type_ref.id) {
+                value = {false, source_value};
+            } else if (
+                dest_type.kind == TypeKind_Int &&
+                source_type.kind == TypeKind_Int) {
+
+                if (dest_type.int_.bits < source_type.int_.bits) {
+                    value = {
+                        false,
+                        ctx->builder.insert_trunc(
+                            get_ir_type(compiler, ctx->module, dest_type),
+                            source_value)};
+                } else if (dest_type.int_.bits > source_type.int_.bits) {
+                    if (source_type.int_.is_signed) {
+                        value = {
+                            false,
+                            ctx->builder.insert_sext(
+                                get_ir_type(compiler, ctx->module, dest_type),
+                                source_value)};
+                    } else {
+                        value = {
+                            false,
+                            ctx->builder.insert_zext(
+                                get_ir_type(compiler, ctx->module, dest_type),
+                                source_value)};
+                    }
+                } else {
+                    value = {false, source_value};
+                }
+            } else {
+                ACE_ASSERT(!"type cast unimplemented");
+            }
             break;
         }
 

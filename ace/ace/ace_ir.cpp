@@ -129,14 +129,36 @@ print_instruction(Module *module, InstRef inst_ref, StringBuilder *sb)
         break;
     }
 
-    case InstKind_IntCast: {
+    case InstKind_ZExt: {
         String type_string = inst.type->to_string(module);
         sb->sprintf(
-            "%%r%u = int_cast %.*s %%r%u",
+            "%%r%u = zext %.*s %%r%u",
             inst_ref.id,
             (int)type_string.len,
             type_string.ptr,
-            inst.int_cast.inst_ref.id);
+            inst.zext.inst_ref.id);
+        break;
+    }
+
+    case InstKind_SExt: {
+        String type_string = inst.type->to_string(module);
+        sb->sprintf(
+            "%%r%u = sext %.*s %%r%u",
+            inst_ref.id,
+            (int)type_string.len,
+            type_string.ptr,
+            inst.sext.inst_ref.id);
+        break;
+    }
+
+    case InstKind_Trunc: {
+        String type_string = inst.type->to_string(module);
+        sb->sprintf(
+            "%%r%u = trunc %.*s %%r%u",
+            inst_ref.id,
+            (int)type_string.len,
+            type_string.ptr,
+            inst.trunc.inst_ref.id);
         break;
     }
 
@@ -844,16 +866,44 @@ InstRef Builder::insert_ptr_cast(Type *dest_type, InstRef inst_ref)
     return builder_insert_inst(this, inst);
 }
 
-InstRef Builder::insert_int_cast(Type *dest_type, InstRef inst_ref)
+InstRef Builder::insert_zext(Type *dest_type, InstRef inst_ref)
 {
     ZoneScoped;
 
     ACE_ASSERT(dest_type->kind == TypeKind_Int);
 
     Inst inst = {};
-    inst.kind = InstKind_IntCast;
+    inst.kind = InstKind_ZExt;
     inst.type = dest_type;
-    inst.int_cast = {inst_ref};
+    inst.zext = {inst_ref};
+
+    return builder_insert_inst(this, inst);
+}
+
+InstRef Builder::insert_sext(Type *dest_type, InstRef inst_ref)
+{
+    ZoneScoped;
+
+    ACE_ASSERT(dest_type->kind == TypeKind_Int);
+
+    Inst inst = {};
+    inst.kind = InstKind_SExt;
+    inst.type = dest_type;
+    inst.sext = {inst_ref};
+
+    return builder_insert_inst(this, inst);
+}
+
+InstRef Builder::insert_trunc(Type *dest_type, InstRef inst_ref)
+{
+    ZoneScoped;
+
+    ACE_ASSERT(dest_type->kind == TypeKind_Int);
+
+    Inst inst = {};
+    inst.kind = InstKind_Trunc;
+    inst.type = dest_type;
+    inst.trunc = {inst_ref};
 
     return builder_insert_inst(this, inst);
 }

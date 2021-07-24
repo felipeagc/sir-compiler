@@ -293,11 +293,34 @@ static void analyze_expr(
 
             ACE_ASSERT(func_expr.as_type_ref.id != 0);
 
-            analyze_expr(
-                compiler,
-                state,
-                expr.func_call.param_refs[0],
-                func_expr.as_type_ref);
+            Type dest_type = func_expr.as_type_ref.get(compiler);
+
+            size_t error_checkpoint = compiler->get_error_checkpoint();
+
+            analyze_expr(compiler, state, expr.func_call.param_refs[0]);
+
+            TypeRef param_type_ref =
+                expr.func_call.param_refs[0].get(compiler).expr_type_ref;
+            Type param_type = param_type_ref.get(compiler);
+            if (param_type.kind == TypeKind_Unknown ||
+                param_type.kind == TypeKind_UntypedInt ||
+                param_type.kind == TypeKind_UntypedFloat) {
+
+                compiler->restore_error_checkpoint(error_checkpoint);
+
+                analyze_expr(
+                    compiler,
+                    state,
+                    expr.func_call.param_refs[0],
+                    func_expr.as_type_ref);
+
+            } else if (!((param_type.kind == TypeKind_Int ||
+                          param_type.kind == TypeKind_Float) &&
+                         (dest_type.kind == TypeKind_Int ||
+                          dest_type.kind == TypeKind_Float))) {
+                compiler->add_error(expr.loc, "invalid cast");
+                break;
+            }
 
             expr.expr_type_ref = func_expr.as_type_ref;
 
@@ -516,13 +539,42 @@ static void analyze_expr(
         case BinaryOp_Mul:
         case BinaryOp_Div:
         case BinaryOp_Mod: {
+            size_t error_checkpoint = compiler->get_error_checkpoint();
+
             analyze_expr(
                 compiler, state, expr.binary.left_ref, expected_type_ref);
+            Expr left = expr.binary.left_ref.get(compiler);
+            Type left_type = left.expr_type_ref.get(compiler);
+
+            if (left_type.kind == TypeKind_Unknown ||
+                left_type.kind == TypeKind_UntypedInt ||
+                left_type.kind == TypeKind_UntypedFloat) {
+                compiler->restore_error_checkpoint(error_checkpoint);
+
+                analyze_expr(
+                    compiler, state, expr.binary.left_ref, expected_type_ref);
+                left = expr.binary.left_ref.get(compiler);
+                left_type = left.expr_type_ref.get(compiler);
+            }
+
+            error_checkpoint = compiler->get_error_checkpoint();
+
             analyze_expr(
                 compiler, state, expr.binary.right_ref, expected_type_ref);
-
-            Expr left = expr.binary.left_ref.get(compiler);
             Expr right = expr.binary.right_ref.get(compiler);
+            Type right_type = right.expr_type_ref.get(compiler);
+
+            if (right_type.kind == TypeKind_Unknown ||
+                right_type.kind == TypeKind_UntypedInt ||
+                right_type.kind == TypeKind_UntypedFloat) {
+                compiler->restore_error_checkpoint(error_checkpoint);
+
+                analyze_expr(
+                    compiler, state, expr.binary.right_ref, expected_type_ref);
+                right = expr.binary.right_ref.get(compiler);
+                right_type = right.expr_type_ref.get(compiler);
+            }
+
             if (left.expr_type_ref.id != right.expr_type_ref.id) {
                 compiler->add_error(
                     expr.loc,
@@ -530,7 +582,15 @@ static void analyze_expr(
                 break;
             }
 
-            Type type = left.expr_type_ref.get(compiler);
+            Type type = left_type;
+            if (type.kind == TypeKind_UntypedInt ||
+                type.kind == TypeKind_UntypedFloat) {
+                compiler->add_error(
+                    expr.loc,
+                    "cannot use compile-time integers in binary expression");
+                break;
+            }
+
             if (type.kind != TypeKind_Int && type.kind != TypeKind_Float) {
                 compiler->add_error(
                     expr.loc, "binary expression expects numeric operands");
@@ -545,8 +605,28 @@ static void analyze_expr(
         case BinaryOp_BitXor: {
             analyze_expr(compiler, state, expr.binary.left_ref);
             analyze_expr(compiler, state, expr.binary.right_ref);
+
             Expr left = expr.binary.left_ref.get(compiler);
             Expr right = expr.binary.right_ref.get(compiler);
+
+            Type left_type = left.expr_type_ref.get(compiler);
+            Type right_type = right.expr_type_ref.get(compiler);
+
+            if (left_type.kind == TypeKind_UntypedInt ||
+                left_type.kind == TypeKind_UntypedFloat) {
+                analyze_expr(
+                    compiler, state, expr.binary.left_ref, expected_type_ref);
+                left = expr.binary.left_ref.get(compiler);
+                left_type = left.expr_type_ref.get(compiler);
+            }
+
+            if (right_type.kind == TypeKind_UntypedInt ||
+                right_type.kind == TypeKind_UntypedFloat) {
+                analyze_expr(
+                    compiler, state, expr.binary.right_ref, expected_type_ref);
+                right = expr.binary.right_ref.get(compiler);
+                right_type = right.expr_type_ref.get(compiler);
+            }
 
             if (left.expr_type_ref.id != right.expr_type_ref.id) {
                 compiler->add_error(
@@ -555,7 +635,7 @@ static void analyze_expr(
                 break;
             }
 
-            Type type = left.expr_type_ref.get(compiler);
+            Type type = left_type;
             if (type.kind == TypeKind_UntypedInt ||
                 type.kind == TypeKind_UntypedFloat) {
                 ace::String type_string = type.to_string(compiler);

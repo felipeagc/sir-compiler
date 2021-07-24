@@ -523,6 +523,8 @@ struct Compiler {
     TypeRef create_func_type(
         TypeRef return_type, ace::Slice<TypeRef> param_types, bool vararg);
 
+    size_t get_error_checkpoint();
+    void restore_error_checkpoint(size_t checkpoint);
     ACE_PRINTF_FORMATTING(3, 4)
     void add_error(const Location &loc, const char *fmt, ...);
     void halt_compilation();

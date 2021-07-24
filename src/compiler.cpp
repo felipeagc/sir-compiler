@@ -330,6 +330,16 @@ void Compiler::destroy()
     this->arena->destroy();
 }
 
+size_t Compiler::get_error_checkpoint()
+{
+    return this->errors.len;
+}
+
+void Compiler::restore_error_checkpoint(size_t checkpoint)
+{
+    this->errors.len = checkpoint;
+}
+
 void Compiler::add_error(const Location &loc, const char *fmt, ...)
 {
     va_list args;
@@ -505,8 +515,8 @@ TypeRef Compiler::create_slice_type(TypeRef sub)
     return this->get_cached_type(type);
 }
 
-TypeRef
-Compiler::create_func_type(TypeRef return_type, ace::Slice<TypeRef> param_types, bool vararg)
+TypeRef Compiler::create_func_type(
+    TypeRef return_type, ace::Slice<TypeRef> param_types, bool vararg)
 {
     Type type = {};
     type.kind = TypeKind_Function;

@@ -405,6 +405,11 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
         break;
     }
 
+    case ExprKind_Access: {
+        ACE_ASSERT(!"unimplemented codegen for access expr");
+        break;
+    }
+
     case ExprKind_Unary: {
 
         switch (expr.unary.op) {

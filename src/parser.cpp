@@ -1098,17 +1098,40 @@ static Expr parse_func_call_expr(Compiler *compiler, TokenizerState *state)
             break;
         }
         case TokenKind_Dot: {
-            state->consume_token(compiler, TokenKind_Dot);
-            state->consume_token(compiler, TokenKind_Mul);
+            Token dot_tok = state->consume_token(compiler, TokenKind_Dot);
 
-            Expr sub_expr = expr;
-            ExprRef sub_expr_ref = compiler->add_expr(sub_expr);
+            state->next_token(compiler, &next_token);
+            if (next_token.kind == TokenKind_Mul) {
+                state->consume_token(compiler, TokenKind_Mul);
 
-            expr = {};
-            expr.loc = sub_expr.loc;
-            expr.kind = ExprKind_Unary;
-            expr.unary.op = UnaryOp_Dereference;
-            expr.unary.left_ref = sub_expr_ref;
+                Expr sub_expr = expr;
+                ExprRef sub_expr_ref = compiler->add_expr(sub_expr);
+
+                expr = {};
+                expr.loc = dot_tok.loc;
+                expr.kind = ExprKind_Unary;
+                expr.unary.op = UnaryOp_Dereference;
+                expr.unary.left_ref = sub_expr_ref;
+            } else {
+                Expr left_expr = expr;
+                Token ident_tok =
+                    state->consume_token(compiler, TokenKind_Identifier);
+
+                Expr accessed_ident_expr = {};
+                accessed_ident_expr.kind = ExprKind_Identifier;
+                accessed_ident_expr.loc = ident_tok.loc;
+                accessed_ident_expr.ident.str = ident_tok.str;
+
+                ExprRef left_expr_ref = compiler->add_expr(left_expr);
+                ExprRef right_expr_ref =
+                    compiler->add_expr(accessed_ident_expr);
+
+                expr = {};
+                expr.loc = dot_tok.loc;
+                expr.kind = ExprKind_Access;
+                expr.access.left_ref = left_expr_ref;
+                expr.access.accessed_ident_ref = right_expr_ref;
+            }
 
             break;
         }

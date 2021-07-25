@@ -521,6 +521,11 @@ static void analyze_expr(
         break;
     }
 
+    case ExprKind_Access: {
+        ACE_ASSERT(!"unimplemented analysis for access expr");
+        break;
+    }
+
     case ExprKind_Unary: {
         switch (expr.unary.op) {
         case UnaryOp_Unknown: ACE_ASSERT(0); break;

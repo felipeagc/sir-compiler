@@ -325,6 +325,7 @@ enum ExprKind {
     ExprKind_ArrayType,
     ExprKind_StructType,
     ExprKind_Subscript,
+    ExprKind_Access,
     ExprKind_BuiltinCall,
     ExprKind_Unary,
     ExprKind_Binary,
@@ -391,6 +392,10 @@ struct Expr {
             ExprRef left_ref;
             ExprRef right_ref;
         } subscript;
+        struct {
+            ExprRef left_ref;
+            ExprRef accessed_ident_ref;
+        } access;
         struct {
             ExprRef left_ref;
             ExprRef right_ref;

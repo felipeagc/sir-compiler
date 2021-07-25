@@ -4,6 +4,7 @@
 struct AnalyzerState {
     FileRef file_ref;
     ace::Array<Scope *> scope_stack;
+    ace::Array<DeclRef> func_stack;
 };
 
 static bool
@@ -830,7 +831,36 @@ analyze_stmt(Compiler *compiler, AnalyzerState *state, StmtRef stmt_ref)
     }
 
     case StmtKind_Return: {
-        compiler->add_error(stmt.loc, "unimplemented return stmt");
+        ACE_ASSERT(state->func_stack.len > 0);
+
+        Decl func_decl = state->func_stack.last()->get(compiler);
+        Type func_type = func_decl.decl_type_ref.get(compiler);
+        ACE_ASSERT(func_type.kind == TypeKind_Function);
+
+        if (func_type.func.return_type.id == 0) {
+            if (stmt.return_.returned_expr_ref.id > 0) {
+                compiler->add_error(
+                    stmt.loc,
+                    "function '%.*s' does not return a value",
+                    (int)func_decl.name.len,
+                    func_decl.name.ptr);
+            }
+        } else {
+            if (stmt.return_.returned_expr_ref.id == 0) {
+                compiler->add_error(
+                    stmt.loc,
+                    "function '%.*s' must return a value",
+                    (int)func_decl.name.len,
+                    func_decl.name.ptr);
+            } else {
+                analyze_expr(
+                    compiler,
+                    state,
+                    stmt.return_.returned_expr_ref,
+                    func_type.func.return_type);
+            }
+        }
+
         break;
     }
 
@@ -917,11 +947,15 @@ analyze_decl(Compiler *compiler, AnalyzerState *state, DeclRef decl_ref)
         decl.decl_type_ref = compiler->create_func_type(
             return_type, param_types, decl.func.flags & FunctionFlags_VarArg);
 
+        compiler->decls[decl_ref.id] = decl;
+
+        state->func_stack.push_back(decl_ref);
         state->scope_stack.push_back(decl.func.scope);
         for (StmtRef stmt_ref : decl.func.body_stmts) {
             analyze_stmt(compiler, state, stmt_ref);
         }
         state->scope_stack.pop();
+        state->func_stack.pop();
 
         break;
     }
@@ -1042,6 +1076,7 @@ void analyze_file(Compiler *compiler, FileRef file_ref)
     AnalyzerState state = {};
     state.file_ref = file_ref;
     state.scope_stack = ace::Array<Scope *>::create(compiler->arena);
+    state.func_stack = ace::Array<DeclRef>::create(compiler->arena);
 
     state.scope_stack.push_back(file.scope);
 

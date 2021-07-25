@@ -30,3 +30,4 @@ array_ptr.*[0] = 2
 my_global = 123
 my_global = 321
 my_global > 10
+factorial(10) = 3628800

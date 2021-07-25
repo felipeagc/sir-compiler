@@ -4,6 +4,12 @@ def extern vararg printf(_: *u8);
 
 global my_global: i32;
 
+def factorial(n: i32): i32 {
+	if (n <= i32(0)) return 0;
+	if (n == i32(1)) return 1;
+	return n * factorial(n-1);
+}
+
 def export main() {
 	printf("Hello, world!\n");
 	printf("%d\n", i32(123));
@@ -83,5 +89,9 @@ def export main() {
 		if (addr.* < i32(10)) {
 			printf("DO NOT PRINT\n");
 		}
+	}
+
+	{
+		printf("factorial(10) = %d\n", factorial(10));
 	}
 }

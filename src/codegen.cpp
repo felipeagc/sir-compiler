@@ -642,7 +642,14 @@ codegen_stmt(Compiler *compiler, CodegenContext *ctx, StmtRef stmt_ref)
     }
 
     case StmtKind_Return: {
-        ACE_ASSERT(!"unimplemented");
+        if (stmt.return_.returned_expr_ref.id > 0) {
+            ace::InstRef returned_value = load_lvalue(
+                ctx,
+                codegen_expr(compiler, ctx, stmt.return_.returned_expr_ref));
+            ctx->builder.insert_return_value(returned_value);
+        } else {
+            ctx->builder.insert_return_void();
+        }
         break;
     }
 
@@ -779,7 +786,24 @@ codegen_decl(Compiler *compiler, CodegenContext *ctx, DeclRef decl_ref)
                 codegen_stmt(compiler, ctx, stmt_ref);
             }
 
-            ctx->builder.insert_return_void();
+            ace::Inst last_block = ctx->builder.current_block_ref.get(module);
+            if (return_type->kind == ace::TypeKind_Void) {
+                if (last_block.block.inst_refs.len == 0 ||
+                    last_block.block.inst_refs.last()->get(module).kind !=
+                        ace::InstKind_ReturnVoid) {
+                    ctx->builder.insert_return_void();
+                }
+            } else {
+                if (last_block.block.inst_refs.len == 0 ||
+                    last_block.block.inst_refs.last()->get(module).kind !=
+                        ace::InstKind_ReturnValue) {
+                    compiler->add_error(
+                        decl.loc,
+                        "no return statement for '%.*s'",
+                        (int)decl.name.len,
+                        decl.name.ptr);
+                }
+            }
         }
 
         ctx->function_stack.pop();
@@ -874,6 +898,10 @@ void codegen_file(Compiler *compiler, FileRef file_ref)
 
     for (DeclRef decl_ref : file.top_level_decls) {
         codegen_decl(compiler, &ctx, decl_ref);
+    }
+
+    if (compiler->errors.len > 0) {
+        compiler->halt_compilation();
     }
 
 #if !NDEBUG

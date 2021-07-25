@@ -1355,6 +1355,22 @@ static Stmt parse_stmt(Compiler *compiler, TokenizerState *state)
             compiler->add_stmt(parse_stmt(compiler, state));
         break;
     }
+    case TokenKind_Return: {
+        Token return_token = state->consume_token(compiler, TokenKind_Return);
+        stmt.kind = StmtKind_Return;
+        stmt.loc = return_token.loc;
+        stmt.return_ = {};
+
+        state->next_token(compiler, &next_token);
+        if (next_token.kind != TokenKind_Semicolon) {
+            stmt.return_.returned_expr_ref =
+                compiler->add_expr(parse_expr(compiler, state));
+        }
+
+        state->consume_token(compiler, TokenKind_Semicolon);
+
+        break;
+    }
     case TokenKind_LCurly: {
         Token lcurly_token = state->consume_token(compiler, TokenKind_LCurly);
 
@@ -1544,9 +1560,8 @@ static void parse_top_level_decl(
             state->consume_token(compiler, TokenKind_Colon);
 
             while (1) {
-                Expr return_type_expr = parse_expr(compiler, state);
                 ExprRef return_type_expr_ref =
-                    compiler->add_expr(return_type_expr);
+                    compiler->add_expr(parse_expr(compiler, state));
 
                 func_decl.func.return_type_expr_refs.push_back(
                     return_type_expr_ref);

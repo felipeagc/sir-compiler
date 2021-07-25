@@ -1,0 +1,32 @@
+Hello, world!
+123
+iter 0
+iter 1
+iter 2
+iter 3
+iter 4
+iter 5
+iter 6
+iter 7
+iter 8
+iter 9
+ptr.* = 1
+ptr.* = 2
+@sizeof(i32) = 4
+@sizeof([32]i32) = 128
+array[0] = 1
+array[0] = 2
+array[1] = 3
+array[0] = 2
+array[0] = 1337
+array_ptr.*[0] = 1
+array_ptr.*[0] = 2
+array_ptr.*[1] = 3
+array_ptr.*[0] = 2
+1 + 2 = 3
+2 + 5 = 7
+100 + 5 = 105
+5 + 5 = 10
+my_global = 123
+my_global = 321
+my_global > 10

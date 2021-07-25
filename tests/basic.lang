@@ -1,0 +1,87 @@
+def extern malloc(size: u64): *void;
+def extern free(ptr: *void);
+def extern vararg printf(_: *u8);
+
+global my_global: i32;
+
+def export main() {
+	printf("Hello, world!\n");
+	printf("%d\n", i32(123));
+
+	{
+		i := i32(0);
+		while (i < i32(10)) {
+			printf("iter %d\n", i);
+			i = i + 1;
+		}
+	}
+
+	{
+		ptr := @ptrcast(*i32, malloc(@sizeof(i32)));
+		ptr.* = 1;
+		printf("ptr.* = %d\n", ptr.*);
+		ptr.* = 2;
+		printf("ptr.* = %d\n", ptr.*);
+		free(@ptrcast(*void, ptr));
+	}
+
+	{
+		array: [32]i32;
+		printf("@sizeof(i32) = %d\n", i32(@sizeof(i32)));
+		printf("@sizeof([32]i32) = %d\n", i32(@sizeof([32]i32)));
+
+		array[0] = 1;
+		printf("array[0] = %d\n", array[0]);
+		array[0] = 2;
+		printf("array[0] = %d\n", array[0]);
+		array[1] = 3;
+		printf("array[1] = %d\n", array[1]);
+		printf("array[0] = %d\n", array[0]);
+
+		elem_ptr := &array[0];
+		elem_ptr.* = 1337;
+		printf("array[0] = %d\n", array[0]);
+	}
+
+	{
+		array_ptr := @ptrcast(*[32]i32, malloc(@sizeof([32]i32)));
+
+		array_ptr.*[0] = 1;
+		printf("array_ptr.*[0] = %d\n", array_ptr.*[0]);
+		array_ptr.*[0] = 2;
+		printf("array_ptr.*[0] = %d\n", array_ptr.*[0]);
+		array_ptr.*[1] = 3;
+		printf("array_ptr.*[1] = %d\n", array_ptr.*[1]);
+		printf("array_ptr.*[0] = %d\n", array_ptr.*[0]);
+
+		free(@ptrcast(*void, array_ptr));
+	}
+
+	{
+		a := i32(1);
+		b := i32(2);
+		printf("1 + 2 = %d\n", a + b);
+		a = 2;
+		b = 5;
+		printf("2 + 5 = %d\n", a + b);
+		c := &a;
+		c.* = 100;
+		printf("100 + 5 = %d\n", a + b);
+		c.* = b;
+		printf("5 + 5 = %d\n", a + b);
+	}
+
+	{
+		my_global = 123;
+		printf("my_global = %d\n", my_global);
+		addr := &my_global;
+		addr.* = 321;
+		printf("my_global = %d\n", my_global);
+		if (addr.* > i32(10)) {
+			printf("my_global > 10\n");
+		}
+		if (addr.* < i32(10)) {
+			printf("DO NOT PRINT\n");
+		}
+	}
+}

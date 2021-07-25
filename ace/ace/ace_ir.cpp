@@ -512,7 +512,7 @@ Type *Module::create_struct_type(Slice<Type *> fields, bool packed)
 {
     Type *type = this->arena->alloc<Type>();
     *type = {};
-    type->kind = TypeKind_Array;
+    type->kind = TypeKind_Struct;
     type->struct_.fields = this->arena->clone(fields);
     type->struct_.packed = packed;
     return this->get_cached_type(type);

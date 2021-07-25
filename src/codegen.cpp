@@ -85,8 +85,16 @@ get_ir_type(Compiler *compiler, ace::Module *module, const Type &type)
         return module->create_pointer_type(subtype);
     }
     case TypeKind_Slice: {
-        /* ACE_ASSERT(!"unimplemented"); */
-        break;
+        return module->create_struct_type(
+            {
+                get_ir_type(
+                    compiler,
+                    module,
+                    compiler->create_pointer_type(type.slice.sub_type)
+                        .get(compiler)),
+                get_ir_type(compiler, module, compiler->u64_type.get(compiler)),
+            },
+            false);
     }
     case TypeKind_Array: {
         ace::Type *subtype =
@@ -94,12 +102,26 @@ get_ir_type(Compiler *compiler, ace::Module *module, const Type &type)
         return module->create_array_type(subtype, type.array.size);
     }
     case TypeKind_Tuple: {
-        /* ACE_ASSERT(!"unimplemented"); */
-        break;
+        ace::Slice<ace::Type *> field_types =
+            compiler->arena->alloc<ace::Type *>(type.tuple.field_types.len);
+
+        for (size_t i = 0; i < type.tuple.field_types.len; ++i) {
+            field_types[i] = get_ir_type(
+                compiler, module, type.tuple.field_types[i].get(compiler));
+        }
+
+        return module->create_struct_type(field_types, false);
     }
     case TypeKind_Struct: {
-        /* ACE_ASSERT(!"unimplemented"); */
-        break;
+        ace::Slice<ace::Type *> field_types =
+            compiler->arena->alloc<ace::Type *>(type.struct_.field_types.len);
+
+        for (size_t i = 0; i < type.struct_.field_types.len; ++i) {
+            field_types[i] = get_ir_type(
+                compiler, module, type.struct_.field_types[i].get(compiler));
+        }
+
+        return module->create_struct_type(field_types, false);
     }
     }
 
@@ -124,7 +146,8 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
     case ExprKind_FloatType:
     case ExprKind_IntType:
     case ExprKind_SliceType:
-    case ExprKind_ArrayType: break;
+    case ExprKind_ArrayType:
+    case ExprKind_StructType: break;
 
     case ExprKind_BoolLiteral: {
         value = {false, ctx->builder.insert_imm_bool(expr.bool_literal.bool_)};

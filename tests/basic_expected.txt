@@ -31,3 +31,5 @@ my_global = 123
 my_global = 321
 my_global > 10
 factorial(10) = 3628800
+@sizeof(struct{a i32}) = 4
+@sizeof(struct{a i32, b i64}) = 16

@@ -139,6 +139,8 @@ Compiler Compiler::create()
     keyword_map.set("export", TokenKind_Export);
     keyword_map.set("inline", TokenKind_Inline);
     keyword_map.set("def", TokenKind_Def);
+    keyword_map.set("type", TokenKind_Type);
+    keyword_map.set("struct", TokenKind_Struct);
     keyword_map.set("global", TokenKind_Global);
     keyword_map.set("macro", TokenKind_Macro);
     keyword_map.set("null", TokenKind_Null);
@@ -487,6 +489,10 @@ TypeRef Compiler::create_struct_type(
     type.kind = TypeKind_Struct;
     type.struct_.field_types = fields;
     type.struct_.field_names = field_names;
+    type.struct_.field_map = ace::StringMap<uint32_t>::create(this->arena, 32);
+    for (size_t i = 0; i < field_names.len; ++i) {
+        type.struct_.field_map.set(field_names[i], (uint32_t)i);
+    }
     return this->get_cached_type(type);
 }
 
@@ -686,6 +692,8 @@ ace::String Type::to_string(Compiler *compiler)
 
 uint32_t Type::size_of(Compiler *compiler)
 {
+    uint32_t size = 0;
+
     switch (this->kind) {
     case TypeKind_Unknown:
     case TypeKind_Void:
@@ -693,13 +701,16 @@ uint32_t Type::size_of(Compiler *compiler)
     case TypeKind_UntypedFloat:
     case TypeKind_Function:
     case TypeKind_Type: {
-        return 0;
+        size = 0;
+        break;
     }
     case TypeKind_Int: {
-        return this->int_.bits >> 3;
+        size = this->int_.bits >> 3;
+        break;
     }
     case TypeKind_Float: {
-        return this->float_.bits >> 3;
+        size = this->float_.bits >> 3;
+        break;
     }
     case TypeKind_Array: {
         uint32_t subtype_size =
@@ -707,30 +718,57 @@ uint32_t Type::size_of(Compiler *compiler)
         uint32_t subtype_alignment =
             this->array.sub_type.get(compiler).align_of(compiler);
         uint32_t stride = ACE_ROUND_UP(subtype_alignment, subtype_size);
-        return stride * this->array.size;
+        size = stride * this->array.size;
+        break;
     }
     case TypeKind_Slice: {
-        return 16;
+        size = 16;
+        break;
     }
     case TypeKind_Bool: {
-        return 1;
+        size = 1;
+        break;
     }
     case TypeKind_Pointer: {
-        return 8;
+        size = 8;
+        break;
     }
     case TypeKind_Struct: {
-        ACE_ASSERT(!"unimplemented");
+        size = 0;
+        for (TypeRef field_type_ref : this->struct_.field_types) {
+            Type field_type = field_type_ref.get(compiler);
+            uint32_t field_align = field_type.align_of(compiler);
+            size = ACE_ROUND_UP(field_align, size); // Add padding
+
+            uint32_t field_size = field_type.size_of(compiler);
+            size += field_size;
+        }
+        break;
     }
     case TypeKind_Tuple: {
-        ACE_ASSERT(!"unimplemented");
+        size = 0;
+        for (TypeRef field_type_ref : this->tuple.field_types) {
+            Type field_type = field_type_ref.get(compiler);
+            uint32_t field_align = field_type.align_of(compiler);
+            size = ACE_ROUND_UP(field_align, size); // Add padding
+
+            uint32_t field_size = field_type.size_of(compiler);
+            size += field_size;
+        }
+        break;
     }
     }
 
-    return 0;
+    uint32_t self_alignment = this->align_of(compiler);
+    size = ACE_ROUND_UP(self_alignment, size); // Round size up for alignment
+
+    return size;
 }
 
 uint32_t Type::align_of(Compiler *compiler)
 {
+    uint32_t alignment = 0;
+
     switch (this->kind) {
     case TypeKind_Unknown:
     case TypeKind_Void:
@@ -738,34 +776,62 @@ uint32_t Type::align_of(Compiler *compiler)
     case TypeKind_UntypedFloat:
     case TypeKind_Function:
     case TypeKind_Type: {
-        return 0;
+        alignment = 0;
+        break;
     }
     case TypeKind_Int: {
-        return this->int_.bits >> 3;
+        alignment = this->int_.bits >> 3;
+        break;
     }
     case TypeKind_Float: {
-        return this->float_.bits >> 3;
+        alignment = this->float_.bits >> 3;
+        break;
     }
     case TypeKind_Array: {
         uint32_t subtype_alignment =
             this->array.sub_type.get(compiler).align_of(compiler);
-        return subtype_alignment;
+        alignment = subtype_alignment;
+        break;
     }
     case TypeKind_Slice: {
-        return 8;
+        alignment = 8;
+        break;
     }
     case TypeKind_Bool: {
-        return 1;
+        alignment = 1;
+        break;
     }
     case TypeKind_Pointer: {
-        return 8;
+        alignment = 8;
+        break;
     }
     case TypeKind_Struct: {
-        ACE_ASSERT(!"unimplemented");
+        alignment = 0;
+
+        for (TypeRef field_type_ref : this->struct_.field_types) {
+            Type field_type = field_type_ref.get(compiler);
+            uint32_t field_align = field_type.align_of(compiler);
+            if (field_align > alignment) {
+                alignment = field_align;
+            }
+        }
+
+        break;
     }
     case TypeKind_Tuple: {
-        ACE_ASSERT(!"unimplemented");
+        alignment = 0;
+
+        for (TypeRef field_type_ref : this->tuple.field_types) {
+            Type field_type = field_type_ref.get(compiler);
+            uint32_t field_align = field_type.align_of(compiler);
+            if (field_align > alignment) {
+                alignment = field_align;
+            }
+        }
+
+        break;
     }
     }
-    return 0;
+
+    return alignment;
 }

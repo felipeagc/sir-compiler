@@ -94,4 +94,15 @@ def export main() {
 	{
 		printf("factorial(10) = %d\n", factorial(10));
 	}
+
+	{
+		printf(
+			"@sizeof(struct{a i32}) = %d\n",
+			i32(@sizeof(struct { a i32 })),
+		);
+		printf(
+			"@sizeof(struct{a i32, b i64}) = %d\n",
+			i32(@sizeof(struct { a i32, b i64 })),
+		);
+	}
 }

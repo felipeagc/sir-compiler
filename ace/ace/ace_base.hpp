@@ -75,6 +75,12 @@ template <typename T> struct Slice {
         return this->ptr[index];
     }
 
+    const T &operator[](size_t index) const
+    {
+        ACE_ASSERT(index < this->len);
+        return this->ptr[index];
+    }
+
     T *begin() const
     {
         return this->ptr;

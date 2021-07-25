@@ -73,6 +73,7 @@ const char *token_kind_to_string(TokenKind kind)
     case TokenKind_Inline: return "inline";
     case TokenKind_Macro: return "macro";
     case TokenKind_Def: return "def";
+    case TokenKind_Type: return "type";
     case TokenKind_Struct: return "struct";
     case TokenKind_Union: return "union";
     case TokenKind_If: return "if";
@@ -877,6 +878,40 @@ static Expr parse_primary_expr(Compiler *compiler, TokenizerState *state)
         }
 
         state->consume_token(compiler, TokenKind_RParen);
+        break;
+    }
+    case TokenKind_Struct: {
+        Token struct_token = state->consume_token(compiler, TokenKind_Struct);
+
+        expr.kind = ExprKind_StructType;
+        expr.loc = struct_token.loc;
+        expr.struct_type.field_names =
+            ace::Array<ace::String>::create(compiler->arena);
+        expr.struct_type.field_type_expr_refs =
+            ace::Array<ExprRef>::create(compiler->arena);
+
+        state->consume_token(compiler, TokenKind_LCurly);
+
+        state->next_token(compiler, &next_token);
+        while (next_token.kind != TokenKind_RCurly) {
+            Token field_ident_token =
+                state->consume_token(compiler, TokenKind_Identifier);
+
+            Expr field_type_expr = parse_expr(compiler, state);
+
+            expr.struct_type.field_names.push_back(field_ident_token.str);
+            expr.struct_type.field_type_expr_refs.push_back(
+                compiler->add_expr(field_type_expr));
+
+            state->next_token(compiler, &next_token);
+            if (next_token.kind != TokenKind_RCurly) {
+                state->consume_token(compiler, TokenKind_Comma);
+            }
+
+            state->next_token(compiler, &next_token);
+        }
+
+        state->consume_token(compiler, TokenKind_RCurly);
         break;
     }
     default: {

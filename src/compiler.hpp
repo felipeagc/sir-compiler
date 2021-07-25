@@ -142,6 +142,7 @@ enum TokenKind {
     TokenKind_VarArg,
     TokenKind_Def,
     TokenKind_Macro,
+    TokenKind_Type,
     TokenKind_Struct,
     TokenKind_Union,
     TokenKind_If,
@@ -223,6 +224,7 @@ struct Type {
         struct {
             ace::Slice<TypeRef> field_types;
             ace::Slice<ace::String> field_names;
+            ace::StringMap<uint32_t> field_map;
         } struct_;
         struct {
             ace::Slice<TypeRef> field_types;
@@ -321,6 +323,7 @@ enum ExprKind {
     ExprKind_FloatType,
     ExprKind_SliceType,
     ExprKind_ArrayType,
+    ExprKind_StructType,
     ExprKind_Subscript,
     ExprKind_BuiltinCall,
     ExprKind_Unary,
@@ -380,6 +383,10 @@ struct Expr {
             ExprRef subtype_expr_ref;
             ExprRef size_expr_ref;
         } array_type;
+        struct {
+            ace::Array<ace::String> field_names;
+            ace::Array<ExprRef> field_type_expr_refs;
+        } struct_type;
         struct {
             ExprRef left_ref;
             ExprRef right_ref;

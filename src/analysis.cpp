@@ -154,6 +154,58 @@ static void analyze_expr(
         break;
     }
 
+    case ExprKind_StructType: {
+        ACE_ASSERT(
+            expr.struct_type.field_type_expr_refs.len ==
+            expr.struct_type.field_names.len);
+
+        bool has_invalid_type = false;
+
+        for (ExprRef field_type_expr_ref :
+             expr.struct_type.field_type_expr_refs) {
+            analyze_expr(
+                compiler, state, field_type_expr_ref, compiler->type_type);
+            if (field_type_expr_ref.get(compiler).as_type_ref.id == 0) {
+                has_invalid_type = true;
+            }
+        }
+
+        ace::StringMap<uint32_t> field_map =
+            ace::StringMap<uint32_t>::create(compiler->arena, 32);
+
+        bool has_conflict = false;
+
+        for (size_t i = 0; i < expr.struct_type.field_names.len; ++i) {
+            auto field_name = expr.struct_type.field_names[i];
+            if (field_map.get(field_name)) {
+                has_conflict = true;
+                compiler->add_error(
+                    expr.loc,
+                    "duplicate struct field: '%.*s'",
+                    (int)field_name.len,
+                    field_name.ptr);
+                continue;
+            }
+            field_map.set(field_name, (uint32_t)i);
+        }
+
+        if (has_conflict || has_invalid_type) break;
+
+        ace::Slice<TypeRef> field_types = compiler->arena->alloc<TypeRef>(
+            expr.struct_type.field_type_expr_refs.len);
+        for (size_t i = 0; i < expr.struct_type.field_type_expr_refs.len; ++i) {
+            field_types[i] = expr.struct_type.field_type_expr_refs[i]
+                                 .get(compiler)
+                                 .as_type_ref;
+        }
+
+        expr.expr_type_ref = compiler->type_type;
+        expr.as_type_ref = compiler->create_struct_type(
+            field_types, expr.struct_type.field_names.as_slice());
+
+        break;
+    }
+
     case ExprKind_BoolLiteral: {
         expr.expr_type_ref = compiler->bool_type;
         break;

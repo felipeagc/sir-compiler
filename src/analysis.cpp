@@ -522,7 +522,46 @@ static void analyze_expr(
     }
 
     case ExprKind_Access: {
-        ACE_ASSERT(!"unimplemented analysis for access expr");
+        analyze_expr(compiler, state, expr.access.left_ref);
+
+        Type accessed_type =
+            expr.access.left_ref.get(compiler).expr_type_ref.get(compiler);
+        ace::String type_name = accessed_type.to_string(compiler);
+
+        switch (accessed_type.kind) {
+        case TypeKind_Struct: {
+            Expr ident_expr = expr.access.accessed_ident_ref.get(compiler);
+            ACE_ASSERT(ident_expr.kind == ExprKind_Identifier);
+            ace::String accessed_field = ident_expr.ident.str;
+
+            uint32_t field_index = 0;
+            if (!accessed_type.struct_.field_map.get(
+                    accessed_field, &field_index)) {
+                compiler->add_error(
+                    expr.loc,
+                    "no struct field named '%.*s' for struct type '%.*s'",
+                    (int)accessed_field.len,
+                    accessed_field.ptr,
+                    (int)type_name.len,
+                    type_name.ptr);
+                break;
+            }
+
+            TypeRef field_type = accessed_type.struct_.field_types[field_index];
+            expr.expr_type_ref = field_type;
+
+            break;
+        }
+        default: {
+            compiler->add_error(
+                expr.loc,
+                "invalid type for left side of access expression: '%.*s'",
+                (int)type_name.len,
+                type_name.ptr);
+            break;
+        }
+        }
+
         break;
     }
 

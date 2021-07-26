@@ -406,7 +406,40 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
     }
 
     case ExprKind_Access: {
-        ACE_ASSERT(!"unimplemented codegen for access expr");
+        Type accessed_type =
+            expr.access.left_ref.get(compiler).expr_type_ref.get(compiler);
+        Expr ident_expr = expr.access.accessed_ident_ref.get(compiler);
+        ACE_ASSERT(ident_expr.kind == ExprKind_Identifier);
+        ace::String accessed_field = ident_expr.ident.str;
+
+        switch (accessed_type.kind) {
+        case TypeKind_Struct: {
+            CodegenValue accessed_ref =
+                codegen_expr(compiler, ctx, expr.access.left_ref);
+            ACE_ASSERT(accessed_ref.is_lvalue);
+
+            uint32_t field_index = 0;
+            if (!accessed_type.struct_.field_map.get(
+                    accessed_field, &field_index)) {
+                ACE_ASSERT(0);
+            }
+
+            value = {
+                true,
+                ctx->builder.insert_struct_elem_ptr(
+                    accessed_ref.inst_ref, field_index)};
+
+            TypeRef field_type = accessed_type.struct_.field_types[field_index];
+            expr.expr_type_ref = field_type;
+
+            break;
+        }
+        default: {
+            ACE_ASSERT(0);
+            break;
+        }
+        }
+
         break;
     }
 

@@ -124,6 +124,7 @@ enum InstKind : uint8_t {
     InstKind_SExt,
     InstKind_Trunc,
     InstKind_ArrayElemPtr,
+    InstKind_StructElemPtr,
     InstKind_Binop,
 };
 
@@ -171,6 +172,10 @@ struct Inst {
             InstRef accessed_ref;
             InstRef index_ref;
         } array_elem_ptr;
+        struct {
+            InstRef accessed_ref;
+            uint32_t field_index;
+        } struct_elem_ptr;
         struct {
             InstRef ptr_ref;
             InstRef value_ref;
@@ -269,6 +274,7 @@ struct Builder {
     InstRef insert_imm_bool(bool value);
 
     InstRef insert_array_elem_ptr(InstRef accessed_ref, InstRef index_ref);
+    InstRef insert_struct_elem_ptr(InstRef accessed_ref, uint32_t field_index);
 
     void insert_store(InstRef ptr_ref, InstRef value_ref);
     InstRef insert_load(InstRef ptr_ref);

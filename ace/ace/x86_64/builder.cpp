@@ -1413,6 +1413,34 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
         break;
     }
 
+    case InstKind_StructElemPtr: {
+        uint32_t field_index = inst.struct_elem_ptr.field_index;
+        ace::Type *struct_type =
+            inst.struct_elem_ptr.accessed_ref.get(this->module)
+                .type->pointer.sub;
+
+        uint32_t field_offset = 0;
+        for (uint32_t i = 0; i <= field_index; ++i) {
+            ace::Type *field_type = struct_type->struct_.fields[i];
+            uint32_t field_align = field_type->align_of(module);
+            field_offset =
+                ACE_ROUND_UP(field_align, field_offset); // Add padding
+
+            if (i != field_index) {
+                field_offset += field_type->size_of(module);
+            }
+        }
+
+        MetaValue ptr_value = create_int_register_value(8, RegisterIndex_RAX);
+        this->move_inst_rvalue(inst.struct_elem_ptr.accessed_ref, ptr_value);
+
+        MetaValue value_addr = create_int_register_memory_value(
+            8, RegisterIndex_RAX, 0, RegisterIndex_None, field_offset);
+
+        this->encode_mnem(Mnem_LEA, value_addr, this->meta_insts[inst_ref.id]);
+        break;
+    }
+
     case InstKind_Store: {
         size_t value_size =
             inst.store.value_ref.get(this->module).type->size_of(this->module);
@@ -1865,6 +1893,7 @@ void X86_64AsmBuilder::generate_function(InstRef func_ref)
             case InstKind_Trunc:
             case InstKind_Binop:
             case InstKind_ArrayElemPtr:
+            case InstKind_StructElemPtr:
             case InstKind_Load:
             case InstKind_FuncCall: {
                 uint32_t inst_size = inst.type->size_of(this->module);

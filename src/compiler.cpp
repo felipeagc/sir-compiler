@@ -18,6 +18,8 @@ bool ExprRef::is_lvalue(Compiler *compiler)
         is_lvalue = true;
     } else if (expr.kind == ExprKind_Subscript) {
         is_lvalue = true;
+    } else if (expr.kind == ExprKind_Access) {
+        return expr.access.left_ref.is_lvalue(compiler);
     }
 
     return is_lvalue;

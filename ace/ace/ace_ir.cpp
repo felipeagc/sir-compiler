@@ -198,6 +198,18 @@ print_instruction(Module *module, InstRef inst_ref, StringBuilder *sb)
         break;
     }
 
+    case InstKind_StructElemPtr: {
+        String type_string = inst.type->to_string(module);
+        sb->sprintf(
+            "%%r%u = struct_elem_ptr %.*s %%r%u %u",
+            inst_ref.id,
+            (int)type_string.len,
+            type_string.ptr,
+            inst.struct_elem_ptr.accessed_ref.id,
+            inst.struct_elem_ptr.field_index);
+        break;
+    }
+
     case InstKind_FuncCall: {
         sb->sprintf(
             "%%r%u = func_call %%r%u (",
@@ -819,6 +831,25 @@ InstRef Builder::insert_array_elem_ptr(InstRef accessed_ref, InstRef index_ref)
         accessed_inst.type->pointer.sub->array.sub);
     inst.array_elem_ptr.accessed_ref = accessed_ref;
     inst.array_elem_ptr.index_ref = index_ref;
+
+    return builder_insert_inst(this, inst);
+}
+
+InstRef
+Builder::insert_struct_elem_ptr(InstRef accessed_ref, uint32_t field_index)
+{
+    ZoneScoped;
+
+    Inst accessed_inst = accessed_ref.get(this->module);
+    ACE_ASSERT(accessed_inst.type->kind == TypeKind_Pointer);
+    ACE_ASSERT(accessed_inst.type->pointer.sub->kind == TypeKind_Struct);
+
+    Inst inst = {};
+    inst.kind = InstKind_StructElemPtr;
+    inst.type = this->module->create_pointer_type(
+        accessed_inst.type->pointer.sub->struct_.fields[field_index]);
+    inst.struct_elem_ptr.accessed_ref = accessed_ref;
+    inst.struct_elem_ptr.field_index = field_index;
 
     return builder_insert_inst(this, inst);
 }

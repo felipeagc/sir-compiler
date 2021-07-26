@@ -528,12 +528,12 @@ static void analyze_expr(
             expr.access.left_ref.get(compiler).expr_type_ref.get(compiler);
         ace::String type_name = accessed_type.to_string(compiler);
 
+        Expr ident_expr = expr.access.accessed_ident_ref.get(compiler);
+        ACE_ASSERT(ident_expr.kind == ExprKind_Identifier);
+        ace::String accessed_field = ident_expr.ident.str;
+
         switch (accessed_type.kind) {
         case TypeKind_Struct: {
-            Expr ident_expr = expr.access.accessed_ident_ref.get(compiler);
-            ACE_ASSERT(ident_expr.kind == ExprKind_Identifier);
-            ace::String accessed_field = ident_expr.ident.str;
-
             uint32_t field_index = 0;
             if (!accessed_type.struct_.field_map.get(
                     accessed_field, &field_index)) {

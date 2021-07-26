@@ -1,14 +1,13 @@
 def extern vararg printf(_: *u8);
 
 def export main(): i32 {
-	s: struct { a i32 };
-	printf(
-		"@sizeof(struct{a i32}) = %d\n",
-		i32(@sizeof(struct { a i32 })),
-	);
-	printf(
-		"@sizeof(struct{a i32, b i64}) = %d\n",
-		i32(@sizeof(struct { a i32, b i64 })),
-	);
+	// arr: [32]i32;
+	// a := arr[0];
+	s: struct {
+		a i64,
+		b i64,
+	};
+	s.a = 123;
+	s.b = 123;
 	return 0;
 }

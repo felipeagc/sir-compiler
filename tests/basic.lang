@@ -105,4 +105,20 @@ def export main() {
 			i32(@sizeof(struct { a i32, b i64 })),
 		);
 	}
+
+	{
+		s: struct {
+			a i32,
+			b i64,
+		};
+		s.a = 123;
+		printf("s.a = %d\n", s.a);
+		s.b = 321;
+		printf("s.b = %ld\n", s.b);
+		ptr := &s.a;
+		ptr.* = i32(s.b);
+		s.b = 123;
+		printf("s.a = %d\n", s.a);
+		printf("s.b = %ld\n", s.b);
+	}
 }

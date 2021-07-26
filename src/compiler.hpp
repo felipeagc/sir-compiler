@@ -453,6 +453,7 @@ struct Stmt {
 
 enum DeclKind {
     DeclKind_Unknown = 0,
+    DeclKind_Type,
     DeclKind_Function,
     DeclKind_FunctionParameter,
     DeclKind_LocalVarDecl,
@@ -489,6 +490,9 @@ struct Decl {
             ExprRef type_expr;
             ExprRef value_expr;
         } const_decl;
+        struct {
+            ExprRef type_expr;
+        } type_decl;
     };
 };
 

@@ -275,6 +275,7 @@ static void analyze_expr(
                 (int)expr.ident.str.len,
                 expr.ident.str.ptr);
         }
+
         break;
     }
 
@@ -997,10 +998,29 @@ analyze_decl(Compiler *compiler, AnalyzerState *state, DeclRef decl_ref)
         ACE_ASSERT(0);
         break;
     }
+
+    case DeclKind_Type: {
+        Scope *scope = *state->scope_stack.last();
+        if (scope->lookup(decl.name).id != decl_ref.id) {
+            scope->add(compiler, decl_ref);
+        }
+
+        analyze_expr(
+            compiler, state, decl.type_decl.type_expr, compiler->type_type);
+        TypeRef as_type_ref =
+            decl.type_decl.type_expr.get(compiler).as_type_ref;
+        if (as_type_ref.id > 0) {
+            decl.as_type_ref = as_type_ref;
+            decl.decl_type_ref = compiler->type_type;
+        }
+        break;
+    }
+
     case DeclKind_ConstDecl: {
         compiler->add_error(decl.loc, "const decl unimplemented");
         break;
     }
+
     case DeclKind_Function: {
         decl.func.scope = Scope::create(
             compiler, state->file_ref, *state->scope_stack.last());
@@ -1055,6 +1075,7 @@ analyze_decl(Compiler *compiler, AnalyzerState *state, DeclRef decl_ref)
 
         break;
     }
+
     case DeclKind_FunctionParameter: {
         analyze_expr(
             compiler, state, decl.func_param.type_expr, compiler->type_type);
@@ -1062,6 +1083,7 @@ analyze_decl(Compiler *compiler, AnalyzerState *state, DeclRef decl_ref)
             decl.func_param.type_expr.get(compiler).as_type_ref;
         break;
     }
+
     case DeclKind_LocalVarDecl: {
         Scope *scope = *state->scope_stack.last();
         scope->add(compiler, decl_ref);
@@ -1107,6 +1129,7 @@ analyze_decl(Compiler *compiler, AnalyzerState *state, DeclRef decl_ref)
 
         break;
     }
+
     case DeclKind_GlobalVarDecl: {
         Scope *scope = *state->scope_stack.last();
         if (scope->lookup(decl.name).id != decl_ref.id) {

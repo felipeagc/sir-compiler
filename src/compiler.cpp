@@ -61,7 +61,8 @@ void Scope::add(Compiler *compiler, DeclRef decl_ref)
 {
     ace::String name = compiler->decls[decl_ref.id].name;
     if (name != "_") {
-        if (this->lookup(name).id != 0) {
+        DeclRef found_decl = this->lookup(name);
+        if (found_decl.id != 0) {
             const Location &loc = compiler->decls[decl_ref.id].loc;
             compiler->add_error(
                 loc,

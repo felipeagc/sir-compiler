@@ -37,3 +37,6 @@ s.a = 123
 s.b = 321
 s.a = 321
 s.b = 123
+@sizeof(LocalType) = 16
+local_global.a[0] = 321
+local_global.a[1] = 123

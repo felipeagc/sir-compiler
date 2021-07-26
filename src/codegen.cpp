@@ -791,6 +791,10 @@ codegen_decl(Compiler *compiler, CodegenContext *ctx, DeclRef decl_ref)
     switch (decl.kind) {
     case DeclKind_Unknown: ACE_ASSERT(0); break;
 
+    case DeclKind_Type: {
+        break;
+    }
+
     case DeclKind_ConstDecl: {
         ACE_ASSERT(!"unimplemented");
         break;

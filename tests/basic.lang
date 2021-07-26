@@ -121,4 +121,19 @@ def export main() {
 		printf("s.a = %d\n", s.a);
 		printf("s.b = %ld\n", s.b);
 	}
+
+	{
+		type LocalType struct {
+			a [2]i32,
+			b i64,
+		};
+
+		printf("@sizeof(LocalType) = %d\n", i32(@sizeof(LocalType)));
+
+		global local_global: LocalType;
+		local_global.a[0] = 321;
+		local_global.a[1] = 123;
+		printf("local_global.a[0] = %d\n", local_global.a[0]);
+		printf("local_global.a[1] = %d\n", local_global.a[1]);
+	}
 }

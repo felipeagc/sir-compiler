@@ -1486,6 +1486,7 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
 
         switch (called_func->calling_convention) {
         case CallingConvention_SystemV: {
+            uint32_t used_int_regs = 0;
             static RegisterIndex sysv_int_param_regs[6] = {
                 RegisterIndex_RDI,
                 RegisterIndex_RSI,
@@ -1495,6 +1496,7 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
                 RegisterIndex_R9,
             };
 
+            uint32_t used_float_regs = 0;
             static RegisterIndex sysv_float_param_regs[8] = {
                 RegisterIndex_XMM0,
                 RegisterIndex_XMM1,
@@ -1505,9 +1507,6 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
                 RegisterIndex_XMM6,
                 RegisterIndex_XMM7,
             };
-
-            uint32_t int_count = 0;
-            uint32_t float_count = 0;
 
             // Write parameters to ABI locations
             for (size_t i = 0; i < inst.func_call.parameters.len; ++i) {
@@ -1525,23 +1524,35 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
 
                 switch (param_inst.type->kind) {
                 case TypeKind_Pointer: {
-                    dest_param_value = create_int_register_value(
-                        8, sysv_int_param_regs[int_count]);
-                    int_count++;
+                    if (used_int_regs <
+                        ACE_CARRAY_LENGTH(sysv_int_param_regs)) {
+                        dest_param_value = create_int_register_value(
+                            8, sysv_int_param_regs[used_int_regs++]);
+                    } else {
+                        ACE_ASSERT(!"TODO: pass parameter via stack");
+                    }
                     break;
                 }
                 case TypeKind_Int: {
-                    dest_param_value = create_int_register_value(
-                        param_inst.type->int_.bits >> 3,
-                        sysv_int_param_regs[int_count]);
-                    int_count++;
+                    if (used_int_regs <
+                        ACE_CARRAY_LENGTH(sysv_int_param_regs)) {
+                        dest_param_value = create_int_register_value(
+                            param_inst.type->int_.bits >> 3,
+                            sysv_int_param_regs[used_int_regs++]);
+                    } else {
+                        ACE_ASSERT(!"TODO: pass parameter via stack");
+                    }
                     break;
                 }
                 case TypeKind_Float: {
-                    dest_param_value = create_float_register_value(
-                        param_inst.type->float_.bits >> 3,
-                        sysv_float_param_regs[float_count]);
-                    float_count++;
+                    if (used_float_regs <
+                        ACE_CARRAY_LENGTH(sysv_float_param_regs)) {
+                        dest_param_value = create_float_register_value(
+                            param_inst.type->float_.bits >> 3,
+                            sysv_float_param_regs[used_float_regs++]);
+                    } else {
+                        ACE_ASSERT(!"TODO: pass parameter via stack");
+                    }
                     break;
                 }
                 default: {
@@ -1560,7 +1571,7 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
             if (called_func->variadic) {
                 // Write the amount of vector registers to %AL
                 MetaValue float_count_imm =
-                    create_imm_int_value(1, float_count);
+                    create_imm_int_value(1, used_float_regs);
                 MetaValue float_count_reg =
                     create_int_register_value(1, RegisterIndex_RAX);
                 this->encode_mnem(Mnem_MOV, float_count_imm, float_count_reg);
@@ -1889,6 +1900,7 @@ void X86_64AsmBuilder::generate_function(InstRef func_ref)
     // Move parameters to stack
     switch (func->calling_convention) {
     case CallingConvention_SystemV: {
+        uint32_t used_int_regs = 0;
         static RegisterIndex sysv_int_param_regs[6] = {
             RegisterIndex_RDI,
             RegisterIndex_RSI,
@@ -1898,26 +1910,81 @@ void X86_64AsmBuilder::generate_function(InstRef func_ref)
             RegisterIndex_R9,
         };
 
+        uint32_t used_float_regs = 0;
+        static RegisterIndex sysv_float_param_regs[8] = {
+            RegisterIndex_XMM0,
+            RegisterIndex_XMM1,
+            RegisterIndex_XMM2,
+            RegisterIndex_XMM3,
+            RegisterIndex_XMM4,
+            RegisterIndex_XMM5,
+            RegisterIndex_XMM6,
+            RegisterIndex_XMM7,
+        };
+
+        uint32_t stack_param_offset = 16;
+
         for (uint32_t i = 0; i < func->param_types.len; ++i) {
             Type *param_type = func->param_types[i];
             InstRef param_inst_ref = func->param_insts[i];
             MetaValue param_meta_inst = this->meta_insts[param_inst_ref.id];
 
             switch (param_type->kind) {
-            case TypeKind_Int: {
-                MetaValue param_register_value = create_int_register_value(
-                    param_type->int_.bits >> 3, sysv_int_param_regs[i]);
+            case TypeKind_Pointer: {
+                MetaValue param_value = {};
+                if (used_int_regs < ACE_CARRAY_LENGTH(sysv_int_param_regs)) {
+                    param_value = create_int_register_value(
+                        8, sysv_int_param_regs[used_int_regs++]);
+                } else {
+                    param_value = create_int_register_memory_value(
+                        8,
+                        RegisterIndex_RBP,
+                        0,
+                        RegisterIndex_None,
+                        stack_param_offset);
+                    stack_param_offset += 8;
+                }
 
-                this->encode_mnem(
-                    Mnem_MOV, param_register_value, param_meta_inst);
+                this->encode_mnem(Mnem_MOV, param_value, param_meta_inst);
                 break;
             }
-            case TypeKind_Pointer: {
-                MetaValue param_register_value =
-                    create_int_register_value(8, sysv_int_param_regs[i]);
+            case TypeKind_Int: {
+                MetaValue param_value = {};
+                if (used_int_regs < ACE_CARRAY_LENGTH(sysv_int_param_regs)) {
+                    param_value = create_int_register_value(
+                        param_type->int_.bits >> 3,
+                        sysv_int_param_regs[used_int_regs++]);
+                } else {
+                    param_value = create_int_register_memory_value(
+                        param_type->int_.bits >> 3,
+                        RegisterIndex_RBP,
+                        0,
+                        RegisterIndex_None,
+                        stack_param_offset);
+                    stack_param_offset += 8;
+                }
 
-                this->encode_mnem(
-                    Mnem_MOV, param_register_value, param_meta_inst);
+                this->encode_mnem(Mnem_MOV, param_value, param_meta_inst);
+                break;
+            }
+            case TypeKind_Float: {
+                MetaValue param_value = {};
+                if (used_int_regs < ACE_CARRAY_LENGTH(sysv_float_param_regs)) {
+                    param_value = create_float_register_value(
+                        param_type->float_.bits >> 3,
+                        sysv_float_param_regs[used_float_regs++]);
+
+                } else {
+                    param_value = create_int_register_memory_value(
+                        param_type->float_.bits >> 3,
+                        RegisterIndex_RBP,
+                        0,
+                        RegisterIndex_None,
+                        stack_param_offset);
+                    stack_param_offset += 8;
+                }
+
+                this->encode_mnem(Mnem_MOVS, param_value, param_meta_inst);
                 break;
             }
             default: {

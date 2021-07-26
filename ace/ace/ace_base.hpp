@@ -28,6 +28,8 @@ namespace ace {
 
 #define ACE_ROUND_UP(to, x) ((((x) + (to)-1) / (to)) * (to))
 
+#define ACE_CARRAY_LENGTH(arr) (sizeof(arr)/sizeof(arr[0]))
+
 #define ACE_STR(x) #x
 
 #define ACE_ASSERT(x)                                                          \

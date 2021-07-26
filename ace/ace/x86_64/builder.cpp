@@ -177,52 +177,6 @@ struct MetaFunction {
     Slice<RegisterIndex> callee_saved_registers;
     Array<RegisterIndex> temp_int_register_stack;
     SymbolRef symbol_ref{};
-    uint32_t temp_stack_space;
-
-    MetaValue push_temporary_int_value(size_t size)
-    {
-        MetaValue value = {};
-
-        switch (size) {
-        case 1:
-        case 2:
-        case 4:
-        case 8: {
-            if (this->temp_int_register_stack.len > 0 && size) {
-                RegisterIndex reg_index = *this->temp_int_register_stack.last();
-                this->temp_int_register_stack.pop();
-
-                value.kind = MetaValueKind_IRegister;
-                value.reg.index = reg_index;
-                value.reg.bytes = size;
-            } else {
-                ACE_ASSERT(!"TODO: use stack space");
-            }
-            break;
-        }
-        default: {
-            ACE_ASSERT(!"TODO: use stack space");
-            break;
-        }
-        }
-
-        return value;
-    }
-
-    void pop_temporary_int_value(const MetaValue &value)
-    {
-        switch (value.kind) {
-        case MetaValueKind_IRegister: {
-            this->temp_int_register_stack.push_back(value.reg.index);
-            break;
-        }
-        case MetaValueKind_IRegisterMemory: {
-            this->temp_int_register_stack.push_back(value.regmem.base);
-            break;
-        }
-        default: break;
-        }
-    }
 };
 
 struct X86_64AsmBuilder : AsmBuilder {

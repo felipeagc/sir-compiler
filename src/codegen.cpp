@@ -825,7 +825,7 @@ codegen_decl(Compiler *compiler, CodegenContext *ctx, DeclRef decl_ref)
                 decl.name,
                 ace::CallingConvention_SystemV,
                 linkage,
-                false,
+                func_type.func.vararg,
                 param_types,
                 return_type)};
 

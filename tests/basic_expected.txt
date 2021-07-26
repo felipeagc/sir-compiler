@@ -40,3 +40,7 @@ s.b = 123
 @sizeof(LocalType) = 16
 local_global.a[0] = 321
 local_global.a[1] = 123
+register params: 1 2 3 4 5 6
+stack params: 7 8
+register params: 1.0 2.0 3.0 4.0 5.0 6.0 7.0 8.0
+stack params: 9.0 10.0

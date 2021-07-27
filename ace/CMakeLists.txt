@@ -8,6 +8,7 @@ add_library(
   ace/ace_ir.cpp
   ace/ace_type.hpp
   ace/ace_type.cpp
+  ace/stb_sprintf.c
 
   ace/ace_obj.hpp
   ace/ace_elf64.cpp

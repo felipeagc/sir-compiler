@@ -44,6 +44,8 @@ void ArenaAllocator::destroy()
 
 void *ArenaAllocator::alloc_bytes(size_t size)
 {
+    ZoneScoped;
+
     Chunk *chunk = this->last_chunk;
 
     size_t new_offset = chunk->offset;
@@ -72,6 +74,8 @@ void *ArenaAllocator::alloc_bytes(size_t size)
 
 void *ArenaAllocator::realloc_bytes(void *ptr, size_t size)
 {
+    ZoneScoped;
+
     if (ptr) {
         Header *header = get_alloc_header(ptr);
         if (size <= header->size) return ptr;
@@ -86,5 +90,6 @@ void *ArenaAllocator::realloc_bytes(void *ptr, size_t size)
 
 void ArenaAllocator::free_bytes(void *ptr)
 {
+    ZoneScoped;
     (void)ptr;
 }

@@ -93,6 +93,8 @@ DeclRef Scope::lookup(const ace::String &name)
 
 Compiler Compiler::create()
 {
+    init_parser_tables();
+
     ace::ArenaAllocator *arena = ace::ArenaAllocator::create(
         ace::MallocAllocator::get_instance(), 1 << 24);
 
@@ -167,6 +169,8 @@ Compiler Compiler::create()
     keyword_map.set("i64", TokenKind_I64);
     keyword_map.set("f32", TokenKind_F32);
     keyword_map.set("f64", TokenKind_F64);
+    keyword_map.set("and", TokenKind_And);
+    keyword_map.set("or", TokenKind_Or);
 
     builtin_function_map.set("sizeof", BuiltinFunction_Sizeof);
     builtin_function_map.set("alignof", BuiltinFunction_Alignof);
@@ -392,6 +396,16 @@ void Compiler::print_errors()
     }
 }
 
+static void
+print_time_taken(const char *task_name, timespec start_time, timespec end_time)
+{
+    uint64_t secs = end_time.tv_sec - start_time.tv_sec;
+    uint64_t nsecs = end_time.tv_nsec - start_time.tv_nsec;
+    double time = (double)secs + ((double)nsecs / (double)1e9);
+
+    printf("%s time: %.3lf seconds\n", task_name, time);
+}
+
 void Compiler::compile(ace::String path)
 {
     try {
@@ -408,8 +422,9 @@ void Compiler::compile(ace::String path)
         size_t file_size = ftell(f);
         fseek(f, 0, SEEK_SET);
 
-        ace::Slice<char> file_content = this->arena->alloc<char>(file_size);
+        ace::Slice<char> file_content = this->arena->alloc<char>(file_size + 1);
         size_t bytes_read = fread(file_content.ptr, 1, file_size, f);
+        file_content[file_size] = '\0';
 
         fclose(f);
 
@@ -431,20 +446,33 @@ void Compiler::compile(ace::String path)
             .top_level_decls = ace::Array<DeclRef>::create(this->arena),
         };
 
+        timespec total_start_time, total_end_time;
         timespec start_time, end_time;
+
+        clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &total_start_time);
+
         clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &start_time);
-
         parse_file(this, file_ref);
-        analyze_file(this, file_ref);
-        codegen_file(this, file_ref);
-
         clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &end_time);
+        print_time_taken("Parser", start_time, end_time);
+
+        clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &start_time);
+        analyze_file(this, file_ref);
+        clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &end_time);
+        print_time_taken("Analysis", start_time, end_time);
+
+        clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &start_time);
+        codegen_file(this, file_ref);
+        clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &end_time);
+        print_time_taken("Codegen", start_time, end_time);
+
+        clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &total_end_time);
 
         {
             File *file = &this->files[file_ref.id];
 
-            uint64_t secs = end_time.tv_sec - start_time.tv_sec;
-            uint64_t nsecs = end_time.tv_nsec - start_time.tv_nsec;
+            uint64_t secs = total_end_time.tv_sec - total_start_time.tv_sec;
+            uint64_t nsecs = total_end_time.tv_nsec - total_start_time.tv_nsec;
             double time = (double)secs + ((double)nsecs / (double)1e9);
             double total_line_count = (double)file->line_count;
 

@@ -17,17 +17,15 @@ const char *token_kind_to_string(TokenKind kind)
     case TokenKind_RCurly: return "}";
 
     case TokenKind_Colon: return ":";
-    case TokenKind_ColonColon: return "::";
     case TokenKind_Comma: return ",";
-    case TokenKind_Underscore: return "_";
     case TokenKind_Dot: return ".";
     case TokenKind_Semicolon: return ";";
     case TokenKind_Question: return "?";
 
     case TokenKind_Equal: return "=";
 
-    case TokenKind_And: return "&&";
-    case TokenKind_Or: return "||";
+    case TokenKind_And: return "and";
+    case TokenKind_Or: return "or";
 
     case TokenKind_Sub: return "-";
     case TokenKind_Add: return "+";
@@ -125,6 +123,7 @@ static ace::String token_to_string(Compiler *compiler, const Token &token)
     default: return token_kind_to_string(token.kind);
     }
 
+    ACE_ASSERT(0);
     return "";
 }
 
@@ -155,16 +154,182 @@ ACE_INLINE static bool is_num(char c)
     return (c >= '0' && c <= '9');
 }
 
+enum EqClass : uint8_t {
+    EqClass_Other = 0,
+    EqClass_Whitespace,
+    EqClass_LineFeed,       // \n
+    EqClass_CarriageReturn, // \r
+    EqClass_Letter,         // a..z A..Z
+    EqClass_Digit,          // 0..9
+    EqClass_Dot,            // .
+    EqClass_Comma,          // ,
+    EqClass_Colon,          // :
+    EqClass_Semicolon,      // ;
+    EqClass_LParen,         // (
+    EqClass_RParen,         // )
+    EqClass_LBracket,       // [
+    EqClass_RBracket,       // ]
+    EqClass_LCurly,         // {
+    EqClass_RCurly,         // }
+    EqClass_Ampersand,      // &
+    EqClass_Pipe,           // |
+    EqClass_Tilde,          // ~
+    EqClass_Caret,          // ^
+    EqClass_Exclam,         // !
+    EqClass_Equal,          // =
+    EqClass_Less,           // <
+    EqClass_Greater,        // >
+    EqClass_Plus,           // +
+    EqClass_Minus,          // -
+    EqClass_Asterisk,       // *
+    EqClass_Underscore,     // _
+    EqClass_SingleQuote,    // '
+    EqClass_DoubleQuote,    // "
+    EqClass_Slash,          // /
+    EqClass_BackSlash,      // "\"
+    EqClass_Percent,        // %
+    EqClass_Question,       // ?
+    EqClass_At,             // @
+    EqClass_EOF,            // \0
+    EqClass_COUNT,
+};
+
+enum State : uint8_t {
+    State_Error = 0,
+
+    State_Whitespace,
+    State_WhitespaceFinal,
+    State_WhitespaceStart,
+    State_UWhitespace,
+    State_UCommentSlash,
+    State_UCommentBody,
+
+    State_Identifier,
+    State_BuiltinIdentifier,
+    State_StringLiteral,
+    State_IntLiteral,
+    State_FloatLiteral,
+    State_LParen,
+    State_RParen,
+    State_LBracket,
+    State_RBracket,
+    State_LCurly,
+    State_RCurly,
+    State_Dot,
+    State_Comma,
+    State_Colon,
+    State_Semicolon,
+    State_Question,
+    State_Not,
+    State_BitAnd,
+    State_BitOr,
+    State_BitNot,
+    State_BitXor,
+    State_BitAndEqual,
+    State_BitOrEqual,
+    State_BitNotEqual,
+    State_BitXorEqual,
+    State_Mul,
+    State_Add,
+    State_Sub,
+    State_Div,
+    State_Mod,
+    State_MulEqual,
+    State_AddEqual,
+    State_SubEqual,
+    State_DivEqual,
+    State_ModEqual,
+    State_EqualEqual,
+    State_NotEqual,
+    State_Less,
+    State_LessEqual,
+    State_Greater,
+    State_GreaterEqual,
+    State_LShift,
+    State_RShift,
+    State_LShiftEqual,
+    State_RShiftEqual,
+    State_Arrow,
+    State_Assign,
+
+    State_EOF,
+
+    State_Final,
+
+    State_Start,
+
+    State_UIdentifier,
+    State_UBuiltinIdentifier,
+    State_UIntLiteral,
+    State_UFloatLiteral,
+    State_UOpenStringLiteral,
+    State_UOpenStringLiteralSlashEscape,
+    State_UClosedStringLiteral,
+    State_UDot,
+    State_UNot,
+    State_UBitAnd,
+    State_UBitOr,
+    State_UBitXor,
+    State_UBitNot,
+    State_UBitAndEqual,
+    State_UBitOrEqual,
+    State_UBitXorEqual,
+    State_UBitNotEqual,
+    State_UMul,
+    State_UAdd,
+    State_USub,
+    State_UDiv,
+    State_UMod,
+    State_UMulEqual,
+    State_UAddEqual,
+    State_USubEqual,
+    State_UDivEqual,
+    State_UModEqual,
+    State_UEqualEqual,
+    State_UNotEqual,
+    State_ULess,
+    State_ULessEqual,
+    State_UGreater,
+    State_UGreaterEqual,
+    State_ULShift,
+    State_URShift,
+    State_ULShiftEqual,
+    State_URShiftEqual,
+    State_UAssign,
+    State_UArrow,
+
+    State_COUNT,
+};
+
+static EqClass EQ_CLASSES[255];
+static State TRANSITION[State_COUNT][EqClass_COUNT];
+static uint32_t EQ_CLASS_LINE_INC[EqClass_COUNT];
+static uint32_t EQ_CLASS_COLCOUNT_AND_MASK[EqClass_COUNT];
+static uint32_t EQ_CLASS_COLCOUNT_OR_MASK[EqClass_COUNT];
+static TokenKind STATE_TOKENS[State_COUNT];
+
+static void end_transition(State from_state, State final_state)
+{
+    for (size_t i = 0; i < EqClass_COUNT; ++i) {
+        TRANSITION[from_state][i] = final_state;
+    }
+}
+
 struct TokenizerState {
     FileRef file_ref;
+    const char *text;
+    size_t text_len;
     uint32_t pos;
     uint32_t line;
     uint32_t col;
 
-    static TokenizerState create(FileRef file_ref)
+    static TokenizerState
+    create(FileRef file_ref, const char *text, size_t text_len)
     {
         TokenizerState state = {};
         state.file_ref = file_ref;
+        state.text = text;
+        state.text_len = text_len;
         state.pos = 0;
         state.line = 1;
         state.col = 1;
@@ -181,16 +346,16 @@ struct TokenizerState {
         Token token = {};
         *this = this->next_token(compiler, &token);
         if (token.kind != token_kind) {
+            ace::String token_string = token_to_string(compiler, token);
             if (token.kind == TokenKind_Error) {
                 compiler->add_error(
                     token.loc,
-                    "unexpected token: %.*s",
-                    (int)token.str.len,
-                    token.str.ptr);
+                    "unexpected token: '%.*s'",
+                    (int)token_string.len,
+                    token_string.ptr);
                 compiler->halt_compilation();
             }
 
-            ace::String token_string = token_to_string(compiler, token);
             compiler->add_error(
                 token.loc,
                 "unexpected token: '%.*s', expecting '%s'",
@@ -207,64 +372,79 @@ struct TokenizerState {
     {
         ZoneScoped;
 
-        Allocator *allocator = compiler->arena;
-        File file = compiler->files[this->file_ref.id];
         TokenizerState state = *this;
+        Allocator *allocator = compiler->arena;
 
-    begin:
-        *token = Token{};
+        State mstate = State_WhitespaceStart;
 
-        // Skip whitespace
-        for (size_t i = state.pos; i < file.text.len; ++i) {
-            if (is_whitespace(file.text[i])) {
-                state.pos++;
-                state.col++;
-                if (file.text[i] == '\n') {
-                    state.line++;
-                    state.col = 1;
-                }
-            } else
-                break;
-        }
+        do {
+            char c = state.text[state.pos++];
+            EqClass eq_class = EQ_CLASSES[(int)c];
+            mstate = TRANSITION[mstate][eq_class];
+            state.line += EQ_CLASS_LINE_INC[eq_class];
+            state.col++;
+            state.col &= EQ_CLASS_COLCOUNT_AND_MASK[eq_class];
+            state.col |= EQ_CLASS_COLCOUNT_OR_MASK[eq_class];
+        } while (mstate > State_WhitespaceFinal);
 
-        token->loc.offset = state.pos;
-        token->loc.line = state.line;
-        token->loc.col = state.col;
-        token->loc.len = 1;
+        state.col--;
+        state.pos--;
+
         token->loc.file_ref = state.file_ref;
+        token->loc.offset = state.pos;
+        token->loc.col = state.col;
+        token->loc.line = state.line;
 
-        if (state.length_left(&file) <= 0) {
-            token->kind = TokenKind_EOF;
-            return state;
+        mstate = State_Start;
+
+        do {
+            char c = state.text[state.pos++];
+            EqClass eq_class = EQ_CLASSES[(int)c];
+            mstate = TRANSITION[mstate][eq_class];
+        } while (mstate > State_Final);
+
+        token->loc.len = state.pos - token->loc.offset;
+        if (token->loc.len > 1) {
+            token->loc.len--;
+            state.pos--;
         }
 
-        char c = file.text[state.pos];
-        switch (c) {
-        case '\"': {
-            // String
-            state.pos++;
+        state.col += token->loc.len;
+        token->kind = STATE_TOKENS[mstate];
 
-            bool closed = false;
+        switch (token->kind) {
+        case TokenKind_Identifier: {
+            String ident_str =
+                String{&state.text[token->loc.offset], token->loc.len};
+            if (!compiler->keyword_map.get(ident_str, &token->kind)) {
+                token->str = ident_str;
+            }
+            break;
+        }
+        case TokenKind_BuiltinIdentifier: {
+            String ident_str =
+                String{&state.text[token->loc.offset + 1], token->loc.len - 1};
+            if (!compiler->keyword_map.get(ident_str, &token->kind)) {
+                token->str = ident_str;
+            }
+            break;
+        }
+        case TokenKind_StringLiteral: {
+            String ident_str =
+                String{&state.text[token->loc.offset + 1], token->loc.len - 2};
 
             compiler->sb.reset();
-            size_t i = state.pos;
-            for (; i < file.text.len; ++i) {
-                if (file.text[i] == '\"') {
-                    closed = true;
-                    i++;
-                    break;
-                }
-
-                if (file.text[i] == '\\') {
-                    if (i + 1 >= file.text.len) {
+            for (size_t i = 0; i < ident_str.len; ++i) {
+                if (ident_str[i] == '\\') {
+                    if (i + 1 >= ident_str.len) {
                         token->kind = TokenKind_Error;
                         token->str = allocator->clone("invalid string literal");
-                        break;
+                        goto end;
                     }
                     ++i;
 
-                    char actual_char = file.text[i];
-                    switch (file.text[i]) {
+                    char actual_char = ident_str[i];
+                    switch (ident_str[i]) {
                     case 'n': actual_char = '\n'; break;
                     case 'r': actual_char = '\r'; break;
                     case 't': actual_char = '\t'; break;
@@ -282,381 +462,31 @@ struct TokenizerState {
                     continue;
                 }
 
-                compiler->sb.append(file.text[i]);
+                compiler->sb.append(ident_str[i]);
             }
 
-            state.pos = i;
-
-            if (!closed) {
-                token->kind = TokenKind_Error;
-                token->str = allocator->clone("unclosed string literal");
-            }
-
-            if (token->kind == TokenKind_Error) {
-                break;
-            }
-
-            token->kind = TokenKind_StringLiteral;
             token->str = compiler->sb.build_null_terminated(compiler->arena);
-
+            break;
+        }
+        case TokenKind_FloatLiteral: {
+            String ident_str =
+                String{&state.text[token->loc.offset], token->loc.len};
+            const char *strz = allocator->null_terminate(ident_str);
+            token->float_ = strtod(strz, NULL);
+            break;
+        }
+        case TokenKind_IntLiteral: {
+            String ident_str =
+                String{&state.text[token->loc.offset], token->loc.len};
+            const char *strz = allocator->null_terminate(ident_str);
+            token->int_ = strtol(strz, NULL, 10);
             break;
         }
 
-        case '{':
-            state.pos++;
-            token->kind = TokenKind_LCurly;
-            break;
-        case '}':
-            state.pos++;
-            token->kind = TokenKind_RCurly;
-            break;
-        case '[':
-            state.pos++;
-            token->kind = TokenKind_LBracket;
-            break;
-        case ']':
-            state.pos++;
-            token->kind = TokenKind_RBracket;
-            break;
-        case '(':
-            state.pos++;
-            token->kind = TokenKind_LParen;
-            break;
-        case ')':
-            state.pos++;
-            token->kind = TokenKind_RParen;
-            break;
-
-        case '=': {
-            state.pos++;
-            token->kind = TokenKind_Equal;
-            if (state.length_left(&file) > 0) {
-                switch (file.text[state.pos]) {
-                case '=':
-                    state.pos++;
-                    token->kind = TokenKind_EqualEqual;
-                    break;
-                case '>':
-                    state.pos++;
-                    token->kind = TokenKind_Arrow;
-                    break;
-                default: break;
-                }
-            }
-            break;
+        default: break;
         }
 
-        case '+': {
-            state.pos++;
-            token->kind = TokenKind_Add;
-            if (state.length_left(&file) > 0) {
-                switch (file.text[state.pos]) {
-                case '=':
-                    state.pos++;
-                    token->kind = TokenKind_AddEqual;
-                    break;
-                default: break;
-                }
-            }
-            break;
-        }
-
-        case '-': {
-            state.pos++;
-            token->kind = TokenKind_Sub;
-            if (state.length_left(&file) > 0 && file.text[state.pos] == '=') {
-                state.pos++;
-                token->kind = TokenKind_SubEqual;
-            }
-            break;
-        }
-
-        case '*': {
-            state.pos++;
-            token->kind = TokenKind_Mul;
-            if (state.length_left(&file) > 0 && file.text[state.pos] == '=') {
-                state.pos++;
-                token->kind = TokenKind_MulEqual;
-            }
-            break;
-        }
-
-        case '/': {
-            state.pos++;
-            token->kind = TokenKind_Div;
-            if (state.length_left(&file) > 0) {
-                switch (file.text[state.pos]) {
-                case '=':
-                    state.pos++;
-                    token->kind = TokenKind_DivEqual;
-                    break;
-                case '/':
-                    state.pos++;
-                    while (state.length_left(&file) > 0 &&
-                           file.text[state.pos] != '\n') {
-                        state.pos++;
-                    }
-                    goto begin;
-                    break;
-                default: break;
-                }
-            }
-            break;
-        }
-
-        case '%': {
-            state.pos++;
-            token->kind = TokenKind_Mod;
-            if (state.length_left(&file) > 0 && file.text[state.pos] == '=') {
-                state.pos++;
-                token->kind = TokenKind_ModEqual;
-            }
-            break;
-        }
-
-        case '|': {
-            state.pos++;
-            token->kind = TokenKind_BitOr;
-            if (state.length_left(&file) > 0) {
-                switch (file.text[state.pos]) {
-                case '=':
-                    state.pos++;
-                    token->kind = TokenKind_BitOrEqual;
-                    break;
-                case '|':
-                    state.pos++;
-                    token->kind = TokenKind_Or;
-                    break;
-                default: break;
-                }
-            }
-            break;
-        }
-
-        case '&': {
-            state.pos++;
-            token->kind = TokenKind_BitAnd;
-            if (state.length_left(&file) > 0) {
-                switch (file.text[state.pos]) {
-                case '=':
-                    state.pos++;
-                    token->kind = TokenKind_BitAndEqual;
-                    break;
-                case '&':
-                    state.pos++;
-                    token->kind = TokenKind_And;
-                    break;
-                default: break;
-                }
-            }
-            break;
-        }
-
-        case '^': {
-            state.pos++;
-            token->kind = TokenKind_BitXor;
-            if (state.length_left(&file) > 0 && file.text[state.pos] == '=') {
-                state.pos++;
-                token->kind = TokenKind_BitXorEqual;
-            }
-            break;
-        }
-
-        case '~': {
-            state.pos++;
-            token->kind = TokenKind_BitNot;
-            if (state.length_left(&file) > 0 && file.text[state.pos] == '=') {
-                state.pos++;
-                token->kind = TokenKind_BitNotEqual;
-            }
-            break;
-        }
-
-        case '!': {
-            state.pos++;
-            token->kind = TokenKind_Not;
-            if (state.length_left(&file) > 0 && file.text[state.pos] == '=') {
-                state.pos++;
-                token->kind = TokenKind_NotEqual;
-            }
-            break;
-        }
-
-        case '<': {
-            state.pos++;
-            token->kind = TokenKind_Less;
-            if (state.length_left(&file) > 0) {
-                switch (file.text[state.pos]) {
-                case '=':
-                    state.pos++;
-                    token->kind = TokenKind_LessEqual;
-                    break;
-                case '<':
-                    state.pos++;
-                    token->kind = TokenKind_LShift;
-                    if (state.length_left(&file) > 0 &&
-                        file.text[state.pos] == '=') {
-                        token->kind = TokenKind_LShiftEqual;
-                    }
-                    break;
-                default: break;
-                }
-            }
-            break;
-        }
-
-        case '>': {
-            state.pos++;
-            token->kind = TokenKind_Greater;
-            if (state.length_left(&file) > 0) {
-                switch (file.text[state.pos]) {
-                case '=':
-                    state.pos++;
-                    token->kind = TokenKind_GreaterEqual;
-                    break;
-                case '>':
-                    state.pos++;
-                    token->kind = TokenKind_RShift;
-                    if (state.length_left(&file) > 0 &&
-                        file.text[state.pos] == '=') {
-                        token->kind = TokenKind_RShiftEqual;
-                    }
-                    break;
-                default: break;
-                }
-            }
-            break;
-        }
-
-        case ':': {
-            state.pos++;
-            token->kind = TokenKind_Colon;
-            if (state.length_left(&file) > 0 && file.text[state.pos] == ':') {
-                state.pos++;
-                token->kind = TokenKind_ColonColon;
-            }
-            break;
-        }
-        case ';':
-            state.pos++;
-            token->kind = TokenKind_Semicolon;
-            break;
-        case '.':
-            state.pos++;
-            token->kind = TokenKind_Dot;
-            break;
-        case ',':
-            state.pos++;
-            token->kind = TokenKind_Comma;
-            break;
-        case '?':
-            state.pos++;
-            token->kind = TokenKind_Question;
-            break;
-
-        default: {
-            if (is_alpha(c)) {
-                // Identifier
-                size_t ident_length = 0;
-                while (state.length_left(&file, ident_length) > 0 &&
-                       is_alpha_num(file.text[state.pos + ident_length])) {
-                    ident_length++;
-                }
-
-                const char *ident_start = &file.text[state.pos];
-                String ident_str = String{ident_start, ident_length};
-
-                if (!compiler->keyword_map.get(ident_str, &token->kind)) {
-                    token->kind = TokenKind_Identifier;
-                    token->str = allocator->null_terminate(ident_str);
-                }
-
-                state.pos += ident_length;
-            } else if (c == '@' && is_alpha(file.text[state.pos + 1])) {
-                // Builtin Identifier
-                state.pos++;
-                size_t ident_length = 0;
-                while (state.length_left(&file, ident_length) > 0 &&
-                       is_alpha_num(file.text[state.pos + ident_length])) {
-                    ident_length++;
-                }
-
-                const char *ident_start = &file.text[state.pos];
-
-                token->kind = TokenKind_BuiltinIdentifier;
-                token->str = allocator->null_terminate(
-                    String{ident_start, ident_length});
-                state.pos += ident_length;
-            } else if (is_num(c)) {
-                if (state.length_left(&file) >= 3 &&
-                    file.text[state.pos] == '0' &&
-                    file.text[state.pos + 1] == 'x' &&
-                    is_hex(file.text[state.pos + 2])) {
-                    token->kind = TokenKind_IntLiteral;
-                    state.pos += 2;
-
-                    size_t number_length = 0;
-                    while (state.length_left(&file, number_length) > 0 &&
-                           is_hex(file.text[state.pos + number_length])) {
-                        number_length++;
-                    }
-
-                    const char *int_str = allocator->null_terminate(
-                        String{&file.text[state.pos], number_length});
-                    state.pos += number_length;
-                    token->int_ = strtol(int_str, NULL, 16);
-                } else {
-                    token->kind = TokenKind_IntLiteral;
-
-                    size_t number_length = 0;
-                    while (state.length_left(&file, number_length) > 0 &&
-                           is_num(file.text[state.pos + number_length])) {
-                        number_length++;
-                    }
-
-                    if (state.length_left(&file, number_length) > 1 &&
-                        file.text[state.pos + number_length] == '.' &&
-                        is_num(file.text[state.pos + number_length + 1])) {
-                        token->kind = TokenKind_FloatLiteral;
-                        number_length++;
-                    }
-
-                    while (state.length_left(&file, number_length) > 0 &&
-                           is_num(file.text[state.pos + number_length])) {
-                        number_length++;
-                    }
-
-                    switch (token->kind) {
-                    case TokenKind_IntLiteral: {
-                        const char *int_str = allocator->null_terminate(
-                            String{&file.text[state.pos], number_length});
-                        token->int_ = strtol(int_str, NULL, 10);
-                        break;
-                    }
-                    case TokenKind_FloatLiteral: {
-                        const char *float_str = allocator->null_terminate(
-                            String{&file.text[state.pos], number_length});
-                        token->float_ = strtod(float_str, NULL);
-                        break;
-                    }
-                    default: ACE_ASSERT(0); break;
-                    }
-
-                    state.pos += number_length;
-                }
-            } else {
-                token->kind = TokenKind_Error;
-                token->str = allocator->sprintf(
-                    "unknown token: '%c'", file.text[state.pos]);
-                state.pos++;
-            }
-            break;
-        }
-        }
-
-        token->loc.len = state.pos - token->loc.offset;
-        state.col += token->loc.len;
-
+    end:
         return state;
     }
 };
@@ -1045,10 +875,7 @@ static Expr parse_func_call_expr(Compiler *compiler, TokenizerState *state)
 
     Token next_token = {};
     state->next_token(compiler, &next_token);
-    while (next_token.kind == TokenKind_LBracket ||
-           next_token.kind == TokenKind_LParen ||
-           next_token.kind == TokenKind_Dot) {
-
+    while (1) {
         switch (next_token.kind) {
         case TokenKind_LBracket: {
             state->consume_token(compiler, TokenKind_LBracket);
@@ -1135,11 +962,13 @@ static Expr parse_func_call_expr(Compiler *compiler, TokenizerState *state)
 
             break;
         }
-        default: ACE_ASSERT(0);
+        default: goto end;
         }
 
         state->next_token(compiler, &next_token);
     }
+
+end:
 
     return expr;
 }
@@ -1797,6 +1626,249 @@ static void parse_top_level_decl(
     }
 }
 
+void init_parser_tables()
+{
+    for (size_t i = 'a'; i <= 'z'; ++i) {
+        EQ_CLASSES[i] = EqClass_Letter;
+    }
+    for (size_t i = 'A'; i <= 'Z'; ++i) {
+        EQ_CLASSES[i] = EqClass_Letter;
+    }
+    for (size_t i = '0'; i <= '9'; ++i) {
+        EQ_CLASSES[i] = EqClass_Digit;
+    }
+
+    EQ_CLASSES[(int)'.'] = EqClass_Dot;
+    EQ_CLASSES[(int)','] = EqClass_Comma;
+    EQ_CLASSES[(int)':'] = EqClass_Colon;
+    EQ_CLASSES[(int)';'] = EqClass_Semicolon;
+    EQ_CLASSES[(int)'('] = EqClass_LParen;
+    EQ_CLASSES[(int)')'] = EqClass_RParen;
+    EQ_CLASSES[(int)'['] = EqClass_LBracket;
+    EQ_CLASSES[(int)']'] = EqClass_RBracket;
+    EQ_CLASSES[(int)'{'] = EqClass_LCurly;
+    EQ_CLASSES[(int)'}'] = EqClass_RCurly;
+    EQ_CLASSES[(int)'&'] = EqClass_Ampersand;
+    EQ_CLASSES[(int)'|'] = EqClass_Pipe;
+    EQ_CLASSES[(int)'~'] = EqClass_Tilde;
+    EQ_CLASSES[(int)'^'] = EqClass_Caret;
+    EQ_CLASSES[(int)'!'] = EqClass_Exclam;
+    EQ_CLASSES[(int)'='] = EqClass_Equal;
+    EQ_CLASSES[(int)'<'] = EqClass_Less;
+    EQ_CLASSES[(int)'>'] = EqClass_Greater;
+    EQ_CLASSES[(int)'+'] = EqClass_Plus;
+    EQ_CLASSES[(int)'-'] = EqClass_Minus;
+    EQ_CLASSES[(int)'*'] = EqClass_Asterisk;
+    EQ_CLASSES[(int)'_'] = EqClass_Underscore;
+    EQ_CLASSES[(int)'\''] = EqClass_SingleQuote;
+    EQ_CLASSES[(int)'\"'] = EqClass_DoubleQuote;
+    EQ_CLASSES[(int)'/'] = EqClass_Slash;
+    EQ_CLASSES[(int)'\\'] = EqClass_BackSlash;
+    EQ_CLASSES[(int)'%'] = EqClass_Percent;
+    EQ_CLASSES[(int)'@'] = EqClass_At;
+    EQ_CLASSES[(int)'?'] = EqClass_Question;
+    EQ_CLASSES[(int)'\0'] = EqClass_EOF;
+    EQ_CLASSES[(int)' '] = EqClass_Whitespace;
+    EQ_CLASSES[(int)'\t'] = EqClass_Whitespace;
+    EQ_CLASSES[(int)'\n'] = EqClass_LineFeed;
+    EQ_CLASSES[(int)'\r'] = EqClass_CarriageReturn;
+
+    for (size_t i = 0; i < EqClass_COUNT; ++i) {
+        EQ_CLASS_COLCOUNT_AND_MASK[i] = 0xffffffff;
+    }
+    EQ_CLASS_COLCOUNT_AND_MASK[EqClass_LineFeed] = 0;
+    EQ_CLASS_COLCOUNT_OR_MASK[EqClass_LineFeed] = 1;
+    EQ_CLASS_LINE_INC[EqClass_LineFeed] = 1;
+
+    end_transition(State_UWhitespace, State_Whitespace);
+    TRANSITION[State_WhitespaceStart][EqClass_Whitespace] = State_UWhitespace;
+    TRANSITION[State_WhitespaceStart][EqClass_Slash] = State_UCommentSlash;
+    TRANSITION[State_UWhitespace][EqClass_Slash] = State_UCommentSlash;
+    TRANSITION[State_UCommentSlash][EqClass_Slash] = State_UCommentBody;
+    for (size_t i = 0; i < EqClass_COUNT; ++i) {
+        TRANSITION[State_UCommentBody][i] = State_UCommentBody;
+    }
+    TRANSITION[State_UCommentBody][EqClass_LineFeed] = State_UWhitespace;
+    TRANSITION[State_UCommentBody][EqClass_CarriageReturn] = State_UWhitespace;
+
+    TRANSITION[State_WhitespaceStart][EqClass_LineFeed] = State_UWhitespace;
+    TRANSITION[State_WhitespaceStart][EqClass_CarriageReturn] =
+        State_UWhitespace;
+    TRANSITION[State_UWhitespace][EqClass_Whitespace] = State_UWhitespace;
+    TRANSITION[State_UWhitespace][EqClass_LineFeed] = State_UWhitespace;
+    TRANSITION[State_UWhitespace][EqClass_CarriageReturn] = State_UWhitespace;
+
+    end_transition(State_UIdentifier, State_Identifier);
+    end_transition(State_UBuiltinIdentifier, State_BuiltinIdentifier);
+    end_transition(State_UIntLiteral, State_IntLiteral);
+    end_transition(State_UFloatLiteral, State_FloatLiteral);
+    end_transition(State_UClosedStringLiteral, State_StringLiteral);
+    end_transition(State_UDot, State_Dot);
+    end_transition(State_UNot, State_Not);
+    end_transition(State_UEqualEqual, State_EqualEqual);
+    end_transition(State_UNotEqual, State_NotEqual);
+    end_transition(State_ULess, State_Less);
+    end_transition(State_ULessEqual, State_LessEqual);
+    end_transition(State_UGreater, State_Greater);
+    end_transition(State_UGreaterEqual, State_GreaterEqual);
+    end_transition(State_UAssign, State_Assign);
+    end_transition(State_UArrow, State_Arrow);
+    end_transition(State_UBitAnd, State_BitAnd);
+    end_transition(State_UBitOr, State_BitOr);
+    end_transition(State_UBitNot, State_BitNot);
+    end_transition(State_UBitXor, State_BitXor);
+    end_transition(State_UBitAndEqual, State_BitAndEqual);
+    end_transition(State_UBitOrEqual, State_BitOrEqual);
+    end_transition(State_UBitNotEqual, State_BitNotEqual);
+    end_transition(State_UBitXorEqual, State_BitXorEqual);
+    end_transition(State_UAdd, State_Add);
+    end_transition(State_USub, State_Sub);
+    end_transition(State_UMul, State_Mul);
+    end_transition(State_UDiv, State_Div);
+    end_transition(State_UMod, State_Mod);
+    end_transition(State_UAddEqual, State_AddEqual);
+    end_transition(State_USubEqual, State_SubEqual);
+    end_transition(State_UMulEqual, State_MulEqual);
+    end_transition(State_UDivEqual, State_DivEqual);
+    end_transition(State_UModEqual, State_ModEqual);
+    end_transition(State_ULShift, State_LShift);
+    end_transition(State_URShift, State_RShift);
+    end_transition(State_ULShiftEqual, State_LShiftEqual);
+    end_transition(State_URShiftEqual, State_RShiftEqual);
+
+    TRANSITION[State_Start][EqClass_EOF] = State_EOF;
+
+    // Simple tokens
+    TRANSITION[State_Start][EqClass_LParen] = State_LParen;
+    TRANSITION[State_Start][EqClass_RParen] = State_RParen;
+    TRANSITION[State_Start][EqClass_LBracket] = State_LBracket;
+    TRANSITION[State_Start][EqClass_RBracket] = State_RBracket;
+    TRANSITION[State_Start][EqClass_LCurly] = State_LCurly;
+    TRANSITION[State_Start][EqClass_RCurly] = State_RCurly;
+    TRANSITION[State_Start][EqClass_Colon] = State_Colon;
+    TRANSITION[State_Start][EqClass_Comma] = State_Comma;
+    TRANSITION[State_Start][EqClass_Semicolon] = State_Semicolon;
+    TRANSITION[State_Start][EqClass_Question] = State_Question;
+
+    TRANSITION[State_Start][EqClass_Exclam] = State_UNot;
+    TRANSITION[State_Start][EqClass_Less] = State_ULess;
+    TRANSITION[State_Start][EqClass_Greater] = State_UGreater;
+    TRANSITION[State_Start][EqClass_Equal] = State_UAssign;
+    TRANSITION[State_Start][EqClass_Ampersand] = State_UBitAnd;
+    TRANSITION[State_Start][EqClass_Pipe] = State_UBitOr;
+    TRANSITION[State_Start][EqClass_Tilde] = State_UBitNot;
+    TRANSITION[State_Start][EqClass_Caret] = State_UBitXor;
+    TRANSITION[State_Start][EqClass_Asterisk] = State_UMul;
+    TRANSITION[State_Start][EqClass_Plus] = State_UAdd;
+    TRANSITION[State_Start][EqClass_Minus] = State_USub;
+    TRANSITION[State_Start][EqClass_Slash] = State_UDiv;
+    TRANSITION[State_Start][EqClass_Percent] = State_UMod;
+
+    TRANSITION[State_UNot][EqClass_Equal] = State_UNotEqual;
+    TRANSITION[State_ULess][EqClass_Equal] = State_ULessEqual;
+    TRANSITION[State_ULess][EqClass_Less] = State_ULShift;
+    TRANSITION[State_UGreater][EqClass_Greater] = State_URShift;
+    TRANSITION[State_UGreater][EqClass_Equal] = State_UGreaterEqual;
+    TRANSITION[State_UAssign][EqClass_Equal] = State_UEqualEqual;
+    TRANSITION[State_UAdd][EqClass_Equal] = State_UAddEqual;
+    TRANSITION[State_USub][EqClass_Equal] = State_USubEqual;
+    TRANSITION[State_UMul][EqClass_Equal] = State_UMulEqual;
+    TRANSITION[State_UDiv][EqClass_Equal] = State_UDivEqual;
+    TRANSITION[State_UMod][EqClass_Equal] = State_UModEqual;
+    TRANSITION[State_UBitAnd][EqClass_Equal] = State_UBitAndEqual;
+    TRANSITION[State_UBitOr][EqClass_Equal] = State_UBitOrEqual;
+    TRANSITION[State_UBitNot][EqClass_Equal] = State_UBitNotEqual;
+    TRANSITION[State_UBitXor][EqClass_Equal] = State_UBitXorEqual;
+    TRANSITION[State_ULShift][EqClass_Equal] = State_ULShiftEqual;
+    TRANSITION[State_URShift][EqClass_Equal] = State_URShiftEqual;
+
+    // Identifier token
+    TRANSITION[State_Start][EqClass_Letter] = State_UIdentifier;
+    TRANSITION[State_Start][EqClass_Underscore] = State_UIdentifier;
+    TRANSITION[State_UIdentifier][EqClass_Letter] = State_UIdentifier;
+    TRANSITION[State_UIdentifier][EqClass_Digit] = State_UIdentifier;
+    TRANSITION[State_UIdentifier][EqClass_Underscore] = State_UIdentifier;
+
+    // Builtin identifier token
+    TRANSITION[State_Start][EqClass_At] = State_UBuiltinIdentifier;
+    TRANSITION[State_UBuiltinIdentifier][EqClass_Letter] =
+        State_UBuiltinIdentifier;
+
+    // String literal token
+    TRANSITION[State_Start][EqClass_DoubleQuote] = State_UOpenStringLiteral;
+    for (size_t i = 0; i < EqClass_COUNT; ++i) {
+        TRANSITION[State_UOpenStringLiteral][i] = State_UOpenStringLiteral;
+    }
+    TRANSITION[State_UOpenStringLiteral][EqClass_EOF] = State_Error;
+    TRANSITION[State_UOpenStringLiteral][EqClass_BackSlash] =
+        State_UOpenStringLiteralSlashEscape;
+    TRANSITION[State_UOpenStringLiteral][EqClass_DoubleQuote] =
+        State_UClosedStringLiteral;
+    for (size_t i = 0; i < EqClass_COUNT; ++i) {
+        TRANSITION[State_UOpenStringLiteralSlashEscape][i] =
+            State_UOpenStringLiteral;
+    }
+
+    // Numeric literal tokens
+    TRANSITION[State_Start][EqClass_Digit] = State_UIntLiteral;
+    TRANSITION[State_UIntLiteral][EqClass_Digit] = State_UIntLiteral;
+    TRANSITION[State_UIntLiteral][EqClass_Dot] = State_UFloatLiteral;
+    TRANSITION[State_UFloatLiteral][EqClass_Digit] = State_UFloatLiteral;
+    TRANSITION[State_UFloatLiteral][EqClass_Dot] = State_Error;
+    TRANSITION[State_UDot][EqClass_Digit] = State_UFloatLiteral;
+    TRANSITION[State_Start][EqClass_Dot] = State_UDot;
+
+    STATE_TOKENS[State_Error] = TokenKind_Error;
+    STATE_TOKENS[State_Identifier] = TokenKind_Identifier;
+    STATE_TOKENS[State_BuiltinIdentifier] = TokenKind_BuiltinIdentifier;
+    STATE_TOKENS[State_StringLiteral] = TokenKind_StringLiteral;
+    STATE_TOKENS[State_IntLiteral] = TokenKind_IntLiteral;
+    STATE_TOKENS[State_FloatLiteral] = TokenKind_FloatLiteral;
+    STATE_TOKENS[State_Dot] = TokenKind_Dot;
+    STATE_TOKENS[State_Comma] = TokenKind_Comma;
+    STATE_TOKENS[State_Colon] = TokenKind_Colon;
+    STATE_TOKENS[State_Semicolon] = TokenKind_Semicolon;
+    STATE_TOKENS[State_LParen] = TokenKind_LParen;
+    STATE_TOKENS[State_RParen] = TokenKind_RParen;
+    STATE_TOKENS[State_LBracket] = TokenKind_LBracket;
+    STATE_TOKENS[State_RBracket] = TokenKind_RBracket;
+    STATE_TOKENS[State_LCurly] = TokenKind_LCurly;
+    STATE_TOKENS[State_RCurly] = TokenKind_RCurly;
+    STATE_TOKENS[State_Not] = TokenKind_Not;
+    STATE_TOKENS[State_Question] = TokenKind_Question;
+    STATE_TOKENS[State_BitAnd] = TokenKind_BitAnd;
+    STATE_TOKENS[State_BitOr] = TokenKind_BitOr;
+    STATE_TOKENS[State_BitNot] = TokenKind_BitNot;
+    STATE_TOKENS[State_BitXor] = TokenKind_BitXor;
+    STATE_TOKENS[State_Mul] = TokenKind_Mul;
+    STATE_TOKENS[State_Add] = TokenKind_Add;
+    STATE_TOKENS[State_Sub] = TokenKind_Sub;
+    STATE_TOKENS[State_Div] = TokenKind_Div;
+    STATE_TOKENS[State_Mod] = TokenKind_Mod;
+    STATE_TOKENS[State_BitAndEqual] = TokenKind_BitAndEqual;
+    STATE_TOKENS[State_BitOrEqual] = TokenKind_BitOrEqual;
+    STATE_TOKENS[State_BitNotEqual] = TokenKind_BitNotEqual;
+    STATE_TOKENS[State_BitXorEqual] = TokenKind_BitXorEqual;
+    STATE_TOKENS[State_MulEqual] = TokenKind_MulEqual;
+    STATE_TOKENS[State_AddEqual] = TokenKind_AddEqual;
+    STATE_TOKENS[State_SubEqual] = TokenKind_SubEqual;
+    STATE_TOKENS[State_DivEqual] = TokenKind_DivEqual;
+    STATE_TOKENS[State_ModEqual] = TokenKind_ModEqual;
+    STATE_TOKENS[State_EqualEqual] = TokenKind_EqualEqual;
+    STATE_TOKENS[State_NotEqual] = TokenKind_NotEqual;
+    STATE_TOKENS[State_Less] = TokenKind_Less;
+    STATE_TOKENS[State_LessEqual] = TokenKind_LessEqual;
+    STATE_TOKENS[State_Greater] = TokenKind_Greater;
+    STATE_TOKENS[State_GreaterEqual] = TokenKind_GreaterEqual;
+    STATE_TOKENS[State_LShift] = TokenKind_LShift;
+    STATE_TOKENS[State_RShift] = TokenKind_RShift;
+    STATE_TOKENS[State_LShiftEqual] = TokenKind_LShiftEqual;
+    STATE_TOKENS[State_RShiftEqual] = TokenKind_RShiftEqual;
+    STATE_TOKENS[State_Arrow] = TokenKind_Arrow;
+    STATE_TOKENS[State_Assign] = TokenKind_Equal;
+    STATE_TOKENS[State_EOF] = TokenKind_EOF;
+}
+
 void parse_file(Compiler *compiler, FileRef file_ref)
 {
     ZoneScoped;
@@ -1804,16 +1876,29 @@ void parse_file(Compiler *compiler, FileRef file_ref)
     File file = compiler->files[file_ref.id];
     file.top_level_decls.reserve(512);
 
-    TokenizerState state = TokenizerState::create(file_ref);
+    TokenizerState state =
+        TokenizerState::create(file_ref, file.text.ptr, file.text.len);
+
+    /* Token token = {}; */
+    /* size_t token_count = 0; */
+    /* while (token.kind != TokenKind_EOF) { */
+    /*     state = state.next_token(compiler, &token); */
+    /*     token_count++; */
+    /* } */
+    /* printf("Got %zu tokens\n", token_count); */
+
+    /* exit(1); */
+
     while (1) {
         Token token = {};
         state.next_token(compiler, &token);
         if (token.kind == TokenKind_Error) {
+            ace::String token_string = token_to_string(compiler, token);
             compiler->add_error(
                 token.loc,
                 "unexpected token: '%.*s'",
-                (int)token.str.len,
-                token.str.ptr);
+                (int)token_string.len,
+                token_string.ptr);
             compiler->halt_compilation();
         }
 

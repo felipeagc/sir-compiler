@@ -86,17 +86,12 @@ enum TokenKind {
     TokenKind_RCurly,
 
     TokenKind_Colon,
-    TokenKind_ColonColon,
     TokenKind_Comma,
-    TokenKind_Underscore,
     TokenKind_Dot,
     TokenKind_Semicolon,
     TokenKind_Question,
 
     TokenKind_Equal,
-
-    TokenKind_And,
-    TokenKind_Or,
 
     TokenKind_Add,
     TokenKind_Sub,
@@ -151,6 +146,8 @@ enum TokenKind {
     TokenKind_Break,
     TokenKind_Continue,
     TokenKind_Return,
+    TokenKind_And,
+    TokenKind_Or,
     TokenKind_Void,
     TokenKind_Bool,
     TokenKind_True,
@@ -602,6 +599,7 @@ struct Compiler {
     void compile(ace::String path);
 };
 
+void init_parser_tables();
 void parse_file(Compiler *compiler, FileRef file_ref);
 void analyze_file(Compiler *compiler, FileRef file_ref);
 void codegen_file(Compiler *compiler, FileRef file_ref);

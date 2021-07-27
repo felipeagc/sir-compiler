@@ -9,6 +9,7 @@
 #include <new>
 #include <initializer_list>
 #include <Tracy.hpp>
+#include "stb_sprintf.h"
 
 namespace ace {
 
@@ -177,6 +178,7 @@ struct Allocator {
 
     template <typename T> void free(T *ptr)
     {
+        ZoneScoped;
         this->free_bytes((void *)ptr);
     }
 
@@ -203,6 +205,8 @@ struct Allocator {
 
     String clone(const String &str)
     {
+        ZoneScoped;
+
         if (!str.ptr) return {};
 
         String new_str;
@@ -216,17 +220,19 @@ struct Allocator {
     ACE_PRINTF_FORMATTING(2, 3)
     String sprintf(const char *fmt, ...)
     {
+        ZoneScoped;
+
         String str;
 
         va_list args;
         va_start(args, fmt);
-        str.len = vsnprintf(NULL, 0, fmt, args);
+        str.len = stbsp_vsnprintf(NULL, 0, fmt, args);
         va_end(args);
 
         str.ptr = (char *)this->alloc_bytes(str.len + 1);
 
         va_start(args, fmt);
-        vsnprintf(str.ptr, str.len + 1, fmt, args);
+        stbsp_vsnprintf(str.ptr, str.len + 1, fmt, args);
         va_end(args);
 
         str.ptr[str.len] = '\0';
@@ -236,16 +242,18 @@ struct Allocator {
 
     String vsprintf(const char *fmt, va_list args)
     {
+        ZoneScoped;
+
         String str;
 
         va_list args_copy;
         va_copy(args_copy, args);
-        str.len = vsnprintf(NULL, 0, fmt, args_copy);
+        str.len = stbsp_vsnprintf(NULL, 0, fmt, args_copy);
         va_end(args_copy);
 
         str.ptr = (char *)this->alloc_bytes(str.len + 1);
 
-        vsnprintf(str.ptr, str.len + 1, fmt, args);
+        stbsp_vsnprintf(str.ptr, str.len + 1, fmt, args);
 
         str.ptr[str.len] = '\0';
 
@@ -254,6 +262,8 @@ struct Allocator {
 
     const char *null_terminate(const String &str)
     {
+        ZoneScoped;
+
         char *result = (char *)this->alloc_bytes(str.len + 1);
         memcpy(result, str.ptr, str.len);
         result[str.len] = '\0';
@@ -270,16 +280,19 @@ struct MallocAllocator : Allocator {
 
     virtual void *alloc_bytes(size_t size) override
     {
+        ZoneScoped;
         return ::malloc(size);
     }
 
     virtual void *realloc_bytes(void *ptr, size_t size) override
     {
+        ZoneScoped;
         return ::realloc(ptr, size);
     }
 
     virtual void free_bytes(void *ptr) override
     {
+        ZoneScoped;
         ::free(ptr);
     }
 };
@@ -669,7 +682,7 @@ struct StringBuilder {
 
         va_list args;
         va_start(args, fmt);
-        size_t str_len = vsnprintf(NULL, 0, fmt, args);
+        size_t str_len = stbsp_vsnprintf(NULL, 0, fmt, args);
         va_end(args);
 
         size_t old_arr_len = this->array.len;
@@ -677,7 +690,7 @@ struct StringBuilder {
         this->array.resize(old_arr_len + str_len);
 
         va_start(args, fmt);
-        vsnprintf(&this->array.ptr[old_arr_len], str_len + 1, fmt, args);
+        stbsp_vsnprintf(&this->array.ptr[old_arr_len], str_len + 1, fmt, args);
         va_end(args);
     }
 };

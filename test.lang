@@ -1,13 +1,7 @@
 def extern vararg printf(_: *u8);
 
-def export main(): i32 {
-	// arr: [32]i32;
-	// a := arr[0];
-	s: struct {
-		a i64,
-		b i64,
-	};
-	s.a = 123;
-	s.b = 123;
-	return 0;
+// Comment
+
+def main() {
+	printf("hello\"\n");
 }

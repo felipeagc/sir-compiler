@@ -357,25 +357,16 @@ Module *Module::create(TargetArch target_arch, Endianness endianness)
 {
     auto parent_allocator = MallocAllocator::get_instance();
 
-    const size_t expected_inst_count = 262144;
-    const size_t expected_function_count = 65536;
-    const size_t expected_type_count = 1024;
-    const size_t expected_global_count = 2048;
-
-    auto arena = ArenaAllocator::create(parent_allocator, 1 << 24);
+    auto arena = ArenaAllocator::create(parent_allocator);
     auto insts = Array<Inst>::create(MallocAllocator::get_instance());
     auto globals = Array<InstRef>::create(MallocAllocator::get_instance());
     auto functions = Array<InstRef>::create(MallocAllocator::get_instance());
     auto function_map = StringMap<InstRef>::create(
-        MallocAllocator::get_instance(), expected_function_count);
+        MallocAllocator::get_instance());
     auto global_string_map = StringMap<InstRef>::create(
-        MallocAllocator::get_instance(), expected_global_count);
+        MallocAllocator::get_instance());
     auto type_map = StringMap<Type *>::create(
-        MallocAllocator::get_instance(), expected_type_count);
-
-    insts.reserve(expected_inst_count);
-    functions.reserve(expected_function_count);
-    globals.reserve(expected_global_count);
+        MallocAllocator::get_instance());
 
     insts.push_back({}); // 0th inst
 

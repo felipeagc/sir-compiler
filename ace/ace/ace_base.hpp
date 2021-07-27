@@ -29,7 +29,7 @@ namespace ace {
 
 #define ACE_ROUND_UP(to, x) ((((x) + (to)-1) / (to)) * (to))
 
-#define ACE_CARRAY_LENGTH(arr) (sizeof(arr)/sizeof(arr[0]))
+#define ACE_CARRAY_LENGTH(arr) (sizeof(arr) / sizeof(arr[0]))
 
 #define ACE_STR(x) #x
 
@@ -174,6 +174,18 @@ struct Allocator {
             static_cast<T *>(this->alloc_bytes(sizeof(T) * len)),
             len,
         };
+    }
+
+    template <typename T> Slice<T> alloc_init(size_t len)
+    {
+        Slice<T> slice = {
+            static_cast<T *>(this->alloc_bytes(sizeof(T) * len)),
+            len,
+        };
+        for (size_t i = 0; i < len; ++i) {
+            new (&slice.ptr[i]) T();
+        }
+        return slice;
     }
 
     template <typename T> void free(T *ptr)
@@ -642,7 +654,8 @@ struct StringBuilder {
     }
 
     ACE_INLINE
-    void reset() {
+    void reset()
+    {
         this->array.len = 0;
     }
 
@@ -695,16 +708,31 @@ struct StringBuilder {
     }
 };
 
+static const int log2_tab64[64] = {
+    63, 0,  58, 1,  59, 47, 53, 2,  60, 39, 48, 27, 54, 33, 42, 3,
+    61, 51, 37, 40, 49, 18, 28, 20, 55, 30, 34, 11, 43, 14, 22, 4,
+    62, 57, 46, 52, 38, 26, 32, 41, 50, 36, 17, 19, 29, 10, 13, 21,
+    56, 45, 25, 31, 35, 16, 9,  12, 44, 24, 15, 8,  23, 7,  6,  5};
+
+ACE_INLINE static int log2_64(uint64_t value)
+{
+    value |= value >> 1;
+    value |= value >> 2;
+    value |= value >> 4;
+    value |= value >> 8;
+    value |= value >> 16;
+    value |= value >> 32;
+    return log2_tab64
+        [((uint64_t)((value - (value >> 1)) * 0x07EDD5E59A4E28C2)) >> 58];
+}
+
 template <typename T> struct StringMap {
-    struct Slot {
-        String key;
-        uint64_t hash;
-        T value;
-    };
+    Allocator *allocator;
+    size_t size;
+    String *keys;
+    uint64_t *hashes;
+    T *values;
 
-    Array<List<Slot>> slot_lists;
-
-  private:
     ACE_INLINE static uint64_t string_hash(const char *string, size_t len)
     {
         uint64_t hash = 14695981039346656037ULL;
@@ -714,8 +742,7 @@ template <typename T> struct StringMap {
         return hash;
     }
 
-  public:
-    static StringMap create(Allocator *allocator, size_t size)
+    static StringMap create(Allocator *allocator, size_t size = 16)
     {
         // Round size to next power of 2
         size -= 1;
@@ -727,21 +754,44 @@ template <typename T> struct StringMap {
         size |= size >> 32;
         size += 1;
 
-        StringMap map;
-        map.slot_lists = Array<List<Slot>>::create(allocator);
-        map.slot_lists.resize(size);
-        for (auto &slot_list : map.slot_lists) {
-            slot_list = List<Slot>::create(allocator);
-        }
+        StringMap map = {};
+        map.allocator = allocator;
+        map.size = size;
+        map.keys = allocator->alloc_init<String>(map.size).ptr;
+        map.hashes = allocator->alloc<uint64_t>(map.size).ptr;
+        map.values = allocator->alloc<T>(map.size).ptr;
+
         return map;
     }
 
     void destroy()
     {
-        for (auto &slot_list : this->slot_lists) {
-            slot_list.destroy();
+        this->allocator->free(this->keys);
+        this->allocator->free(this->hashes);
+        this->allocator->free(this->values);
+        this->size = 0;
+        this->keys = nullptr;
+        this->hashes = nullptr;
+        this->values = nullptr;
+    }
+
+    void grow()
+    {
+        StringMap<T> new_map =
+            StringMap<T>::create(this->allocator, this->size * 2);
+
+        for (size_t i = 0; i < this->size; ++i) {
+            if (this->keys[i].ptr) {
+                T value;
+                bool got_value = this->get(this->keys[i], &value);
+                ACE_ASSERT(got_value);
+
+                new_map.set(this->keys[i], value);
+            }
         }
-        this->slot_lists.destroy();
+
+        this->destroy();
+        *this = new_map;
     }
 
     void set(String key, const T &value)
@@ -751,21 +801,29 @@ template <typename T> struct StringMap {
         if (key.len == 0) return;
 
         uint64_t hash = string_hash(key.ptr, key.len);
-        uint64_t i = hash & (this->slot_lists.len - 1); // fast modulo 2
 
-        Slot slot = {key, hash, value};
+    start:
+        uint64_t i = hash & (this->size - 1); // fast modulo for powers of 2
 
-        List<Slot> *slot_list = &this->slot_lists[i];
-        for (auto &existing_slot_node : *slot_list) {
-            auto existing_slot = &existing_slot_node.value;
-            if (slot.hash == existing_slot->hash &&
-                slot.key == existing_slot->key) {
-                existing_slot->value = value;
-                return;
-            }
+        size_t iters = 0;
+        size_t max_iters = log2_64(this->size);
+
+        while (this->keys[i].ptr != nullptr &&
+               (this->hashes[i] != hash || this->keys[i] != key)) {
+            iters++;
+            if (iters > max_iters) break;
+
+            i = (i + 1) & (this->size - 1); // fast modulo for powers of 2
         }
 
-        slot_list->push_back(slot);
+        if (iters > max_iters) {
+            this->grow();
+            goto start;
+        }
+
+        this->keys[i] = key;
+        this->hashes[i] = hash;
+        this->values[i] = value;
     }
 
     bool get(String key, T *out_value = nullptr)
@@ -775,38 +833,48 @@ template <typename T> struct StringMap {
         if (key.len == 0) return false;
 
         uint64_t hash = string_hash(key.ptr, key.len);
-        uint64_t i = hash & (this->slot_lists.len - 1); // fast modulo 2
 
-        List<Slot> *slot_list = &this->slot_lists[i];
-        for (auto &existing_slot_node : *slot_list) {
-            auto existing_slot = &existing_slot_node.value;
-            if (hash == existing_slot->hash && key == existing_slot->key) {
-                if (out_value) *out_value = existing_slot->value;
-                return true;
-            }
+        uint64_t i = hash & (this->size - 1); // fast modulo for powers of 2
+
+        size_t iters = 0;
+        size_t max_iters = log2_64(this->size);
+
+        while (this->keys[i].ptr == nullptr || this->hashes[i] != hash ||
+               this->keys[i] != key) {
+            iters++;
+            if (iters > max_iters) break;
+
+            i = (i + 1) & (this->size - 1); // fast modulo for powers of 2
         }
 
-        return false;
-    }
-
-    void remove(String key)
-    {
-        ZoneScoped;
-
-        if (key.len == 0) return;
-
-        uint64_t hash = string_hash(key.ptr, key.len);
-        uint64_t i = hash & (this->slot_lists.len - 1); // fast modulo 2
-
-        List<Slot> *slot_list = &this->slot_lists[i];
-        for (auto &existing_slot_node : *slot_list) {
-            auto existing_slot = &existing_slot_node.value;
-            if (hash == existing_slot->hash && key == existing_slot->key) {
-                slot_list->remove(&existing_slot_node);
-                return;
-            }
+        if (iters > max_iters) {
+            return false;
         }
+
+        if (out_value) *out_value = this->values[i];
+
+        return true;
     }
+
+    /* void remove(String key) */
+    /* { */
+    /*     ZoneScoped; */
+
+    /*     if (key.len == 0) return; */
+
+    /*     uint64_t hash = string_hash(key.ptr, key.len); */
+    /*     uint64_t i = hash & (this->slot_lists.len - 1); // fast modulo 2 */
+
+    /*     List<Slot> *slot_list = &this->slot_lists[i]; */
+    /*     for (auto &existing_slot_node : *slot_list) { */
+    /*         auto existing_slot = &existing_slot_node.value; */
+    /*         if (hash == existing_slot->hash && key == existing_slot->key) {
+     */
+    /*             slot_list->remove(&existing_slot_node); */
+    /*             return; */
+    /*         } */
+    /*     } */
+    /* } */
 };
 
 } // namespace ace

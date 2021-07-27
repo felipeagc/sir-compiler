@@ -52,7 +52,7 @@ Scope *Scope::create(Compiler *compiler, FileRef file_ref, Scope *parent)
 
     scope->file_ref = file_ref;
     scope->parent = parent;
-    scope->decl_refs = ace::StringMap<DeclRef>::create(compiler->arena, 32);
+    scope->decl_refs = ace::StringMap<DeclRef>::create(compiler->arena);
 
     return scope;
 }
@@ -95,48 +95,38 @@ Compiler Compiler::create()
 {
     init_parser_tables();
 
-    ace::ArenaAllocator *arena = ace::ArenaAllocator::create(
-        ace::MallocAllocator::get_instance(), 1 << 24);
+    ace::ArenaAllocator *arena =
+        ace::ArenaAllocator::create(ace::MallocAllocator::get_instance());
 
     ace::StringMap<TokenKind> keyword_map =
-        ace::StringMap<TokenKind>::create(arena, 32);
+        ace::StringMap<TokenKind>::create(ace::MallocAllocator::get_instance());
     ace::StringMap<BuiltinFunction> builtin_function_map =
-        ace::StringMap<BuiltinFunction>::create(arena, 32);
+        ace::StringMap<BuiltinFunction>::create(
+            ace::MallocAllocator::get_instance());
     ace::Array<Error> errors = ace::Array<Error>::create(arena);
-    errors.reserve(64);
 
     ace::StringBuilder sb =
         ace::StringBuilder::create(ace::MallocAllocator::get_instance());
 
     ace::Array<File> files =
         ace::Array<File>::create(ace::MallocAllocator::get_instance());
-    files.reserve(64);
     files.push_back({}); // 0th file
 
-    const size_t expected_type_count = 2048;
-    const size_t expected_decl_count = 2048;
-    const size_t expected_stmt_count = 16384;
-    const size_t expected_expr_count = 65536;
-
-    ace::StringMap<TypeRef> type_map = ace::StringMap<TypeRef>::create(
-        ace::MallocAllocator::get_instance(), expected_type_count);
+    ace::StringMap<TypeRef> type_map =
+        ace::StringMap<TypeRef>::create(ace::MallocAllocator::get_instance());
     ace::Array<Type> types =
         ace::Array<Type>::create(ace::MallocAllocator::get_instance());
-    types.reserve(expected_type_count);
 
     ace::Array<Decl> decls =
         ace::Array<Decl>::create(ace::MallocAllocator::get_instance());
-    decls.reserve(expected_decl_count);
     decls.push_back({}); // 0th decl
 
     ace::Array<Stmt> stmts =
         ace::Array<Stmt>::create(ace::MallocAllocator::get_instance());
-    stmts.reserve(expected_stmt_count);
     stmts.push_back({}); // 0th decl
 
     ace::Array<Expr> exprs =
         ace::Array<Expr>::create(ace::MallocAllocator::get_instance());
-    exprs.reserve(expected_expr_count);
     exprs.push_back({}); // 0th expr
 
     keyword_map.set("extern", TokenKind_Extern);
@@ -331,6 +321,7 @@ void Compiler::destroy()
     this->decls.destroy();
     this->type_map.destroy();
     this->types.destroy();
+    this->files.destroy();
 
     this->sb.destroy();
     this->errors.destroy();

@@ -217,7 +217,7 @@ static void elf_init_section(
     }
 
     if (section->header.sh_type != Elf64SectionType_Null) {
-        section->data.reserve(1 << 20);
+        /* section->data.reserve(1 << 20); */
         section->header.sh_name =
             elf_add_string(builder, builder->shstrtab_index, name);
     }

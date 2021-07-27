@@ -1874,7 +1874,6 @@ void parse_file(Compiler *compiler, FileRef file_ref)
     ZoneScoped;
 
     File file = compiler->files[file_ref.id];
-    file.top_level_decls.reserve(512);
 
     TokenizerState state =
         TokenizerState::create(file_ref, file.text.ptr, file.text.len);

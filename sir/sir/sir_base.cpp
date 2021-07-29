@@ -1,11 +1,9 @@
-#include "ace_base.hpp"
+#include "sir_base.hpp"
 
-using namespace ace;
-
-ArenaAllocator::Chunk *
-ArenaAllocator::Chunk::create(ArenaAllocator *arena, Chunk *prev, size_t size)
+SIRArenaAllocator::Chunk *
+SIRArenaAllocator::Chunk::create(SIRArenaAllocator *arena, Chunk *prev, size_t size)
 {
-    ArenaAllocator::Chunk *chunk = arena->parent->alloc<Chunk>();
+    SIRArenaAllocator::Chunk *chunk = arena->parent->alloc<Chunk>();
     new (chunk) Chunk();
     chunk->prev = prev;
     chunk->ptr = (char *)arena->parent->alloc_bytes(size);
@@ -14,24 +12,24 @@ ArenaAllocator::Chunk::create(ArenaAllocator *arena, Chunk *prev, size_t size)
     return chunk;
 }
 
-void ArenaAllocator::Chunk::destroy(ArenaAllocator *arena)
+void SIRArenaAllocator::Chunk::destroy(SIRArenaAllocator *arena)
 {
     arena->parent->free(this->ptr);
     arena->parent->free(this);
 }
 
-ArenaAllocator *ArenaAllocator::create(Allocator *parent, size_t size)
+SIRArenaAllocator *SIRArenaAllocator::create(SIRAllocator *parent, size_t size)
 {
-    ACE_ASSERT(parent);
+    SIR_ASSERT(parent);
 
-    ArenaAllocator *arena = parent->alloc<ArenaAllocator>();
-    new (arena) ArenaAllocator();
+    SIRArenaAllocator *arena = parent->alloc<SIRArenaAllocator>();
+    new (arena) SIRArenaAllocator();
     arena->parent = parent;
     arena->last_chunk = Chunk::create(arena, nullptr, size);
     return arena;
 }
 
-void ArenaAllocator::destroy()
+void SIRArenaAllocator::destroy()
 {
     Chunk *chunk = this->last_chunk;
     while (chunk) {
@@ -42,7 +40,7 @@ void ArenaAllocator::destroy()
     this->parent->free(this);
 }
 
-void *ArenaAllocator::alloc_bytes(size_t size)
+void *SIRArenaAllocator::alloc_bytes(size_t size)
 {
     ZoneScoped;
 
@@ -72,7 +70,7 @@ void *ArenaAllocator::alloc_bytes(size_t size)
     return (void *)ptr;
 }
 
-void *ArenaAllocator::realloc_bytes(void *ptr, size_t size)
+void *SIRArenaAllocator::realloc_bytes(void *ptr, size_t size)
 {
     ZoneScoped;
 
@@ -88,7 +86,7 @@ void *ArenaAllocator::realloc_bytes(void *ptr, size_t size)
     }
 }
 
-void ArenaAllocator::free_bytes(void *ptr)
+void SIRArenaAllocator::free_bytes(void *ptr)
 {
     ZoneScoped;
     (void)ptr;

@@ -11,51 +11,49 @@
 #include <Tracy.hpp>
 #include "stb_sprintf.h"
 
-namespace ace {
-
 #if defined(_MSC_VER)
-#define ACE_INLINE __forceinline
+#define SIR_INLINE __forceinline
 #elif defined(__clang__) || defined(__GNUC__)
-#define ACE_INLINE __attribute__((always_inline)) __attribute__((unused)) inline
+#define SIR_INLINE __attribute__((always_inline)) __attribute__((unused)) inline
 #else
-#define ACE_INLINE inline
+#define SIR_INLINE inline
 #endif
 
 #ifdef __GNUC__
-#define ACE_PRINTF_FORMATTING(x, y) __attribute__((format(printf, x, y)))
+#define SIR_PRINTF_FORMATTING(x, y) __attribute__((format(printf, x, y)))
 #else
-#define ACE_PRINTF_FORMATTING(x, y)
+#define SIR_PRINTF_FORMATTING(x, y)
 #endif
 
-#define ACE_ROUND_UP(to, x) ((((x) + (to)-1) / (to)) * (to))
+#define SIR_ROUND_UP(to, x) ((((x) + (to)-1) / (to)) * (to))
 
-#define ACE_CARRAY_LENGTH(arr) (sizeof(arr) / sizeof(arr[0]))
+#define SIR_CARRAY_LENGTH(arr) (sizeof(arr) / sizeof(arr[0]))
 
-#define ACE_STR(x) #x
+#define SIR_STR(x) #x
 
-#define ACE_ASSERT(x)                                                          \
+#define SIR_ASSERT(x)                                                          \
     do {                                                                       \
         if (!(x)) {                                                            \
             fprintf(                                                           \
                 stderr,                                                        \
                 "ACE assertion failure: '%s' at %s:%d\n",                      \
-                ACE_STR(x),                                                    \
+                SIR_STR(x),                                                    \
                 __FILE__,                                                      \
                 __LINE__);                                                     \
             abort();                                                           \
         }                                                                      \
     } while (0)
 
-template <typename T> struct Slice {
+template <typename T> struct SIRSlice {
     T *ptr = nullptr;
     size_t len = 0;
 
-    Slice() : ptr(nullptr), len(0) {}
+    SIRSlice() : ptr(nullptr), len(0) {}
 
-    Slice(T *ptr, size_t len) : ptr(ptr), len(len) {}
+    SIRSlice(T *ptr, size_t len) : ptr(ptr), len(len) {}
 
     template <size_t N>
-    Slice(T (&arr)[N]) : ptr(&arr[0]), len(sizeof(arr) / sizeof(arr[0]))
+    SIRSlice(T (&arr)[N]) : ptr(&arr[0]), len(sizeof(arr) / sizeof(arr[0]))
     {
     }
 
@@ -63,7 +61,7 @@ template <typename T> struct Slice {
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Winit-list-lifetime"
 #endif
-    Slice(const std::initializer_list<T> &list)
+    SIRSlice(const std::initializer_list<T> &list)
         : ptr(list.begin() == list.end() ? nullptr : (T *)list.begin()),
           len(list.size())
     {
@@ -74,13 +72,13 @@ template <typename T> struct Slice {
 
     T &operator[](size_t index)
     {
-        ACE_ASSERT(index < this->len);
+        SIR_ASSERT(index < this->len);
         return this->ptr[index];
     }
 
     const T &operator[](size_t index) const
     {
-        ACE_ASSERT(index < this->len);
+        SIR_ASSERT(index < this->len);
         return this->ptr[index];
     }
 
@@ -95,23 +93,23 @@ template <typename T> struct Slice {
     }
 };
 
-struct String {
+struct SIRString {
     char *ptr = nullptr;
     size_t len = 0;
 
-    String()
+    SIRString()
     {
         this->ptr = 0;
         this->len = 0;
     }
 
-    String(const char *str)
+    SIRString(const char *str)
     {
         this->ptr = (char *)str;
         this->len = strlen(str);
     }
 
-    String(const char *str, size_t len)
+    SIRString(const char *str, size_t len)
     {
         this->ptr = (char *)str;
         this->len = len;
@@ -119,18 +117,18 @@ struct String {
 
     char &operator[](size_t index) const
     {
-        ACE_ASSERT(index < this->len);
+        SIR_ASSERT(index < this->len);
         return this->ptr[index];
     }
 
-    bool operator==(const String &other) const
+    bool operator==(const SIRString &other) const
     {
         ZoneScoped;
         if (this->len != other.len) return false;
         return (memcmp(this->ptr, other.ptr, this->len) == 0);
     }
 
-    bool operator!=(const String &other) const
+    bool operator!=(const SIRString &other) const
     {
         ZoneScoped;
         if (this->len != other.len) return true;
@@ -148,7 +146,7 @@ struct String {
     }
 };
 
-struct Allocator {
+struct SIRAllocator {
     virtual void *alloc_bytes(size_t size) = 0;
     virtual void *realloc_bytes(void *ptr, size_t size) = 0;
     virtual void free_bytes(void *ptr) = 0;
@@ -170,17 +168,17 @@ struct Allocator {
         return static_cast<T *>(this->realloc_bytes(ptr, sizeof(T) * count));
     }
 
-    template <typename T> Slice<T> alloc(size_t len)
+    template <typename T> SIRSlice<T> alloc(size_t len)
     {
-        return Slice<T>{
+        return SIRSlice<T>{
             static_cast<T *>(this->alloc_bytes(sizeof(T) * len)),
             len,
         };
     }
 
-    template <typename T> Slice<T> alloc_init(size_t len)
+    template <typename T> SIRSlice<T> alloc_init(size_t len)
     {
-        Slice<T> slice = {
+        SIRSlice<T> slice = {
             static_cast<T *>(this->alloc_bytes(sizeof(T) * len)),
             len,
         };
@@ -196,34 +194,34 @@ struct Allocator {
         this->free_bytes((void *)ptr);
     }
 
-    template <typename T> void free(const Slice<T> &slice)
+    template <typename T> void free(const SIRSlice<T> &slice)
     {
         this->free_bytes(slice.ptr);
     }
 
-    void free(const String &str)
+    void free(const SIRString &str)
     {
         this->free_bytes(str.ptr);
     }
 
-    template <typename T> Slice<T> clone(const Slice<T> &slice)
+    template <typename T> SIRSlice<T> clone(const SIRSlice<T> &slice)
     {
         if (!slice.ptr) return {};
 
-        Slice<T> new_slice;
+        SIRSlice<T> new_slice;
         new_slice.ptr = (T *)this->alloc_bytes(sizeof(T) * slice.len);
         new_slice.len = slice.len;
         memcpy((void *)new_slice.ptr, (void *)slice.ptr, sizeof(T) * slice.len);
         return new_slice;
     }
 
-    String clone(const String &str)
+    SIRString clone(const SIRString &str)
     {
         ZoneScoped;
 
         if (!str.ptr) return {};
 
-        String new_str;
+        SIRString new_str;
         new_str.ptr = (char *)this->alloc_bytes(str.len + 1);
         new_str.len = str.len;
         memcpy(new_str.ptr, str.ptr, str.len);
@@ -231,12 +229,12 @@ struct Allocator {
         return new_str;
     }
 
-    ACE_PRINTF_FORMATTING(2, 3)
-    String sprintf(const char *fmt, ...)
+    SIR_PRINTF_FORMATTING(2, 3)
+    SIRString sprintf(const char *fmt, ...)
     {
         ZoneScoped;
 
-        String str;
+        SIRString str;
 
         va_list args;
         va_start(args, fmt);
@@ -254,11 +252,11 @@ struct Allocator {
         return str;
     }
 
-    String vsprintf(const char *fmt, va_list args)
+    SIRString vsprintf(const char *fmt, va_list args)
     {
         ZoneScoped;
 
-        String str;
+        SIRString str;
 
         va_list args_copy;
         va_copy(args_copy, args);
@@ -274,7 +272,7 @@ struct Allocator {
         return str;
     }
 
-    const char *null_terminate(const String &str)
+    const char *null_terminate(const SIRString &str)
     {
         ZoneScoped;
 
@@ -285,10 +283,10 @@ struct Allocator {
     }
 };
 
-struct MallocAllocator : Allocator {
-    static MallocAllocator *get_instance()
+struct SIRMallocAllocator : SIRAllocator {
+    static SIRMallocAllocator *get_instance()
     {
-        static MallocAllocator instance{};
+        static SIRMallocAllocator instance{};
         return &instance;
     }
 
@@ -311,7 +309,7 @@ struct MallocAllocator : Allocator {
     }
 };
 
-struct ArenaAllocator : Allocator {
+struct SIRArenaAllocator : SIRAllocator {
   private:
     struct Chunk {
         struct Chunk *prev;
@@ -319,15 +317,15 @@ struct ArenaAllocator : Allocator {
         size_t size;
         size_t offset;
 
-        static Chunk *create(ArenaAllocator *arena, Chunk *prev, size_t size);
-        void destroy(ArenaAllocator *arena);
+        static Chunk *create(SIRArenaAllocator *arena, Chunk *prev, size_t size);
+        void destroy(SIRArenaAllocator *arena);
     };
 
     struct alignas(16) Header {
         size_t size;
     };
 
-    Allocator *parent;
+    SIRAllocator *parent;
     Chunk *last_chunk;
 
     static Header *get_alloc_header(void *ptr)
@@ -336,7 +334,7 @@ struct ArenaAllocator : Allocator {
     }
 
   public:
-    static ArenaAllocator *create(Allocator *parent, size_t size = 1 << 16);
+    static SIRArenaAllocator *create(SIRAllocator *parent, size_t size = 1 << 16);
     void destroy();
 
     virtual void *alloc_bytes(size_t size) override;
@@ -344,25 +342,25 @@ struct ArenaAllocator : Allocator {
     virtual void free_bytes(void *ptr) override;
 };
 
-template <typename T> struct Array {
+template <typename T> struct SIRArray {
     T *ptr = nullptr;
     size_t len = 0;
     size_t cap = 0;
-    Allocator *allocator = MallocAllocator::get_instance();
+    SIRAllocator *allocator = SIRMallocAllocator::get_instance();
 
-    ACE_INLINE static Array create(Allocator *allocator)
+    SIR_INLINE static SIRArray create(SIRAllocator *allocator)
     {
         return {nullptr, 0, 0, allocator};
     }
 
-    ACE_INLINE void destroy()
+    SIR_INLINE void destroy()
     {
         this->allocator->free(this->ptr);
         this->cap = 0;
         this->len = 0;
     }
 
-    ACE_INLINE Slice<T> as_slice()
+    SIR_INLINE SIRSlice<T> as_slice()
     {
         return {this->ptr, this->len};
     }
@@ -384,7 +382,7 @@ template <typename T> struct Array {
         }
     }
 
-    ACE_INLINE void resize(size_t new_len)
+    SIR_INLINE void resize(size_t new_len)
     {
         ZoneScoped;
 
@@ -392,7 +390,7 @@ template <typename T> struct Array {
         this->len = new_len;
     }
 
-    ACE_INLINE void push_back(const T &value)
+    SIR_INLINE void push_back(const T &value)
     {
         ZoneScoped;
 
@@ -401,7 +399,7 @@ template <typename T> struct Array {
         this->len++;
     }
 
-    ACE_INLINE void push_many(const Slice<T> &slice)
+    SIR_INLINE void push_many(const SIRSlice<T> &slice)
     {
         ZoneScoped;
 
@@ -415,20 +413,20 @@ template <typename T> struct Array {
         this->len += slice.len;
     }
 
-    ACE_INLINE void pop()
+    SIR_INLINE void pop()
     {
         if (this->len > 0) {
             this->len--;
         }
     }
 
-    ACE_INLINE T &operator[](size_t index)
+    SIR_INLINE T &operator[](size_t index)
     {
-        ACE_ASSERT(index < this->len);
+        SIR_ASSERT(index < this->len);
         return this->ptr[index];
     }
 
-    ACE_INLINE T *last()
+    SIR_INLINE T *last()
     {
         if (this->len == 0) {
             return nullptr;
@@ -437,244 +435,53 @@ template <typename T> struct Array {
         return &this->ptr[this->len - 1];
     }
 
-    ACE_INLINE T *begin() const
+    SIR_INLINE T *begin() const
     {
         return this->ptr;
     }
 
-    ACE_INLINE T *end() const
+    SIR_INLINE T *end() const
     {
         return &this->ptr[this->len];
     }
 };
 
-template <typename T> struct List {
-    struct Node {
-        T value;
-        struct Node *next;
-        struct Node *prev;
-    };
+struct SIRStringBuilder {
+    SIRArray<char> array;
 
-    Node *first = nullptr;
-    Node *last = nullptr;
-    Allocator *allocator = MallocAllocator::get_instance();
-
-    ACE_INLINE static List create(Allocator *allocator)
+    SIR_INLINE static SIRStringBuilder
+    create(SIRAllocator *allocator, size_t size = 1 << 16)
     {
-        return {nullptr, nullptr, allocator};
-    }
-
-    void destroy()
-    {
-        Node *node = this->first;
-        while (node) {
-            Node *deleted_node = node;
-            node = node->next;
-            this->allocator->free(deleted_node);
-        }
-        this->first = nullptr;
-        this->last = nullptr;
-    }
-
-    Node *push_back(const T &value)
-    {
-        ZoneScoped;
-
-        Node *new_node = this->allocator->template alloc<Node>();
-        new_node->value = value;
-
-        if (!this->last) {
-            ACE_ASSERT(!this->first);
-
-            new_node->next = nullptr;
-            new_node->prev = nullptr;
-
-            this->first = new_node;
-            this->last = new_node;
-        } else {
-            new_node->next = nullptr;
-            new_node->prev = this->last;
-
-            this->last->next = new_node;
-
-            this->last = new_node;
-        }
-
-        return new_node;
-    }
-
-    Node *push_front(const T &value)
-    {
-        ZoneScoped;
-
-        Node *new_node = this->allocator->template alloc<Node>();
-        new_node->value = value;
-
-        if (!this->first) {
-            ACE_ASSERT(!this->last);
-
-            new_node->next = nullptr;
-            new_node->prev = nullptr;
-
-            this->first = new_node;
-            this->last = new_node;
-        } else {
-            new_node->next = this->first;
-            new_node->prev = nullptr;
-
-            this->first->prev = new_node;
-
-            this->first = new_node;
-        }
-
-        return new_node;
-    }
-
-    Node *insert_after(Node *other_node, const T &value)
-    {
-        ZoneScoped;
-
-        Node *new_node = this->allocator->template alloc<Node>();
-        new_node->value = value;
-
-        if (other_node == this->last) {
-            this->last = new_node;
-        }
-
-        new_node->prev = other_node;
-        new_node->next = other_node->next;
-
-        if (other_node->next) {
-            other_node->next->prev = new_node;
-        }
-        other_node->next = new_node;
-
-        return new_node;
-    }
-
-    Node *insert_before(Node *other_node, const T &value)
-    {
-        ZoneScoped;
-
-        Node *new_node = this->allocator->template alloc<Node>();
-        new_node->value = value;
-
-        if (other_node == this->first) {
-            this->first = new_node;
-        }
-
-        new_node->prev = other_node->prev;
-        new_node->next = other_node;
-
-        if (other_node->prev) {
-            other_node->prev->next = new_node;
-        }
-        other_node->prev = new_node;
-
-        return new_node;
-    }
-
-    void remove(Node *node)
-    {
-        ZoneScoped;
-
-        if (this->first == node) {
-            this->first = node->next;
-        }
-        if (this->last == node) {
-            this->last = node->prev;
-        }
-
-        if (node->next) {
-            node->next->prev = node->prev;
-        }
-        if (node->prev) {
-            node->prev->next = node->next;
-        }
-    }
-
-    ACE_INLINE bool is_empty()
-    {
-        return this->first == nullptr;
-    }
-
-    struct Iterator {
-        Node *node;
-
-        ACE_INLINE Iterator &operator++()
-        {
-            this->node = this->node->next;
-            return *this;
-        }
-
-        ACE_INLINE Node &operator*() const
-        {
-            return *node;
-        }
-
-        ACE_INLINE Node *operator->()
-        {
-            return node;
-        }
-
-        ACE_INLINE friend bool operator==(const Iterator &a, const Iterator &b)
-        {
-            return a.node == b.node;
-        };
-
-        ACE_INLINE friend bool operator!=(const Iterator &a, const Iterator &b)
-        {
-            return a.node != b.node;
-        };
-    };
-
-    ACE_INLINE Iterator begin()
-    {
-        return Iterator{this->first};
-    }
-
-    ACE_INLINE Iterator end()
-    {
-        return Iterator{nullptr};
-    }
-};
-
-struct StringBuilder {
-    Array<char> array;
-
-    ACE_INLINE static StringBuilder
-    create(Allocator *allocator, size_t size = 1 << 16)
-    {
-        auto array = Array<char>::create(allocator);
+        auto array = SIRArray<char>::create(allocator);
         array.reserve(size);
         return {array};
     }
 
-    ACE_INLINE void destroy()
+    SIR_INLINE void destroy()
     {
         this->array.destroy();
     }
 
-    ACE_INLINE
+    SIR_INLINE
     void reset()
     {
         this->array.len = 0;
     }
 
-    String build_null_terminated(Allocator *allocator)
+    SIRString build_null_terminated(SIRAllocator *allocator)
     {
         ZoneScoped;
 
-        Slice<char> chars = allocator->alloc<char>(this->array.len + 1);
+        SIRSlice<char> chars = allocator->alloc<char>(this->array.len + 1);
         memcpy(chars.ptr, this->array.ptr, this->array.len);
         chars[chars.len - 1] = '\0';
-        return String{
+        return SIRString{
             chars.ptr,
             chars.len - 1,
         };
     }
 
-    ACE_INLINE void append(const String &str)
+    SIR_INLINE void append(const SIRString &str)
     {
         ZoneScoped;
 
@@ -683,14 +490,14 @@ struct StringBuilder {
         memcpy(&this->array.ptr[old_arr_len], str.ptr, str.len);
     }
 
-    ACE_INLINE void append(char c)
+    SIR_INLINE void append(char c)
     {
         ZoneScoped;
 
         this->array.push_back(c);
     }
 
-    ACE_PRINTF_FORMATTING(2, 3)
+    SIR_PRINTF_FORMATTING(2, 3)
     void sprintf(const char *fmt, ...)
     {
         ZoneScoped;
@@ -710,13 +517,13 @@ struct StringBuilder {
     }
 };
 
-static const int log2_tab64[64] = {
+static const int SIR_LOG2_TAB64[64] = {
     63, 0,  58, 1,  59, 47, 53, 2,  60, 39, 48, 27, 54, 33, 42, 3,
     61, 51, 37, 40, 49, 18, 28, 20, 55, 30, 34, 11, 43, 14, 22, 4,
     62, 57, 46, 52, 38, 26, 32, 41, 50, 36, 17, 19, 29, 10, 13, 21,
     56, 45, 25, 31, 35, 16, 9,  12, 44, 24, 15, 8,  23, 7,  6,  5};
 
-ACE_INLINE static int log2_64(uint64_t value)
+SIR_INLINE static int SIRLog2_64(uint64_t value)
 {
     ZoneScoped;
     value |= value >> 1;
@@ -725,18 +532,18 @@ ACE_INLINE static int log2_64(uint64_t value)
     value |= value >> 8;
     value |= value >> 16;
     value |= value >> 32;
-    return log2_tab64
+    return SIR_LOG2_TAB64
         [((uint64_t)((value - (value >> 1)) * 0x07EDD5E59A4E28C2)) >> 58];
 }
 
-template <typename T> struct StringMap {
-    Allocator *allocator;
+template <typename T> struct SIRStringMap {
+    SIRAllocator *allocator;
     size_t size;
-    String *keys;
+    SIRString *keys;
     uint64_t *hashes;
     T *values;
 
-    ACE_INLINE static uint64_t string_hash(const char *string, size_t len)
+    SIR_INLINE static uint64_t string_hash(const char *string, size_t len)
     {
         uint64_t hash = 14695981039346656037ULL;
         for (const char *c = string; c != string + len; ++c) {
@@ -745,7 +552,7 @@ template <typename T> struct StringMap {
         return hash;
     }
 
-    static StringMap create(Allocator *allocator, size_t size = 16)
+    static SIRStringMap create(SIRAllocator *allocator, size_t size = 16)
     {
         // Round size to next power of 2
         size -= 1;
@@ -757,10 +564,10 @@ template <typename T> struct StringMap {
         size |= size >> 32;
         size += 1;
 
-        StringMap map = {};
+        SIRStringMap map = {};
         map.allocator = allocator;
         map.size = size;
-        map.keys = allocator->alloc_init<String>(map.size).ptr;
+        map.keys = allocator->alloc_init<SIRString>(map.size).ptr;
         map.hashes = allocator->alloc<uint64_t>(map.size).ptr;
         map.values = allocator->alloc<T>(map.size).ptr;
 
@@ -782,14 +589,14 @@ template <typename T> struct StringMap {
     {
         ZoneScoped;
 
-        StringMap<T> new_map =
-            StringMap<T>::create(this->allocator, this->size * 2);
+        SIRStringMap<T> new_map =
+            SIRStringMap<T>::create(this->allocator, this->size * 2);
 
         for (size_t i = 0; i < this->size; ++i) {
             if (this->keys[i].ptr) {
                 T value;
                 bool got_value = this->get(this->keys[i], &value);
-                ACE_ASSERT(got_value);
+                SIR_ASSERT(got_value);
 
                 new_map.set(this->keys[i], value);
             }
@@ -799,7 +606,7 @@ template <typename T> struct StringMap {
         *this = new_map;
     }
 
-    void set(String key, const T &value)
+    void set(SIRString key, const T &value)
     {
         ZoneScoped;
 
@@ -811,7 +618,7 @@ template <typename T> struct StringMap {
         uint64_t i = hash & (this->size - 1); // fast modulo for powers of 2
 
         size_t iters = 0;
-        size_t max_iters = log2_64(this->size);
+        size_t max_iters = SIRLog2_64(this->size);
 
         while (this->keys[i].ptr != nullptr &&
                (this->hashes[i] != hash || this->keys[i] != key)) {
@@ -831,7 +638,7 @@ template <typename T> struct StringMap {
         this->values[i] = value;
     }
 
-    bool get(String key, T *out_value = nullptr)
+    bool get(SIRString key, T *out_value = nullptr)
     {
         ZoneScoped;
 
@@ -842,7 +649,7 @@ template <typename T> struct StringMap {
         uint64_t i = hash & (this->size - 1); // fast modulo for powers of 2
 
         size_t iters = 0;
-        size_t max_iters = log2_64(this->size);
+        size_t max_iters = SIRLog2_64(this->size);
 
         while (this->keys[i].ptr == nullptr || this->hashes[i] != hash ||
                this->keys[i] != key) {
@@ -860,26 +667,4 @@ template <typename T> struct StringMap {
 
         return true;
     }
-
-    /* void remove(String key) */
-    /* { */
-    /*     ZoneScoped; */
-
-    /*     if (key.len == 0) return; */
-
-    /*     uint64_t hash = string_hash(key.ptr, key.len); */
-    /*     uint64_t i = hash & (this->slot_lists.len - 1); // fast modulo 2 */
-
-    /*     List<Slot> *slot_list = &this->slot_lists[i]; */
-    /*     for (auto &existing_slot_node : *slot_list) { */
-    /*         auto existing_slot = &existing_slot_node.value; */
-    /*         if (hash == existing_slot->hash && key == existing_slot->key) {
-     */
-    /*             slot_list->remove(&existing_slot_node); */
-    /*             return; */
-    /*         } */
-    /*     } */
-    /* } */
 };
-
-} // namespace ace

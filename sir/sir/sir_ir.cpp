@@ -1,0 +1,1130 @@
+#include "sir_ir.hpp"
+#include <Tracy.hpp>
+
+SIRString SIRCallingConventionToString(SIRCallingConvention calling_convention)
+{
+    switch (calling_convention) {
+    case SIRCallingConvention_SystemV: return "system_v";
+    }
+
+    SIR_ASSERT(0);
+}
+
+SIRString SIRLinkageToString(SIRLinkage linkage)
+{
+    switch (linkage) {
+    case SIRLinkage_Internal: return "internal";
+    case SIRLinkage_External: return "external";
+    }
+
+    SIR_ASSERT(0);
+}
+
+static const char *binop_to_string(SIRBinaryOperation op)
+{
+    switch (op) {
+    case SIRBinaryOperation_Unknown:
+    case SIRBinaryOperation_MAX: break;
+    case SIRBinaryOperation_IAdd: return "iadd";
+    case SIRBinaryOperation_ISub: return "isub";
+    case SIRBinaryOperation_IMul: return "imul";
+    case SIRBinaryOperation_UDiv: return "udiv";
+    case SIRBinaryOperation_SDiv: return "sdiv";
+    case SIRBinaryOperation_URem: return "urem";
+    case SIRBinaryOperation_SRem: return "srem";
+
+    case SIRBinaryOperation_FAdd: return "fadd";
+    case SIRBinaryOperation_FSub: return "fsub";
+    case SIRBinaryOperation_FMul: return "fmul";
+    case SIRBinaryOperation_FDiv: return "fdiv";
+    case SIRBinaryOperation_FRem: return "frem";
+
+    case SIRBinaryOperation_IEQ: return "ieq";
+    case SIRBinaryOperation_INE: return "ine";
+    case SIRBinaryOperation_UGT: return "ugt";
+    case SIRBinaryOperation_UGE: return "uge";
+    case SIRBinaryOperation_ULT: return "ult";
+    case SIRBinaryOperation_ULE: return "ule";
+    case SIRBinaryOperation_SGT: return "sgt";
+    case SIRBinaryOperation_SGE: return "sge";
+    case SIRBinaryOperation_SLT: return "slt";
+    case SIRBinaryOperation_SLE: return "sle";
+
+    case SIRBinaryOperation_FEQ: return "feq";
+    case SIRBinaryOperation_FNE: return "fne";
+    case SIRBinaryOperation_FGT: return "fgt";
+    case SIRBinaryOperation_FGE: return "fge";
+    case SIRBinaryOperation_FLT: return "flt";
+    case SIRBinaryOperation_FLE: return "fle";
+
+    case SIRBinaryOperation_Shl: return "shl";
+    case SIRBinaryOperation_AShr: return "ashr";
+    case SIRBinaryOperation_LShr: return "lshr";
+
+    case SIRBinaryOperation_And: return "and";
+    case SIRBinaryOperation_Or: return "or";
+    case SIRBinaryOperation_Xor: return "xor";
+    }
+
+    return "<unknown op>";
+}
+
+static void
+print_instruction(SIRModule *module, SIRInstRef inst_ref, SIRStringBuilder *sb)
+{
+    ZoneScoped;
+
+    SIRInst inst = module->insts[inst_ref.id];
+
+    switch (inst.kind) {
+    case SIRInstKind_Unknown: SIR_ASSERT(0); break;
+    case SIRInstKind_Function: SIR_ASSERT(0); break;
+    case SIRInstKind_FunctionParameter: SIR_ASSERT(0); break;
+    case SIRInstKind_Block: SIR_ASSERT(0); break;
+
+    case SIRInstKind_ImmediateInt: {
+        SIRString type_string = inst.type->to_string(module);
+        sb->sprintf(
+            "%%r%u = imm_int %.*s %lu",
+            inst_ref.id,
+            (int)type_string.len,
+            type_string.ptr,
+            inst.imm_int.u64);
+        break;
+    }
+
+    case SIRInstKind_ImmediateFloat: {
+        SIRString type_string = inst.type->to_string(module);
+        sb->sprintf(
+            "%%r%u = imm_float %.*s %lf",
+            inst_ref.id,
+            (int)type_string.len,
+            type_string.ptr,
+            inst.imm_float.f64);
+        break;
+    }
+
+    case SIRInstKind_ImmediateBool: {
+        SIRString type_string = inst.type->to_string(module);
+        sb->sprintf(
+            "%%r%u = imm_bool %.*s %s",
+            inst_ref.id,
+            (int)type_string.len,
+            type_string.ptr,
+            inst.imm_bool.value ? "true" : "false");
+        break;
+    }
+
+    case SIRInstKind_PtrCast: {
+        SIRString type_string = inst.type->to_string(module);
+        sb->sprintf(
+            "%%r%u = ptr_cast %.*s %%r%u",
+            inst_ref.id,
+            (int)type_string.len,
+            type_string.ptr,
+            inst.ptr_cast.inst_ref.id);
+        break;
+    }
+
+    case SIRInstKind_ZExt: {
+        SIRString type_string = inst.type->to_string(module);
+        sb->sprintf(
+            "%%r%u = zext %.*s %%r%u",
+            inst_ref.id,
+            (int)type_string.len,
+            type_string.ptr,
+            inst.zext.inst_ref.id);
+        break;
+    }
+
+    case SIRInstKind_SExt: {
+        SIRString type_string = inst.type->to_string(module);
+        sb->sprintf(
+            "%%r%u = sext %.*s %%r%u",
+            inst_ref.id,
+            (int)type_string.len,
+            type_string.ptr,
+            inst.sext.inst_ref.id);
+        break;
+    }
+
+    case SIRInstKind_Trunc: {
+        SIRString type_string = inst.type->to_string(module);
+        sb->sprintf(
+            "%%r%u = trunc %.*s %%r%u",
+            inst_ref.id,
+            (int)type_string.len,
+            type_string.ptr,
+            inst.trunc.inst_ref.id);
+        break;
+    }
+
+    case SIRInstKind_Load: {
+        SIRString type_string = inst.type->to_string(module);
+        sb->sprintf(
+            "%%r%u = load %.*s %%r%u",
+            inst_ref.id,
+            (int)type_string.len,
+            type_string.ptr,
+            inst.load.ptr_ref.id);
+        break;
+    }
+
+    case SIRInstKind_Binop: {
+        SIRString type_string = inst.type->to_string(module);
+        sb->sprintf(
+            "%%r%u = %s %.*s %%r%u %%r%u",
+            inst_ref.id,
+            binop_to_string(inst.binop.op),
+            (int)type_string.len,
+            type_string.ptr,
+            inst.binop.left_ref.id,
+            inst.binop.right_ref.id);
+        break;
+    }
+
+    case SIRInstKind_ArrayElemPtr: {
+        SIRString type_string = inst.type->to_string(module);
+        sb->sprintf(
+            "%%r%u = array_elem_ptr %.*s %%r%u %%r%u",
+            inst_ref.id,
+            (int)type_string.len,
+            type_string.ptr,
+            inst.array_elem_ptr.accessed_ref.id,
+            inst.array_elem_ptr.index_ref.id);
+        break;
+    }
+
+    case SIRInstKind_StructElemPtr: {
+        SIRString type_string = inst.type->to_string(module);
+        sb->sprintf(
+            "%%r%u = struct_elem_ptr %.*s %%r%u %u",
+            inst_ref.id,
+            (int)type_string.len,
+            type_string.ptr,
+            inst.struct_elem_ptr.accessed_ref.id,
+            inst.struct_elem_ptr.field_index);
+        break;
+    }
+
+    case SIRInstKind_ExtractArrayElem: {
+        SIRString type_string = inst.type->to_string(module);
+        sb->sprintf(
+            "%%r%u = extract_array_elem %.*s %%r%u %%r%u",
+            inst_ref.id,
+            (int)type_string.len,
+            type_string.ptr,
+            inst.extract_array_elem.accessed_ref.id,
+            inst.extract_array_elem.index_ref.id);
+        break;
+    }
+
+    case SIRInstKind_ExtractStructElem: {
+        SIRString type_string = inst.type->to_string(module);
+        sb->sprintf(
+            "%%r%u = extract_struct_elem %.*s %%r%u %u",
+            inst_ref.id,
+            (int)type_string.len,
+            type_string.ptr,
+            inst.extract_struct_elem.accessed_ref.id,
+            inst.extract_struct_elem.field_index);
+        break;
+    }
+
+    case SIRInstKind_FuncCall: {
+        sb->sprintf(
+            "%%r%u = func_call %%r%u (",
+            inst_ref.id,
+            inst.func_call.func_ref.id);
+        for (size_t i = 0; i < inst.func_call.parameters.len; ++i) {
+            if (i > 0) sb->append(", ");
+            SIRInstRef param_inst_ref = inst.func_call.parameters[i];
+            sb->sprintf("%%r%u", param_inst_ref.id);
+        }
+        sb->append(")");
+        break;
+    }
+
+    case SIRInstKind_Global: {
+        SIRString type_string = inst.type->to_string(module);
+        sb->sprintf(
+            "%%r%u = global (%.*s)",
+            inst_ref.id,
+            (int)type_string.len,
+            type_string.ptr);
+        break;
+    }
+    case SIRInstKind_StackSlot: {
+        SIRString type_string = inst.type->to_string(module);
+        sb->sprintf(
+            "%%r%u = stack_slot (%.*s)",
+            inst_ref.id,
+            (int)type_string.len,
+            type_string.ptr);
+        break;
+    }
+    case SIRInstKind_Store: {
+        SIRString type_string =
+            inst.store.value_ref.get(module).type->to_string(module);
+        sb->sprintf(
+            "store %.*s %%r%u %%r%u",
+            (int)type_string.len,
+            type_string.ptr,
+            inst.store.ptr_ref.id,
+            inst.store.value_ref.id);
+        break;
+    }
+    case SIRInstKind_ReturnVoid: {
+        sb->sprintf("return_void");
+        break;
+    }
+    case SIRInstKind_ReturnValue: {
+        SIRString type_string =
+            inst.return_value.inst_ref.get(module).type->to_string(module);
+        sb->sprintf(
+            "return_value %.*s %%r%u",
+            (int)type_string.len,
+            type_string.ptr,
+            inst.return_value.inst_ref.id);
+        break;
+    }
+    case SIRInstKind_Jump: {
+        sb->sprintf("jump %%r%u", inst.jump.block_ref.id);
+        break;
+    }
+    case SIRInstKind_Branch: {
+        sb->sprintf(
+            "branch %%r%u %%b%u %%b%u",
+            inst.branch.cond_inst_ref.id,
+            inst.branch.true_block_ref.id,
+            inst.branch.false_block_ref.id);
+        break;
+    }
+    }
+
+    sb->append("\n");
+}
+
+static void
+print_block(SIRModule *module, SIRInstRef block_ref, SIRStringBuilder *sb)
+{
+    ZoneScoped;
+
+    SIRInst *block = &module->insts[block_ref.id];
+
+    sb->sprintf("  block %%r%u:\n", block_ref.id);
+
+    for (SIRInstRef inst_ref : block->block.inst_refs) {
+        sb->append("    ");
+        print_instruction(module, inst_ref, sb);
+    }
+
+    sb->append("\n");
+}
+
+static void
+print_function(SIRModule *module, SIRInstRef func_ref, SIRStringBuilder *sb)
+{
+    ZoneScoped;
+
+    SIRFunction *func = module->insts[func_ref.id].func;
+
+    SIRString calling_conv_str =
+        SIRCallingConventionToString(func->calling_convention);
+    SIRString linkage_str = SIRLinkageToString(func->linkage);
+    sb->sprintf(
+        "function %%r%u [%.*s, %.*s] \"%.*s\" (",
+        func_ref.id,
+        (int)calling_conv_str.len,
+        calling_conv_str.ptr,
+        (int)linkage_str.len,
+        linkage_str.ptr,
+        (int)func->name.len,
+        func->name.ptr);
+    for (size_t i = 0; i < func->param_insts.len; ++i) {
+        SIRType *param_type = func->param_types[i];
+        SIRInstRef param_inst_ref = func->param_insts[i];
+
+        if (i != 0) sb->append(", ");
+
+        sb->sprintf("%%r%u: ", param_inst_ref.id);
+        sb->append(param_type->to_string(module));
+    }
+    sb->append(") -> ");
+    sb->append(func->return_type->to_string(module));
+    sb->append(" {\n");
+
+    for (SIRInstRef stack_slot_ref : func->stack_slots) {
+        SIRInst *stack_slot = &module->insts[stack_slot_ref.id];
+        SIR_ASSERT(stack_slot->type);
+        SIRString type_string = stack_slot->type->to_string(module);
+        sb->sprintf(
+            "  %%r%u: stack_slot %.*s\n",
+            stack_slot_ref.id,
+            (int)type_string.len,
+            type_string.ptr);
+    }
+
+    if (func->stack_slots.len > 0) {
+        sb->append("\n");
+    }
+
+    for (SIRInstRef block_ref : func->blocks) {
+        print_block(module, block_ref, sb);
+    }
+
+    sb->append("}\n\n");
+}
+
+SIRModule *
+SIRModule::create(SIRTargetArch target_arch, SIREndianness endianness)
+{
+    auto parent_allocator = SIRMallocAllocator::get_instance();
+
+    auto arena = SIRArenaAllocator::create(parent_allocator);
+    auto insts = SIRArray<SIRInst>::create(SIRMallocAllocator::get_instance());
+    auto globals = SIRArray<SIRInstRef>::create(SIRMallocAllocator::get_instance());
+    auto functions = SIRArray<SIRInstRef>::create(SIRMallocAllocator::get_instance());
+    auto function_map =
+        SIRStringMap<SIRInstRef>::create(SIRMallocAllocator::get_instance());
+    auto global_string_map =
+        SIRStringMap<SIRInstRef>::create(SIRMallocAllocator::get_instance());
+    auto type_map = SIRStringMap<SIRType *>::create(SIRMallocAllocator::get_instance());
+
+    insts.push_back({}); // 0th inst
+
+    SIRModule *module = parent_allocator->alloc<SIRModule>();
+    *module = {
+        .arena = arena,
+        .insts = insts,
+        .globals = globals,
+        .functions = functions,
+        .function_map = function_map,
+        .global_string_map = global_string_map,
+        .type_map = type_map,
+        .target_arch = target_arch,
+        .endianness = endianness,
+
+        .void_type = nullptr,
+        .bool_type = nullptr,
+        .i8_type = nullptr,
+        .i16_type = nullptr,
+        .i32_type = nullptr,
+        .i64_type = nullptr,
+        .f32_type = nullptr,
+        .f64_type = nullptr,
+    };
+
+    {
+        SIRType *void_type = module->arena->alloc<SIRType>();
+        *void_type = {};
+        void_type->kind = SIRTypeKind_Void;
+        module->void_type = module->get_cached_type(void_type);
+    }
+
+    {
+        SIRType *bool_type = module->arena->alloc<SIRType>();
+        *bool_type = {};
+        bool_type->kind = SIRTypeKind_Bool;
+        module->bool_type = module->get_cached_type(bool_type);
+    }
+
+    {
+        SIRType *i8_type = module->arena->alloc<SIRType>();
+        *i8_type = {};
+        i8_type->kind = SIRTypeKind_Int;
+        i8_type->int_.bits = 8;
+        module->i8_type = module->get_cached_type(i8_type);
+    }
+
+    {
+        SIRType *i16_type = module->arena->alloc<SIRType>();
+        *i16_type = {};
+        i16_type->kind = SIRTypeKind_Int;
+        i16_type->int_.bits = 16;
+        module->i16_type = module->get_cached_type(i16_type);
+    }
+
+    {
+        SIRType *i32_type = module->arena->alloc<SIRType>();
+        *i32_type = {};
+        i32_type->kind = SIRTypeKind_Int;
+        i32_type->int_.bits = 32;
+        module->i32_type = module->get_cached_type(i32_type);
+    }
+
+    {
+        SIRType *i64_type = module->arena->alloc<SIRType>();
+        *i64_type = {};
+        i64_type->kind = SIRTypeKind_Int;
+        i64_type->int_.bits = 64;
+        module->i64_type = module->get_cached_type(i64_type);
+    }
+
+    {
+        SIRType *f32_type = module->arena->alloc<SIRType>();
+        *f32_type = {};
+        f32_type->kind = SIRTypeKind_Float;
+        f32_type->float_.bits = 32;
+        module->f32_type = module->get_cached_type(f32_type);
+    }
+
+    {
+        SIRType *f64_type = module->arena->alloc<SIRType>();
+        *f64_type = {};
+        f64_type->kind = SIRTypeKind_Float;
+        f64_type->float_.bits = 64;
+        module->f64_type = module->get_cached_type(f64_type);
+    }
+
+    return module;
+}
+
+void SIRModule::destroy()
+{
+    this->insts.destroy();
+    this->globals.destroy();
+    this->functions.destroy();
+    this->function_map.destroy();
+    this->global_string_map.destroy();
+    this->type_map.destroy();
+    this->arena->destroy();
+
+    auto parent_allocator = SIRMallocAllocator::get_instance();
+    parent_allocator->free(this);
+}
+
+SIRString SIRModule::print_alloc(SIRAllocator *allocator)
+{
+    ZoneScoped;
+
+    SIRStringBuilder sb = SIRStringBuilder::create(allocator);
+
+    for (SIRInstRef global_ref : this->globals) {
+        print_instruction(this, global_ref, &sb);
+    }
+
+    sb.append("\n");
+
+    for (SIRInstRef func_ref : this->functions) {
+        print_function(this, func_ref, &sb);
+    }
+
+    SIRString result = sb.build_null_terminated(allocator);
+    sb.destroy();
+    return result;
+}
+
+SIRType *SIRModule::create_pointer_type(SIRType *sub)
+{
+    SIRType *type = this->arena->alloc<SIRType>();
+    *type = {};
+    type->kind = SIRTypeKind_Pointer;
+    type->pointer.sub = sub;
+    return this->get_cached_type(type);
+}
+
+SIRType *SIRModule::create_array_type(SIRType *sub, uint64_t count)
+{
+    SIRType *type = this->arena->alloc<SIRType>();
+    *type = {};
+    type->kind = SIRTypeKind_Array;
+    type->array.sub = sub;
+    type->array.count = count;
+    return this->get_cached_type(type);
+}
+
+SIRType *SIRModule::create_struct_type(SIRSlice<SIRType *> fields, bool packed)
+{
+    SIRType *type = this->arena->alloc<SIRType>();
+    *type = {};
+    type->kind = SIRTypeKind_Struct;
+    type->struct_.fields = this->arena->clone(fields);
+    type->struct_.packed = packed;
+    return this->get_cached_type(type);
+}
+
+SIRType *SIRModule::get_cached_type(SIRType *type)
+{
+    ZoneScoped;
+
+    SIRString type_string = type->to_string(this);
+    SIRType *existing_type = nullptr;
+    if (this->type_map.get(type_string, &existing_type)) {
+        return existing_type;
+    }
+
+    this->type_map.set(type_string, type);
+    return type;
+}
+
+SIR_INLINE
+static SIRInstRef module_add_inst(SIRModule *module, const SIRInst &inst)
+{
+    SIRInstRef ref = {(uint32_t)module->insts.len};
+    module->insts.push_back(inst);
+    return ref;
+}
+
+SIRInstRef SIRModule::add_function(
+    SIRString name,
+    SIRCallingConvention calling_convention,
+    SIRLinkage linkage,
+    bool variadic,
+    SIRSlice<SIRType *> param_types,
+    SIRType *return_type)
+{
+    ZoneScoped;
+
+    SIRString func_name = this->arena->clone(name);
+    uint32_t func_index = 0;
+    while (this->function_map.get(func_name)) {
+        func_index++;
+        func_name = this->arena->sprintf(
+            "%.*s.%u", (int)name.len, name.ptr, func_index);
+    }
+
+    SIRFunction *function = this->arena->alloc<SIRFunction>();
+    *function = SIRFunction{
+        .name = func_name,
+        .param_types = this->arena->clone(param_types),
+        .return_type = return_type,
+        .variadic = variadic,
+
+        .stack_slots = SIRArray<SIRInstRef>::create(this->arena),
+        .blocks = SIRArray<SIRInstRef>::create(this->arena),
+        .param_insts = SIRArray<SIRInstRef>::create(this->arena),
+
+        .linkage = linkage,
+        .calling_convention = calling_convention,
+    };
+
+    for (uint32_t i = 0; i < param_types.len; ++i) {
+        SIRInst param_inst = {
+            .func_param = {.index = i},
+            .kind = SIRInstKind_FunctionParameter,
+            .type = param_types[i],
+        };
+        SIRInstRef inst_ref = module_add_inst(this, param_inst);
+        function->param_insts.push_back(inst_ref);
+    }
+
+    SIRInst func_inst = {};
+    func_inst.kind = SIRInstKind_Function;
+    func_inst.func = function;
+    SIRInstRef func_ref = module_add_inst(this, func_inst);
+
+    this->functions.push_back(func_ref);
+    this->function_map.set(function->name, func_ref);
+
+    return func_ref;
+}
+
+SIRInstRef
+SIRModule::add_global(SIRType *type, uint32_t flags, SIRSlice<uint8_t> data)
+{
+    ZoneScoped;
+
+    SIR_ASSERT(type->size_of(this) == data.len);
+
+    SIRInst global = {};
+    global.kind = SIRInstKind_Global;
+    global.type = this->create_pointer_type(type);
+    global.global.data = this->arena->clone(data);
+    global.global.flags = flags;
+
+    SIRInstRef global_ref = module_add_inst(this, global);
+
+    this->globals.push_back(global_ref);
+
+    return global_ref;
+}
+
+SIRInstRef SIRModule::add_global_string(const SIRString &str)
+{
+    ZoneScoped;
+
+    SIRInstRef existing_global_ref = {0};
+    if (this->global_string_map.get(str, &existing_global_ref)) {
+        return existing_global_ref;
+    }
+
+    SIRInst global = {};
+    global.kind = SIRInstKind_Global;
+    global.type = this->create_pointer_type(this->i8_type);
+    global.global.data = {
+        (uint8_t *)this->arena->null_terminate(str), str.len + 1};
+    global.global.flags = SIRGlobalFlags_Initialized | SIRGlobalFlags_ReadOnly;
+
+    SIRInstRef global_ref = module_add_inst(this, global);
+
+    this->globals.push_back(global_ref);
+
+    this->global_string_map.set(str, global_ref);
+
+    return global_ref;
+}
+
+SIRInstRef SIRModule::add_stack_slot(SIRInstRef func_ref, SIRType *type)
+{
+    ZoneScoped;
+
+    SIRInst func_inst = func_ref.get(this);
+    SIR_ASSERT(func_inst.kind == SIRInstKind_Function);
+
+    SIRFunction *func = func_inst.func;
+
+    SIRInst stack_slot = {};
+    stack_slot.kind = SIRInstKind_StackSlot;
+    stack_slot.type = this->create_pointer_type(type);
+    SIRInstRef stack_slot_ref = module_add_inst(this, stack_slot);
+
+    func->stack_slots.push_back(stack_slot_ref);
+
+    return stack_slot_ref;
+}
+
+SIRInstRef SIRModule::get_func_param(SIRInstRef func_ref, uint32_t param_index)
+{
+    ZoneScoped;
+
+    SIRInst func_inst = func_ref.get(this);
+    SIR_ASSERT(func_inst.kind == SIRInstKind_Function);
+    SIRFunction *func = func_inst.func;
+
+    return func->param_insts[param_index];
+}
+
+SIRInstRef SIRModule::insert_block_at_end(SIRInstRef func_ref)
+{
+    ZoneScoped;
+
+    SIRInst func_inst = func_ref.get(this);
+    SIR_ASSERT(func_inst.kind == SIRInstKind_Function);
+    SIRFunction *func = func_inst.func;
+
+    SIRInst block = {};
+    block.kind = SIRInstKind_Block;
+    block.block.inst_refs = SIRArray<SIRInstRef>::create(this->arena);
+    SIRInstRef block_ref = module_add_inst(this, block);
+
+    func->blocks.push_back(block_ref);
+
+    return block_ref;
+}
+
+/* InstRef Module::insert_block_after(InstRef func_ref, InstRef other_ref) */
+/* { */
+/*     ZoneScoped; */
+
+/*     Inst func_inst = func_ref.get(this); */
+/*     SIR_ASSERT(func_inst.kind == InstKind_Function); */
+/*     Function *func = func_inst.func; */
+
+/*     Inst block = {}; */
+/*     block.kind = InstKind_Block; */
+/*     block.block.inst_refs = Array<InstRef>::create(this->arena); */
+/*     InstRef block_ref = this->add_inst(block); */
+
+/*     auto other_node = func->block_nodes[other_ref.id]; */
+/*     SIR_ASSERT(other_node); */
+
+/*     Block basic_block = { */
+/*         .inst_refs = Array<InstRef>::create(this->arena), */
+/*     }; */
+
+/*     BlockRef ref = {.id = (uint32_t)func->blocks.len}; */
+
+/*     auto node = func->block_refs.insert_after(other_node, ref); */
+/*     func->blocks.push_back(basic_block); */
+/*     func->block_nodes.push_back(node); */
+
+/*     return ref; */
+/* } */
+
+/* BlockRef Module::insert_block_before(FunctionRef func_ref, BlockRef
+ * other_ref) */
+/* { */
+/*     ZoneScoped; */
+
+/*     auto func = &this->functions[func_ref.id]; */
+
+/*     auto other_node = func->block_nodes[other_ref.id]; */
+/*     SIR_ASSERT(other_node); */
+
+/*     Block basic_block = { */
+/*         .inst_refs = Array<InstRef>::create(this->arena), */
+/*     }; */
+
+/*     BlockRef ref = {(uint32_t)func->blocks.len}; */
+
+/*     auto node = func->block_refs.insert_before(other_node, ref); */
+/*     func->blocks.push_back(basic_block); */
+/*     func->block_nodes.push_back(node); */
+
+/*     return ref; */
+/* } */
+
+SIRBuilder SIRBuilder::create(SIRModule *module)
+{
+    return {
+        .module = module,
+        .current_func_ref = {UINT32_MAX},
+        .current_block_ref = {UINT32_MAX},
+    };
+}
+
+void SIRBuilder::set_function(SIRInstRef func_ref)
+{
+    this->current_func_ref = func_ref;
+}
+
+void SIRBuilder::position_at_end(SIRInstRef block_ref)
+{
+    this->current_block_ref = block_ref;
+}
+
+static SIRInstRef builder_insert_inst(SIRBuilder *builder, const SIRInst &inst)
+{
+    ZoneScoped;
+
+    SIRInstRef ref = module_add_inst(builder->module, inst);
+
+    SIRInst *block = &builder->module->insts[builder->current_block_ref.id];
+    block->block.inst_refs.push_back(ref);
+
+    return ref;
+}
+
+SIRInstRef SIRBuilder::insert_imm_int(SIRType *type, uint64_t value)
+{
+    ZoneScoped;
+
+    SIRInst inst = {};
+    inst.kind = SIRInstKind_ImmediateInt;
+    inst.type = type;
+    inst.imm_int.u64 = value;
+
+    return builder_insert_inst(this, inst);
+}
+
+SIRInstRef SIRBuilder::insert_imm_float(SIRType *type, double value)
+{
+    ZoneScoped;
+
+    SIRInst inst = {};
+    inst.kind = SIRInstKind_ImmediateFloat;
+    inst.type = type;
+    inst.imm_float.f64 = value;
+
+    return builder_insert_inst(this, inst);
+}
+
+SIRInstRef SIRBuilder::insert_imm_bool(bool value)
+{
+    ZoneScoped;
+
+    SIRInst inst = {};
+    inst.kind = SIRInstKind_ImmediateBool;
+    inst.type = this->module->bool_type;
+    inst.imm_bool.value = value;
+
+    return builder_insert_inst(this, inst);
+}
+
+SIRInstRef
+SIRBuilder::insert_array_elem_ptr(SIRInstRef accessed_ref, SIRInstRef index_ref)
+{
+    ZoneScoped;
+
+    SIRInst accessed_inst = accessed_ref.get(this->module);
+    SIR_ASSERT(accessed_inst.type->kind == SIRTypeKind_Pointer);
+    SIR_ASSERT(accessed_inst.type->pointer.sub->kind == SIRTypeKind_Array);
+
+    SIRInst inst = {};
+    inst.kind = SIRInstKind_ArrayElemPtr;
+    inst.type = this->module->create_pointer_type(
+        accessed_inst.type->pointer.sub->array.sub);
+    inst.array_elem_ptr.accessed_ref = accessed_ref;
+    inst.array_elem_ptr.index_ref = index_ref;
+
+    return builder_insert_inst(this, inst);
+}
+
+SIRInstRef
+SIRBuilder::insert_struct_elem_ptr(SIRInstRef accessed_ref, uint32_t field_index)
+{
+    ZoneScoped;
+
+    SIRInst accessed_inst = accessed_ref.get(this->module);
+    SIR_ASSERT(accessed_inst.type->kind == SIRTypeKind_Pointer);
+    SIR_ASSERT(accessed_inst.type->pointer.sub->kind == SIRTypeKind_Struct);
+
+    SIRInst inst = {};
+    inst.kind = SIRInstKind_StructElemPtr;
+    inst.type = this->module->create_pointer_type(
+        accessed_inst.type->pointer.sub->struct_.fields[field_index]);
+    inst.struct_elem_ptr.accessed_ref = accessed_ref;
+    inst.struct_elem_ptr.field_index = field_index;
+
+    return builder_insert_inst(this, inst);
+}
+
+SIRInstRef SIRBuilder::insert_extract_array_elem(
+    SIRInstRef accessed_ref, SIRInstRef index_ref)
+{
+    ZoneScoped;
+
+    SIRInst accessed_inst = accessed_ref.get(this->module);
+    SIR_ASSERT(accessed_inst.type->kind == SIRTypeKind_Array);
+
+    SIRInst inst = {};
+    inst.kind = SIRInstKind_ExtractArrayElem;
+    inst.type = accessed_inst.type->array.sub;
+    inst.extract_array_elem.accessed_ref = accessed_ref;
+    inst.extract_array_elem.index_ref = index_ref;
+
+    return builder_insert_inst(this, inst);
+}
+
+SIRInstRef SIRBuilder::insert_extract_struct_elem(
+    SIRInstRef accessed_ref, uint32_t field_index)
+{
+    ZoneScoped;
+
+    SIRInst accessed_inst = accessed_ref.get(this->module);
+    SIR_ASSERT(accessed_inst.type->kind == SIRTypeKind_Struct);
+
+    SIRInst inst = {};
+    inst.kind = SIRInstKind_ExtractStructElem;
+    inst.type = accessed_inst.type->struct_.fields[field_index];
+    inst.extract_struct_elem.accessed_ref = accessed_ref;
+    inst.extract_struct_elem.field_index = field_index;
+
+    return builder_insert_inst(this, inst);
+}
+
+void SIRBuilder::insert_store(SIRInstRef ptr_ref, SIRInstRef value_ref)
+{
+    ZoneScoped;
+
+    SIR_ASSERT(ptr_ref.get(this->module).type->kind == SIRTypeKind_Pointer);
+    SIR_ASSERT(
+        ptr_ref.get(this->module).type->pointer.sub ==
+        value_ref.get(this->module).type);
+
+    SIRInst inst = {};
+    inst.kind = SIRInstKind_Store;
+    inst.store.ptr_ref = ptr_ref;
+    inst.store.value_ref = value_ref;
+
+    builder_insert_inst(this, inst);
+}
+
+SIRInstRef SIRBuilder::insert_load(SIRInstRef ptr_ref)
+{
+    ZoneScoped;
+
+    SIRInst inst = {};
+    inst.kind = SIRInstKind_Load;
+    inst.type = ptr_ref.get(this->module).type->pointer.sub;
+    inst.load.ptr_ref = ptr_ref;
+
+    return builder_insert_inst(this, inst);
+}
+
+SIRInstRef SIRBuilder::insert_ptr_cast(SIRType *dest_type, SIRInstRef inst_ref)
+{
+    ZoneScoped;
+
+    SIR_ASSERT(dest_type->kind == SIRTypeKind_Pointer);
+
+    SIRInst inst = {};
+    inst.kind = SIRInstKind_PtrCast;
+    inst.type = dest_type;
+    inst.ptr_cast = {inst_ref};
+
+    return builder_insert_inst(this, inst);
+}
+
+SIRInstRef SIRBuilder::insert_zext(SIRType *dest_type, SIRInstRef inst_ref)
+{
+    ZoneScoped;
+
+    SIR_ASSERT(dest_type->kind == SIRTypeKind_Int);
+
+    SIRInst inst = {};
+    inst.kind = SIRInstKind_ZExt;
+    inst.type = dest_type;
+    inst.zext = {inst_ref};
+
+    return builder_insert_inst(this, inst);
+}
+
+SIRInstRef SIRBuilder::insert_sext(SIRType *dest_type, SIRInstRef inst_ref)
+{
+    ZoneScoped;
+
+    SIR_ASSERT(dest_type->kind == SIRTypeKind_Int);
+
+    SIRInst inst = {};
+    inst.kind = SIRInstKind_SExt;
+    inst.type = dest_type;
+    inst.sext = {inst_ref};
+
+    return builder_insert_inst(this, inst);
+}
+
+SIRInstRef SIRBuilder::insert_trunc(SIRType *dest_type, SIRInstRef inst_ref)
+{
+    ZoneScoped;
+
+    SIR_ASSERT(dest_type->kind == SIRTypeKind_Int);
+
+    SIRInst inst = {};
+    inst.kind = SIRInstKind_Trunc;
+    inst.type = dest_type;
+    inst.trunc = {inst_ref};
+
+    return builder_insert_inst(this, inst);
+}
+
+SIRInstRef SIRBuilder::insert_binop(
+    SIRBinaryOperation op, SIRInstRef left_ref, SIRInstRef right_ref)
+{
+    ZoneScoped;
+
+    SIRInst inst = {};
+    inst.kind = SIRInstKind_Binop;
+    switch (op) {
+    case SIRBinaryOperation_Unknown:
+    case SIRBinaryOperation_MAX: SIR_ASSERT(0); break;
+
+    case SIRBinaryOperation_IAdd:
+    case SIRBinaryOperation_ISub:
+    case SIRBinaryOperation_IMul:
+    case SIRBinaryOperation_SDiv:
+    case SIRBinaryOperation_UDiv:
+    case SIRBinaryOperation_SRem:
+    case SIRBinaryOperation_URem:
+
+    case SIRBinaryOperation_FAdd:
+    case SIRBinaryOperation_FSub:
+    case SIRBinaryOperation_FMul:
+    case SIRBinaryOperation_FDiv:
+    case SIRBinaryOperation_FRem: {
+        inst.type = left_ref.get(this->module).type;
+        break;
+    }
+
+    case SIRBinaryOperation_IEQ:
+    case SIRBinaryOperation_INE:
+    case SIRBinaryOperation_UGT:
+    case SIRBinaryOperation_UGE:
+    case SIRBinaryOperation_ULT:
+    case SIRBinaryOperation_ULE:
+    case SIRBinaryOperation_SGT:
+    case SIRBinaryOperation_SGE:
+    case SIRBinaryOperation_SLT:
+    case SIRBinaryOperation_SLE:
+
+    case SIRBinaryOperation_FEQ:
+    case SIRBinaryOperation_FNE:
+    case SIRBinaryOperation_FGT:
+    case SIRBinaryOperation_FGE:
+    case SIRBinaryOperation_FLT:
+    case SIRBinaryOperation_FLE: {
+        inst.type = this->module->bool_type;
+        break;
+    }
+
+    case SIRBinaryOperation_Shl:
+    case SIRBinaryOperation_AShr:
+    case SIRBinaryOperation_LShr: {
+        inst.type = left_ref.get(this->module).type;
+        break;
+    }
+
+    case SIRBinaryOperation_And:
+    case SIRBinaryOperation_Or:
+    case SIRBinaryOperation_Xor: {
+        inst.type = left_ref.get(this->module).type;
+        break;
+    }
+    }
+
+    SIR_ASSERT(inst.type);
+
+    inst.binop.op = op;
+    inst.binop.left_ref = left_ref;
+    inst.binop.right_ref = right_ref;
+
+    return builder_insert_inst(this, inst);
+}
+
+SIRInstRef SIRBuilder::insert_func_call(
+    SIRInstRef func_ref, const SIRSlice<SIRInstRef> &parameters)
+{
+    ZoneScoped;
+
+    SIRInst func_inst = func_ref.get(this->module);
+    SIR_ASSERT(func_inst.kind == SIRInstKind_Function);
+    SIRFunction *called_function = func_inst.func;
+
+    SIRInst inst = {};
+    inst.kind = SIRInstKind_FuncCall;
+    inst.type = called_function->return_type;
+    inst.func_call = {func_ref, this->module->arena->clone(parameters)};
+
+    return builder_insert_inst(this, inst);
+}
+
+void SIRBuilder::insert_jump(SIRInstRef block_ref)
+{
+    ZoneScoped;
+
+    SIRInst inst = {};
+    inst.kind = SIRInstKind_Jump;
+    inst.jump = {block_ref};
+
+    builder_insert_inst(this, inst);
+}
+
+void SIRBuilder::insert_branch(
+    SIRInstRef cond_ref, SIRInstRef true_block_ref, SIRInstRef false_block_ref)
+{
+    ZoneScoped;
+
+    SIR_ASSERT(cond_ref.get(this->module).type->kind == SIRTypeKind_Bool);
+    SIR_ASSERT(true_block_ref.get(this->module).kind == SIRInstKind_Block);
+    SIR_ASSERT(false_block_ref.get(this->module).kind == SIRInstKind_Block);
+
+    SIRInst inst = {};
+    inst.kind = SIRInstKind_Branch;
+    inst.branch.cond_inst_ref = cond_ref;
+    inst.branch.true_block_ref = true_block_ref;
+    inst.branch.false_block_ref = false_block_ref;
+
+    builder_insert_inst(this, inst);
+}
+
+void SIRBuilder::insert_return_value(SIRInstRef inst_ref)
+{
+    ZoneScoped;
+
+    SIRInst inst = {};
+    inst.kind = SIRInstKind_ReturnValue;
+    inst.return_value.inst_ref = inst_ref;
+
+    builder_insert_inst(this, inst);
+}
+
+void SIRBuilder::insert_return_void()
+{
+    ZoneScoped;
+
+    SIRInst inst = {};
+    inst.kind = SIRInstKind_ReturnVoid;
+
+    builder_insert_inst(this, inst);
+}

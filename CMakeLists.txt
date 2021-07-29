@@ -16,7 +16,7 @@ endif()
 
 # add_definitions(-DTRACY_ENABLE)
 
-add_subdirectory(ace)
+add_subdirectory(sir)
 
 add_executable(
 	compiler
@@ -26,5 +26,5 @@ add_executable(
 	src/analysis.cpp
 	src/codegen.cpp
 )
-target_link_libraries(compiler PRIVATE ace)
+target_link_libraries(compiler PRIVATE sir)
 

@@ -1,8 +1,6 @@
-#include "ace_obj.hpp"
+#include "sir_obj.hpp"
 #include "x86_64/encoder.h"
 #include <Tracy.hpp>
-
-namespace ace {
 
 struct X86_64AsmBuilder;
 
@@ -147,20 +145,20 @@ struct MetaValue {
         } regmem;
         struct {
             size_t offset;
-            SectionType section_type;
+            SIRSectionType section_type;
         } global;
     };
     MetaValueKind kind;
     SizeClass size_class;
 
-    ACE_INLINE
+    SIR_INLINE
     int64_t into_operand() const
     {
         switch (this->kind) {
         case MetaValueKind_Unknown:
         case MetaValueKind_Function:
         case MetaValueKind_Block:
-        case MetaValueKind_COUNT: ACE_ASSERT(0); break;
+        case MetaValueKind_COUNT: SIR_ASSERT(0); break;
         case MetaValueKind_IRegister:
         case MetaValueKind_FRegister: return REGISTERS[this->reg.index];
         case MetaValueKind_IRegisterMemory:
@@ -176,7 +174,7 @@ struct MetaValue {
         return 0;
     }
 
-    ACE_INLINE void add_relocation(
+    SIR_INLINE void add_relocation(
         X86_64AsmBuilder *builder,
         OperandKind other_operand_kind = OperandKind_None,
         SizeClass other_operand_size_class = SizeClass_None) const;
@@ -185,27 +183,27 @@ struct MetaValue {
 struct FuncJumpPatch {
     int64_t instruction;
     size_t instruction_offset;
-    InstRef destination_block;
+    SIRInstRef destination_block;
 };
 
 struct MetaFunction {
     uint32_t stack_size;
-    Array<FuncJumpPatch> jump_patches;
+    SIRArray<FuncJumpPatch> jump_patches;
     bool registers_used[RegisterIndex_COUNT];
     int32_t saved_register_stack_offset[RegisterIndex_COUNT];
-    Slice<RegisterIndex> caller_saved_registers;
-    Slice<RegisterIndex> callee_saved_registers;
-    Array<RegisterIndex> temp_int_register_stack;
-    SymbolRef symbol_ref{};
+    SIRSlice<RegisterIndex> caller_saved_registers;
+    SIRSlice<RegisterIndex> callee_saved_registers;
+    SIRArray<RegisterIndex> temp_int_register_stack;
+    SIRSymbolRef symbol_ref{};
 };
 
-struct X86_64AsmBuilder : AsmBuilder {
-    Module *module;
-    ObjectBuilder *obj_builder;
-    Array<MetaValue> meta_insts;
+struct X86_64AsmBuilder : SIRAsmBuilder {
+    SIRModule *module;
+    SIRObjectBuilder *obj_builder;
+    SIRArray<MetaValue> meta_insts;
 
     size_t get_code_offset();
-    size_t encode_raw(const Slice<uint8_t> &bytes);
+    size_t encode_raw(const SIRSlice<uint8_t> &bytes);
     size_t encode(
         uint64_t mnem, FeOp op0 = 0, FeOp op1 = 0, FeOp op2 = 0, FeOp op3 = 0);
     size_t encode_at(
@@ -218,15 +216,15 @@ struct X86_64AsmBuilder : AsmBuilder {
 
     void encode_mnem(Mnem mnem, const MetaValue &source, const MetaValue &dest);
 
-    size_t encode_direct_call(InstRef func_ref);
-    void encode_function_ending(InstRef func_ref);
+    size_t encode_direct_call(SIRInstRef func_ref);
+    void encode_function_ending(SIRInstRef func_ref);
 
-    MetaValue generate_global(uint32_t flags, Slice<uint8_t> data);
-    void generate_function(InstRef global_ref);
-    void generate_inst(InstRef func_ref, InstRef inst_ref);
+    MetaValue generate_global(uint32_t flags, SIRSlice<uint8_t> data);
+    void generate_function(SIRInstRef global_ref);
+    void generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref);
 
-    size_t get_func_call_stack_parameters_size(InstRef func_call_ref);
-    void move_inst_rvalue(InstRef inst_ref, const MetaValue &dest_value);
+    size_t get_func_call_stack_parameters_size(SIRInstRef func_call_ref);
+    void move_inst_rvalue(SIRInstRef inst_ref, const MetaValue &dest_value);
     void encode_memcpy(
         size_t value_size, MetaValue source_value, MetaValue dest_value);
 
@@ -234,7 +232,7 @@ struct X86_64AsmBuilder : AsmBuilder {
     virtual void destroy() override;
 };
 
-ACE_INLINE void MetaValue::add_relocation(
+SIR_INLINE void MetaValue::add_relocation(
     X86_64AsmBuilder *builder,
     OperandKind other_operand_kind,
     SizeClass other_operand_size_class) const
@@ -253,7 +251,7 @@ ACE_INLINE void MetaValue::add_relocation(
     }
 }
 
-AsmBuilder *create_x86_64_builder(Module *module, ObjectBuilder *obj_builder)
+SIRAsmBuilder *SIRCreateX86_64Builder(SIRModule *module, SIRObjectBuilder *obj_builder)
 {
     ZoneScoped;
 
@@ -262,7 +260,7 @@ AsmBuilder *create_x86_64_builder(Module *module, ObjectBuilder *obj_builder)
     asm_builder->obj_builder = obj_builder;
 
     asm_builder->meta_insts =
-        Array<MetaValue>::create(MallocAllocator::get_instance());
+        SIRArray<MetaValue>::create(SIRMallocAllocator::get_instance());
     asm_builder->meta_insts.resize(module->insts.len);
 
     for (size_t i = 0; i < asm_builder->meta_insts.len; ++i) {
@@ -370,7 +368,7 @@ AsmBuilder *create_x86_64_builder(Module *module, ObjectBuilder *obj_builder)
     return asm_builder;
 }
 
-ACE_INLINE
+SIR_INLINE
 MetaValue create_int_register_value(uint8_t bytes, RegisterIndex index)
 {
     ZoneScoped;
@@ -383,7 +381,7 @@ MetaValue create_int_register_value(uint8_t bytes, RegisterIndex index)
     return value;
 }
 
-ACE_INLINE
+SIR_INLINE
 MetaValue create_float_register_value(uint8_t bytes, RegisterIndex index)
 {
     ZoneScoped;
@@ -396,7 +394,7 @@ MetaValue create_float_register_value(uint8_t bytes, RegisterIndex index)
     return value;
 }
 
-ACE_INLINE
+SIR_INLINE
 MetaValue create_int_register_memory_value(
     size_t byte_size,
     RegisterIndex base,
@@ -422,7 +420,7 @@ MetaValue create_int_register_memory_value(
     return value;
 }
 
-ACE_INLINE
+SIR_INLINE
 MetaValue create_stack_value(size_t byte_size, int32_t offset)
 {
     ZoneScoped;
@@ -441,7 +439,7 @@ MetaValue create_stack_value(size_t byte_size, int32_t offset)
     return value;
 }
 
-ACE_INLINE
+SIR_INLINE
 MetaValue create_imm_int_value(uint8_t bytes, uint64_t int_value)
 {
     ZoneScoped;
@@ -459,9 +457,9 @@ MetaValue create_imm_int_value(uint8_t bytes, uint64_t int_value)
     return value;
 }
 
-ACE_INLINE
+SIR_INLINE
 MetaValue
-create_global_value(size_t byte_size, SectionType section_type, size_t offset)
+create_global_value(size_t byte_size, SIRSectionType section_type, size_t offset)
 {
     ZoneScoped;
 
@@ -479,22 +477,22 @@ create_global_value(size_t byte_size, SectionType section_type, size_t offset)
     return value;
 }
 
-ACE_INLINE
+SIR_INLINE
 size_t X86_64AsmBuilder::get_code_offset()
 {
-    return this->obj_builder->get_section_size(SectionType_Text);
+    return this->obj_builder->get_section_size(SIRSectionType_Text);
 }
 
-ACE_INLINE
-size_t X86_64AsmBuilder::encode_raw(const Slice<uint8_t> &bytes)
+SIR_INLINE
+size_t X86_64AsmBuilder::encode_raw(const SIRSlice<uint8_t> &bytes)
 {
     ZoneScoped;
 
-    this->obj_builder->add_to_section(SectionType_Text, bytes);
+    this->obj_builder->add_to_section(SIRSectionType_Text, bytes);
     return bytes.len;
 }
 
-ACE_INLINE
+SIR_INLINE
 size_t
 X86_64AsmBuilder::encode(uint64_t mnem, FeOp op0, FeOp op1, FeOp op2, FeOp op3)
 {
@@ -503,14 +501,14 @@ X86_64AsmBuilder::encode(uint64_t mnem, FeOp op0, FeOp op1, FeOp op2, FeOp op3)
     uint8_t temp[15];
     uint8_t *ptr = &temp[0];
     int failed = fe_enc64(&ptr, mnem, op0, op1, op2, op3);
-    ACE_ASSERT(!failed);
+    SIR_ASSERT(!failed);
 
     size_t inst_len = (size_t)(ptr - temp);
-    this->obj_builder->add_to_section(SectionType_Text, {&temp[0], inst_len});
+    this->obj_builder->add_to_section(SIRSectionType_Text, {&temp[0], inst_len});
     return inst_len;
 }
 
-ACE_INLINE
+SIR_INLINE
 size_t X86_64AsmBuilder::encode_at(
     size_t offset, uint64_t mnem, FeOp op0, FeOp op1, FeOp op2, FeOp op3)
 {
@@ -519,16 +517,16 @@ size_t X86_64AsmBuilder::encode_at(
     uint8_t temp[15];
     uint8_t *ptr = &temp[0];
     int failed = fe_enc64(&ptr, mnem, op0, op1, op2, op3);
-    ACE_ASSERT(!failed);
+    SIR_ASSERT(!failed);
 
     size_t inst_len = (size_t)(ptr - temp);
     this->obj_builder->set_section_data(
-        SectionType_Text, offset, {&temp[0], inst_len});
+        SIRSectionType_Text, offset, {&temp[0], inst_len});
     return inst_len;
 }
 
-ACE_INLINE
-size_t X86_64AsmBuilder::encode_direct_call(InstRef func_ref)
+SIR_INLINE
+size_t X86_64AsmBuilder::encode_direct_call(SIRInstRef func_ref)
 {
     ZoneScoped;
 
@@ -544,7 +542,7 @@ size_t X86_64AsmBuilder::encode_direct_call(InstRef func_ref)
     return inst_len;
 }
 
-void X86_64AsmBuilder::encode_function_ending(InstRef func_ref)
+void X86_64AsmBuilder::encode_function_ending(SIRInstRef func_ref)
 {
     ZoneScoped;
 
@@ -600,35 +598,35 @@ void X86_64AsmBuilder::encode_mnem(
 }
 
 size_t
-X86_64AsmBuilder::get_func_call_stack_parameters_size(InstRef func_call_ref)
+X86_64AsmBuilder::get_func_call_stack_parameters_size(SIRInstRef func_call_ref)
 {
     size_t stack_parameters_size = 0;
 
-    Inst func_call = func_call_ref.get(this->module);
-    Function *called_func = func_call.func_call.func_ref.get(this->module).func;
+    SIRInst func_call = func_call_ref.get(this->module);
+    SIRFunction *called_func = func_call.func_call.func_ref.get(this->module).func;
     switch (called_func->calling_convention) {
-    case CallingConvention_SystemV: {
+    case SIRCallingConvention_SystemV: {
         uint32_t used_int_regs = 0;
         uint32_t used_float_regs = 0;
 
         for (uint32_t i = 0; i < called_func->param_types.len; ++i) {
-            Type *param_type = called_func->param_types[i];
+            SIRType *param_type = called_func->param_types[i];
 
             uint32_t param_align = param_type->align_of(this->module);
             stack_parameters_size =
-                ACE_ROUND_UP(param_align, stack_parameters_size);
+                SIR_ROUND_UP(param_align, stack_parameters_size);
 
             switch (param_type->kind) {
-            case TypeKind_Pointer: {
-                if (used_int_regs < ACE_CARRAY_LENGTH(SYSV_INT_PARAM_REGS)) {
+            case SIRTypeKind_Pointer: {
+                if (used_int_regs < SIR_CARRAY_LENGTH(SYSV_INT_PARAM_REGS)) {
                     used_int_regs++;
                 } else {
                     stack_parameters_size += 8;
                 }
                 break;
             }
-            case TypeKind_Int: {
-                if (used_int_regs < ACE_CARRAY_LENGTH(SYSV_INT_PARAM_REGS)) {
+            case SIRTypeKind_Int: {
+                if (used_int_regs < SIR_CARRAY_LENGTH(SYSV_INT_PARAM_REGS)) {
                     used_int_regs++;
                 } else {
                     stack_parameters_size += 8;
@@ -636,9 +634,9 @@ X86_64AsmBuilder::get_func_call_stack_parameters_size(InstRef func_call_ref)
 
                 break;
             }
-            case TypeKind_Float: {
+            case SIRTypeKind_Float: {
                 if (used_float_regs <
-                    ACE_CARRAY_LENGTH(SYSV_FLOAT_PARAM_REGS)) {
+                    SIR_CARRAY_LENGTH(SYSV_FLOAT_PARAM_REGS)) {
                     used_float_regs++;
                 } else {
                     stack_parameters_size += 8;
@@ -658,24 +656,24 @@ X86_64AsmBuilder::get_func_call_stack_parameters_size(InstRef func_call_ref)
     }
     }
 
-    stack_parameters_size = ACE_ROUND_UP(16, stack_parameters_size);
+    stack_parameters_size = SIR_ROUND_UP(16, stack_parameters_size);
     return stack_parameters_size;
 }
 
 void X86_64AsmBuilder::move_inst_rvalue(
-    InstRef inst_ref, const MetaValue &dest_value)
+    SIRInstRef inst_ref, const MetaValue &dest_value)
 {
-    Inst inst = inst_ref.get(this->module);
+    SIRInst inst = inst_ref.get(this->module);
     switch (inst.kind) {
-    case InstKind_StackSlot: {
+    case SIRInstKind_StackSlot: {
         this->encode_mnem(Mnem_LEA, this->meta_insts[inst_ref.id], dest_value);
         break;
     }
-    case InstKind_Global: {
+    case SIRInstKind_Global: {
         this->encode_mnem(Mnem_LEA, this->meta_insts[inst_ref.id], dest_value);
         break;
     }
-    case InstKind_PtrCast: {
+    case SIRInstKind_PtrCast: {
         this->move_inst_rvalue(inst.ptr_cast.inst_ref, dest_value);
         break;
     }
@@ -704,8 +702,8 @@ void X86_64AsmBuilder::move_inst_rvalue(
 void X86_64AsmBuilder::encode_memcpy(
     size_t value_size, MetaValue source_value, MetaValue dest_value)
 {
-    ACE_ASSERT(source_value.kind == MetaValueKind_IRegisterMemory);
-    ACE_ASSERT(dest_value.kind == MetaValueKind_IRegisterMemory);
+    SIR_ASSERT(source_value.kind == MetaValueKind_IRegisterMemory);
+    SIR_ASSERT(dest_value.kind == MetaValueKind_IRegisterMemory);
 
     size_t value_size_left = value_size;
     while (value_size_left > 0) {
@@ -727,30 +725,30 @@ void X86_64AsmBuilder::encode_memcpy(
     }
 }
 
-void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
+void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
 {
     ZoneScoped;
 
     MetaFunction *meta_func = this->meta_insts[func_ref.id].func;
 
-    Inst inst = inst_ref.get(this->module);
+    SIRInst inst = inst_ref.get(this->module);
 
     switch (inst.kind) {
-    case InstKind_Unknown: ACE_ASSERT(0); break;
-    case InstKind_Function: ACE_ASSERT(0); break;
-    case InstKind_Block: ACE_ASSERT(0); break;
-    case InstKind_FunctionParameter: ACE_ASSERT(0); break;
-    case InstKind_Global: ACE_ASSERT(0); break;
-    case InstKind_StackSlot: ACE_ASSERT(0); break;
+    case SIRInstKind_Unknown: SIR_ASSERT(0); break;
+    case SIRInstKind_Function: SIR_ASSERT(0); break;
+    case SIRInstKind_Block: SIR_ASSERT(0); break;
+    case SIRInstKind_FunctionParameter: SIR_ASSERT(0); break;
+    case SIRInstKind_Global: SIR_ASSERT(0); break;
+    case SIRInstKind_StackSlot: SIR_ASSERT(0); break;
 
-    case InstKind_ImmediateInt: {
+    case SIRInstKind_ImmediateInt: {
         uint8_t data[8];
 
         size_t byte_size = inst.type->int_.bits >> 3;
         if (byte_size == 8 && inst.imm_int.u64 > UINT32_MAX) {
             *((uint64_t *)data) = inst.imm_int.u64;
             this->meta_insts[inst_ref.id] = generate_global(
-                GlobalFlags_Initialized | GlobalFlags_ReadOnly,
+                SIRGlobalFlags_Initialized | SIRGlobalFlags_ReadOnly,
                 {&data[0], byte_size});
         } else {
             this->meta_insts[inst_ref.id] =
@@ -760,7 +758,7 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
         break;
     }
 
-    case InstKind_ImmediateFloat: {
+    case SIRInstKind_ImmediateFloat: {
         uint8_t data[8];
         size_t byte_size = inst.type->float_.bits >> 3;
 
@@ -770,29 +768,29 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
         }
 
         this->meta_insts[inst_ref.id] = generate_global(
-            GlobalFlags_Initialized | GlobalFlags_ReadOnly,
+            SIRGlobalFlags_Initialized | SIRGlobalFlags_ReadOnly,
             {&data[0], byte_size});
 
         break;
     }
 
-    case InstKind_ImmediateBool: {
+    case SIRInstKind_ImmediateBool: {
         this->meta_insts[inst_ref.id] =
             create_imm_int_value(1, inst.imm_bool.value ? 1 : 0);
         break;
     }
 
-    case InstKind_PtrCast: {
+    case SIRInstKind_PtrCast: {
         this->meta_insts[inst_ref.id] =
             this->meta_insts[inst.ptr_cast.inst_ref.id];
         break;
     }
 
-    case InstKind_ZExt: {
+    case SIRInstKind_ZExt: {
         MetaValue dest_value = this->meta_insts[inst_ref.id];
 
-        ace::Type *source_type = inst.trunc.inst_ref.get(this->module).type;
-        ace::Type *dest_type = inst.type;
+        SIRType *source_type = inst.trunc.inst_ref.get(this->module).type;
+        SIRType *dest_type = inst.type;
 
         MetaValue source_ax_value = create_int_register_value(
             source_type->size_of(this->module), RegisterIndex_RAX);
@@ -811,7 +809,7 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
             switch (source_bytes) {
             case 1: x86_inst = FE_MOVZXr32r8; break;
             case 2: x86_inst = FE_MOVZXr32r16; break;
-            default: ACE_ASSERT(0); break;
+            default: SIR_ASSERT(0); break;
             }
             break;
         }
@@ -820,11 +818,11 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
             case 1: x86_inst = FE_MOVZXr64r8; break;
             case 2: x86_inst = FE_MOVZXr64r16; break;
             case 4: break;
-            default: ACE_ASSERT(0); break;
+            default: SIR_ASSERT(0); break;
             }
             break;
         }
-        default: ACE_ASSERT(0); break;
+        default: SIR_ASSERT(0); break;
         }
 
         if (x86_inst) {
@@ -835,11 +833,11 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
         break;
     }
 
-    case InstKind_SExt: {
+    case SIRInstKind_SExt: {
         MetaValue dest_value = this->meta_insts[inst_ref.id];
 
-        ace::Type *source_type = inst.trunc.inst_ref.get(this->module).type;
-        ace::Type *dest_type = inst.type;
+        SIRType *source_type = inst.trunc.inst_ref.get(this->module).type;
+        SIRType *dest_type = inst.type;
 
         MetaValue source_ax_value = create_int_register_value(
             source_type->size_of(this->module), RegisterIndex_RAX);
@@ -858,7 +856,7 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
             switch (source_bytes) {
             case 1: x86_inst = FE_MOVSXr32r8; break;
             case 2: x86_inst = FE_MOVSXr32r16; break;
-            default: ACE_ASSERT(0); break;
+            default: SIR_ASSERT(0); break;
             }
             break;
         }
@@ -867,11 +865,11 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
             case 1: x86_inst = FE_MOVSXr64r8; break;
             case 2: x86_inst = FE_MOVSXr64r16; break;
             case 4: x86_inst = FE_MOVSXr64r32; break;
-            default: ACE_ASSERT(0); break;
+            default: SIR_ASSERT(0); break;
             }
             break;
         }
-        default: ACE_ASSERT(0); break;
+        default: SIR_ASSERT(0); break;
         }
 
         this->encode(x86_inst, FE_AX, FE_AX);
@@ -879,11 +877,11 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
         break;
     }
 
-    case InstKind_Trunc: {
+    case SIRInstKind_Trunc: {
         MetaValue dest_value = this->meta_insts[inst_ref.id];
 
-        ace::Type *source_type = inst.trunc.inst_ref.get(this->module).type;
-        ace::Type *dest_type = inst.type;
+        SIRType *source_type = inst.trunc.inst_ref.get(this->module).type;
+        SIRType *dest_type = inst.type;
 
         MetaValue source_ax_value = create_int_register_value(
             source_type->size_of(this->module), RegisterIndex_RAX);
@@ -896,7 +894,7 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
         break;
     }
 
-    case InstKind_Binop: {
+    case SIRInstKind_Binop: {
         MetaValue dest_value = this->meta_insts[inst_ref.id];
 
         size_t size = inst.type->size_of(this->module);
@@ -904,10 +902,10 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
             inst.binop.left_ref.get(this->module).type->size_of(this->module);
 
         switch (inst.binop.op) {
-        case BinaryOperation_Unknown:
-        case BinaryOperation_MAX: ACE_ASSERT(0); break;
+        case SIRBinaryOperation_Unknown:
+        case SIRBinaryOperation_MAX: SIR_ASSERT(0); break;
 
-        case BinaryOperation_IAdd: {
+        case SIRBinaryOperation_IAdd: {
             MetaValue ax_value =
                 create_int_register_value(operand_size, RegisterIndex_RAX);
             MetaValue dx_value =
@@ -919,7 +917,7 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
             case 2: x86_inst = FE_ADD16rr; break;
             case 4: x86_inst = FE_ADD32rr; break;
             case 8: x86_inst = FE_ADD64rr; break;
-            default: ACE_ASSERT(0); break;
+            default: SIR_ASSERT(0); break;
             }
 
             this->move_inst_rvalue(inst.binop.left_ref, ax_value);
@@ -931,7 +929,7 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
             break;
         }
 
-        case BinaryOperation_ISub: {
+        case SIRBinaryOperation_ISub: {
             MetaValue ax_value =
                 create_int_register_value(operand_size, RegisterIndex_RAX);
             MetaValue dx_value =
@@ -943,7 +941,7 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
             case 2: x86_inst = FE_SUB16rr; break;
             case 4: x86_inst = FE_SUB32rr; break;
             case 8: x86_inst = FE_SUB64rr; break;
-            default: ACE_ASSERT(0); break;
+            default: SIR_ASSERT(0); break;
             }
 
             this->move_inst_rvalue(inst.binop.left_ref, ax_value);
@@ -955,7 +953,7 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
             break;
         }
 
-        case BinaryOperation_IMul: {
+        case SIRBinaryOperation_IMul: {
             MetaValue ax_value =
                 create_int_register_value(operand_size, RegisterIndex_RAX);
             MetaValue dx_value =
@@ -967,7 +965,7 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
             case 2: x86_inst = FE_IMUL16rr; break;
             case 4: x86_inst = FE_IMUL32rr; break;
             case 8: x86_inst = FE_IMUL64rr; break;
-            default: ACE_ASSERT(0); break;
+            default: SIR_ASSERT(0); break;
             }
 
             this->move_inst_rvalue(inst.binop.left_ref, ax_value);
@@ -984,7 +982,7 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
             break;
         }
 
-        case BinaryOperation_SDiv: {
+        case SIRBinaryOperation_SDiv: {
             MetaValue ax_value =
                 create_int_register_value(operand_size, RegisterIndex_RAX);
             MetaValue cx_value =
@@ -1006,7 +1004,7 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
                 this->move_inst_rvalue(inst.binop.left_ref, ax_value);
                 break;
             }
-            default: ACE_ASSERT(0); break;
+            default: SIR_ASSERT(0); break;
             }
 
             int64_t sep_inst = 0;
@@ -1015,7 +1013,7 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
             case 2:
             case 4: sep_inst = FE_C_SEP32; break;
             case 8: sep_inst = FE_C_SEP64; break;
-            default: ACE_ASSERT(0); break;
+            default: SIR_ASSERT(0); break;
             }
             this->encode(sep_inst, FE_AX);
 
@@ -1025,7 +1023,7 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
             case 2:
             case 4: div_inst = FE_IDIV32r; break;
             case 8: div_inst = FE_IDIV64r; break;
-            default: ACE_ASSERT(0); break;
+            default: SIR_ASSERT(0); break;
             }
 
             switch (operand_size) {
@@ -1044,7 +1042,7 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
                 this->move_inst_rvalue(inst.binop.right_ref, cx_value);
                 break;
             }
-            default: ACE_ASSERT(0); break;
+            default: SIR_ASSERT(0); break;
             }
 
             this->encode(div_inst, FE_CX);
@@ -1053,7 +1051,7 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
             break;
         }
 
-        case BinaryOperation_UDiv: {
+        case SIRBinaryOperation_UDiv: {
             MetaValue ax_value =
                 create_int_register_value(operand_size, RegisterIndex_RAX);
             MetaValue cx_value =
@@ -1075,7 +1073,7 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
                 this->move_inst_rvalue(inst.binop.left_ref, ax_value);
                 break;
             }
-            default: ACE_ASSERT(0); break;
+            default: SIR_ASSERT(0); break;
             }
 
             switch (operand_size) {
@@ -1093,7 +1091,7 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
             case 2: div_inst = FE_IDIV32r; break;
             case 4: div_inst = FE_DIV32r; break;
             case 8: div_inst = FE_DIV64r; break;
-            default: ACE_ASSERT(0); break;
+            default: SIR_ASSERT(0); break;
             }
 
             switch (operand_size) {
@@ -1113,7 +1111,7 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
                 this->move_inst_rvalue(inst.binop.right_ref, cx_value);
                 break;
             }
-            default: ACE_ASSERT(0); break;
+            default: SIR_ASSERT(0); break;
             }
 
             this->encode(div_inst, FE_CX);
@@ -1122,7 +1120,7 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
             break;
         }
 
-        case BinaryOperation_SRem: {
+        case SIRBinaryOperation_SRem: {
             MetaValue ax_value =
                 create_int_register_value(operand_size, RegisterIndex_RAX);
             MetaValue dx_value =
@@ -1146,7 +1144,7 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
                 this->move_inst_rvalue(inst.binop.left_ref, ax_value);
                 break;
             }
-            default: ACE_ASSERT(0); break;
+            default: SIR_ASSERT(0); break;
             }
 
             int64_t sep_inst = 0;
@@ -1155,7 +1153,7 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
             case 2:
             case 4: sep_inst = FE_C_SEP32; break;
             case 8: sep_inst = FE_C_SEP64; break;
-            default: ACE_ASSERT(0); break;
+            default: SIR_ASSERT(0); break;
             }
             this->encode(sep_inst, FE_AX);
 
@@ -1165,7 +1163,7 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
             case 2:
             case 4: div_inst = FE_IDIV32r; break;
             case 8: div_inst = FE_IDIV64r; break;
-            default: ACE_ASSERT(0); break;
+            default: SIR_ASSERT(0); break;
             }
 
             switch (operand_size) {
@@ -1184,7 +1182,7 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
                 this->move_inst_rvalue(inst.binop.right_ref, cx_value);
                 break;
             }
-            default: ACE_ASSERT(0); break;
+            default: SIR_ASSERT(0); break;
             }
 
             this->encode(div_inst, FE_CX);
@@ -1193,7 +1191,7 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
             break;
         }
 
-        case BinaryOperation_URem: {
+        case SIRBinaryOperation_URem: {
             MetaValue ax_value =
                 create_int_register_value(operand_size, RegisterIndex_RAX);
             MetaValue dx_value =
@@ -1217,7 +1215,7 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
                 this->move_inst_rvalue(inst.binop.left_ref, ax_value);
                 break;
             }
-            default: ACE_ASSERT(0); break;
+            default: SIR_ASSERT(0); break;
             }
 
             switch (operand_size) {
@@ -1235,7 +1233,7 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
             case 2: div_inst = FE_IDIV32r; break;
             case 4: div_inst = FE_DIV32r; break;
             case 8: div_inst = FE_DIV64r; break;
-            default: ACE_ASSERT(0); break;
+            default: SIR_ASSERT(0); break;
             }
 
             switch (operand_size) {
@@ -1255,7 +1253,7 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
                 this->move_inst_rvalue(inst.binop.right_ref, cx_value);
                 break;
             }
-            default: ACE_ASSERT(0); break;
+            default: SIR_ASSERT(0); break;
             }
 
             this->encode(div_inst, FE_CX);
@@ -1264,41 +1262,41 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
             break;
         }
 
-        case BinaryOperation_FAdd: {
-            ACE_ASSERT(!"unimplemented");
+        case SIRBinaryOperation_FAdd: {
+            SIR_ASSERT(!"unimplemented");
             break;
         }
 
-        case BinaryOperation_FSub: {
-            ACE_ASSERT(!"unimplemented");
+        case SIRBinaryOperation_FSub: {
+            SIR_ASSERT(!"unimplemented");
             break;
         }
 
-        case BinaryOperation_FMul: {
-            ACE_ASSERT(!"unimplemented");
+        case SIRBinaryOperation_FMul: {
+            SIR_ASSERT(!"unimplemented");
             break;
         }
 
-        case BinaryOperation_FDiv: {
-            ACE_ASSERT(!"unimplemented");
+        case SIRBinaryOperation_FDiv: {
+            SIR_ASSERT(!"unimplemented");
             break;
         }
 
-        case BinaryOperation_FRem: {
-            ACE_ASSERT(!"unimplemented");
+        case SIRBinaryOperation_FRem: {
+            SIR_ASSERT(!"unimplemented");
             break;
         }
 
-        case BinaryOperation_IEQ:
-        case BinaryOperation_INE:
-        case BinaryOperation_UGT:
-        case BinaryOperation_UGE:
-        case BinaryOperation_ULT:
-        case BinaryOperation_ULE:
-        case BinaryOperation_SGT:
-        case BinaryOperation_SGE:
-        case BinaryOperation_SLT:
-        case BinaryOperation_SLE: {
+        case SIRBinaryOperation_IEQ:
+        case SIRBinaryOperation_INE:
+        case SIRBinaryOperation_UGT:
+        case SIRBinaryOperation_UGE:
+        case SIRBinaryOperation_ULT:
+        case SIRBinaryOperation_ULE:
+        case SIRBinaryOperation_SGT:
+        case SIRBinaryOperation_SGE:
+        case SIRBinaryOperation_SLT:
+        case SIRBinaryOperation_SLE: {
             MetaValue ax_value =
                 create_int_register_value(operand_size, RegisterIndex_RAX);
             MetaValue dx_value =
@@ -1313,43 +1311,43 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
             case 2: x86_inst = FE_CMP16rr; break;
             case 4: x86_inst = FE_CMP32rr; break;
             case 8: x86_inst = FE_CMP64rr; break;
-            default: ACE_ASSERT(0); break;
+            default: SIR_ASSERT(0); break;
             }
 
             this->encode(x86_inst, FE_AX, FE_DX);
 
             switch (inst.binop.op) {
-            case BinaryOperation_IEQ:
+            case SIRBinaryOperation_IEQ:
                 this->encode(FE_SETZ8r, FE_AX); // sete
                 break;
-            case BinaryOperation_INE:
+            case SIRBinaryOperation_INE:
                 this->encode(FE_SETNZ8r, FE_AX); // setne
                 break;
-            case BinaryOperation_UGT:
+            case SIRBinaryOperation_UGT:
                 this->encode(FE_SETA8r, FE_AX); // seta
                 break;
-            case BinaryOperation_UGE:
+            case SIRBinaryOperation_UGE:
                 this->encode(FE_SETNC8r, FE_AX); // setae
                 break;
-            case BinaryOperation_ULT:
+            case SIRBinaryOperation_ULT:
                 this->encode(FE_SETC8r, FE_AX); // setb
                 break;
-            case BinaryOperation_ULE:
+            case SIRBinaryOperation_ULE:
                 this->encode(FE_SETBE8r, FE_AX); // setbe
                 break;
-            case BinaryOperation_SGT:
+            case SIRBinaryOperation_SGT:
                 this->encode(FE_SETG8r, FE_AX); // setg
                 break;
-            case BinaryOperation_SGE:
+            case SIRBinaryOperation_SGE:
                 this->encode(FE_SETGE8r, FE_AX); // setge
                 break;
-            case BinaryOperation_SLT:
+            case SIRBinaryOperation_SLT:
                 this->encode(FE_SETL8r, FE_AX); // setl
                 break;
-            case BinaryOperation_SLE:
+            case SIRBinaryOperation_SLE:
                 this->encode(FE_SETLE8r, FE_AX); // setle
                 break;
-            default: ACE_ASSERT(0); break;
+            default: SIR_ASSERT(0); break;
             }
 
             MetaValue al_value =
@@ -1359,19 +1357,19 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
             break;
         }
 
-        case BinaryOperation_FEQ:
-        case BinaryOperation_FNE:
-        case BinaryOperation_FGT:
-        case BinaryOperation_FGE:
-        case BinaryOperation_FLT:
-        case BinaryOperation_FLE: {
-            ACE_ASSERT(!"unimplemented");
+        case SIRBinaryOperation_FEQ:
+        case SIRBinaryOperation_FNE:
+        case SIRBinaryOperation_FGT:
+        case SIRBinaryOperation_FGE:
+        case SIRBinaryOperation_FLT:
+        case SIRBinaryOperation_FLE: {
+            SIR_ASSERT(!"unimplemented");
             break;
         }
 
-        case BinaryOperation_And:
-        case BinaryOperation_Or:
-        case BinaryOperation_Xor: {
+        case SIRBinaryOperation_And:
+        case SIRBinaryOperation_Or:
+        case SIRBinaryOperation_Xor: {
             MetaValue ax_value =
                 create_int_register_value(operand_size, RegisterIndex_RAX);
             MetaValue dx_value =
@@ -1383,37 +1381,37 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
             int64_t x86_inst = 0;
 
             switch (inst.binop.op) {
-            case BinaryOperation_And: {
+            case SIRBinaryOperation_And: {
                 switch (operand_size) {
                 case 1: x86_inst = FE_AND8rr; break;
                 case 2: x86_inst = FE_AND16rr; break;
                 case 4: x86_inst = FE_AND32rr; break;
                 case 8: x86_inst = FE_AND64rr; break;
-                default: ACE_ASSERT(0); break;
+                default: SIR_ASSERT(0); break;
                 }
                 break;
             }
-            case BinaryOperation_Or: {
+            case SIRBinaryOperation_Or: {
                 switch (operand_size) {
                 case 1: x86_inst = FE_OR8rr; break;
                 case 2: x86_inst = FE_OR16rr; break;
                 case 4: x86_inst = FE_OR32rr; break;
                 case 8: x86_inst = FE_OR64rr; break;
-                default: ACE_ASSERT(0); break;
+                default: SIR_ASSERT(0); break;
                 }
                 break;
             }
-            case BinaryOperation_Xor: {
+            case SIRBinaryOperation_Xor: {
                 switch (operand_size) {
                 case 1: x86_inst = FE_XOR8rr; break;
                 case 2: x86_inst = FE_XOR16rr; break;
                 case 4: x86_inst = FE_XOR32rr; break;
                 case 8: x86_inst = FE_XOR64rr; break;
-                default: ACE_ASSERT(0); break;
+                default: SIR_ASSERT(0); break;
                 }
                 break;
             }
-            default: ACE_ASSERT(0); break;
+            default: SIR_ASSERT(0); break;
             }
 
             this->encode(x86_inst, FE_AX, FE_DX);
@@ -1422,9 +1420,9 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
             break;
         }
 
-        case BinaryOperation_Shl:
-        case BinaryOperation_AShr:
-        case BinaryOperation_LShr: {
+        case SIRBinaryOperation_Shl:
+        case SIRBinaryOperation_AShr:
+        case SIRBinaryOperation_LShr: {
             MetaValue ax_value = create_int_register_value(
                 inst.binop.left_ref.get(this->module)
                     .type->size_of(this->module),
@@ -1440,37 +1438,37 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
             int64_t x86_inst = 0;
 
             switch (inst.binop.op) {
-            case BinaryOperation_Shl: {
+            case SIRBinaryOperation_Shl: {
                 switch (operand_size) {
                 case 1: x86_inst = FE_SHL8rr; break;
                 case 2: x86_inst = FE_SHL16rr; break;
                 case 4: x86_inst = FE_SHL32rr; break;
                 case 8: x86_inst = FE_SHL64rr; break;
-                default: ACE_ASSERT(0); break;
+                default: SIR_ASSERT(0); break;
                 }
                 break;
             }
-            case BinaryOperation_AShr: {
+            case SIRBinaryOperation_AShr: {
                 switch (operand_size) {
                 case 1: x86_inst = FE_SAR8rr; break;
                 case 2: x86_inst = FE_SAR16rr; break;
                 case 4: x86_inst = FE_SAR32rr; break;
                 case 8: x86_inst = FE_SAR64rr; break;
-                default: ACE_ASSERT(0); break;
+                default: SIR_ASSERT(0); break;
                 }
                 break;
             }
-            case BinaryOperation_LShr: {
+            case SIRBinaryOperation_LShr: {
                 switch (operand_size) {
                 case 1: x86_inst = FE_SHR8rr; break;
                 case 2: x86_inst = FE_SHR16rr; break;
                 case 4: x86_inst = FE_SHR32rr; break;
                 case 8: x86_inst = FE_SHR64rr; break;
-                default: ACE_ASSERT(0); break;
+                default: SIR_ASSERT(0); break;
                 }
                 break;
             }
-            default: ACE_ASSERT(0); break;
+            default: SIR_ASSERT(0); break;
             }
 
             this->encode(x86_inst, FE_AX, FE_CX);
@@ -1481,7 +1479,7 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
         break;
     }
 
-    case InstKind_ArrayElemPtr: {
+    case SIRInstKind_ArrayElemPtr: {
         MetaValue ptr_value = create_int_register_value(8, RegisterIndex_RAX);
         this->move_inst_rvalue(inst.array_elem_ptr.accessed_ref, ptr_value);
 
@@ -1505,18 +1503,18 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
         break;
     }
 
-    case InstKind_StructElemPtr: {
+    case SIRInstKind_StructElemPtr: {
         uint32_t field_index = inst.struct_elem_ptr.field_index;
-        ace::Type *struct_type =
+        SIRType *struct_type =
             inst.struct_elem_ptr.accessed_ref.get(this->module)
                 .type->pointer.sub;
 
         uint32_t field_offset = 0;
         for (uint32_t i = 0; i <= field_index; ++i) {
-            ace::Type *field_type = struct_type->struct_.fields[i];
+            SIRType *field_type = struct_type->struct_.fields[i];
             uint32_t field_align = field_type->align_of(module);
             field_offset =
-                ACE_ROUND_UP(field_align, field_offset); // Add padding
+                SIR_ROUND_UP(field_align, field_offset); // Add padding
 
             if (i != field_index) {
                 field_offset += field_type->size_of(module);
@@ -1526,7 +1524,7 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
         MetaValue ptr_mem_value =
             this->meta_insts[inst.struct_elem_ptr.accessed_ref.id];
         if (inst.struct_elem_ptr.accessed_ref.get(this->module).kind !=
-            InstKind_StackSlot) {
+            SIRInstKind_StackSlot) {
             this->move_inst_rvalue(
                 inst.struct_elem_ptr.accessed_ref,
                 create_int_register_value(8, RegisterIndex_RAX));
@@ -1534,7 +1532,7 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
                 8, RegisterIndex_RAX, 0, RegisterIndex_None, 0);
         }
 
-        ACE_ASSERT(ptr_mem_value.kind == MetaValueKind_IRegisterMemory);
+        SIR_ASSERT(ptr_mem_value.kind == MetaValueKind_IRegisterMemory);
         ptr_mem_value.regmem.offset += field_offset;
 
         this->encode_mnem(
@@ -1542,12 +1540,12 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
         break;
     }
 
-    case InstKind_ExtractArrayElem: {
+    case SIRInstKind_ExtractArrayElem: {
         size_t value_size = inst.type->size_of(this->module);
 
         MetaValue accessed_value =
             this->meta_insts[inst.extract_array_elem.accessed_ref.id];
-        ACE_ASSERT(accessed_value.kind == MetaValueKind_IRegisterMemory);
+        SIR_ASSERT(accessed_value.kind == MetaValueKind_IRegisterMemory);
         MetaValue ptr_value = create_int_register_value(8, RegisterIndex_RAX);
         this->encode_mnem(Mnem_LEA, accessed_value, ptr_value);
 
@@ -1582,19 +1580,19 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
         break;
     }
 
-    case InstKind_ExtractStructElem: {
+    case SIRInstKind_ExtractStructElem: {
         size_t value_size = inst.type->size_of(this->module);
 
         uint32_t field_index = inst.extract_struct_elem.field_index;
-        ace::Type *struct_type =
+        SIRType *struct_type =
             inst.extract_struct_elem.accessed_ref.get(this->module).type;
 
         uint32_t field_offset = 0;
         for (uint32_t i = 0; i <= field_index; ++i) {
-            ace::Type *field_type = struct_type->struct_.fields[i];
+            SIRType *field_type = struct_type->struct_.fields[i];
             uint32_t field_align = field_type->align_of(module);
             field_offset =
-                ACE_ROUND_UP(field_align, field_offset); // Add padding
+                SIR_ROUND_UP(field_align, field_offset); // Add padding
 
             if (i != field_index) {
                 field_offset += field_type->size_of(module);
@@ -1603,7 +1601,7 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
 
         MetaValue ptr_mem_value =
             this->meta_insts[inst.extract_struct_elem.accessed_ref.id];
-        ACE_ASSERT(ptr_mem_value.kind == MetaValueKind_IRegisterMemory);
+        SIR_ASSERT(ptr_mem_value.kind == MetaValueKind_IRegisterMemory);
         ptr_mem_value.regmem.offset += field_offset;
 
         switch (value_size) {
@@ -1627,11 +1625,11 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
         break;
     }
 
-    case InstKind_Store: {
+    case SIRInstKind_Store: {
         size_t value_size =
             inst.store.value_ref.get(this->module).type->size_of(this->module);
 
-        Inst ptr_inst = inst.store.ptr_ref.get(this->module);
+        SIRInst ptr_inst = inst.store.ptr_ref.get(this->module);
 
         switch (value_size) {
         case 1:
@@ -1644,8 +1642,8 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
 
             MetaValue ptr_value = {};
             switch (ptr_inst.kind) {
-            case InstKind_Global:
-            case InstKind_StackSlot: {
+            case SIRInstKind_Global:
+            case SIRInstKind_StackSlot: {
                 ptr_value = this->meta_insts[inst.store.ptr_ref.id];
                 break;
             }
@@ -1706,19 +1704,19 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
         break;
     }
 
-    case InstKind_Load: {
+    case SIRInstKind_Load: {
         size_t value_size = inst.type->size_of(this->module);
         switch (value_size) {
         case 1:
         case 2:
         case 4:
         case 8: {
-            Inst ptr_inst = inst.load.ptr_ref.get(this->module);
+            SIRInst ptr_inst = inst.load.ptr_ref.get(this->module);
 
             MetaValue ptr_value = {};
             switch (ptr_inst.kind) {
-            case InstKind_Global:
-            case InstKind_StackSlot: {
+            case SIRInstKind_Global:
+            case SIRInstKind_StackSlot: {
                 ptr_value = this->meta_insts[inst.store.ptr_ref.id];
                 break;
             }
@@ -1770,16 +1768,16 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
         break;
     }
 
-    case InstKind_FuncCall: {
-        Function *called_func = inst.func_call.func_ref.get(this->module).func;
+    case SIRInstKind_FuncCall: {
+        SIRFunction *called_func = inst.func_call.func_ref.get(this->module).func;
 
         // TODO: save and restore caller-saved registers
 
-        ACE_ASSERT(
+        SIR_ASSERT(
             called_func->param_types.len <= inst.func_call.parameters.len);
 
         switch (called_func->calling_convention) {
-        case CallingConvention_SystemV: {
+        case SIRCallingConvention_SystemV: {
             uint32_t used_int_regs = 0;
             uint32_t used_float_regs = 0;
 
@@ -1787,30 +1785,30 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
 
             // Write parameters to ABI locations
             for (size_t i = 0; i < inst.func_call.parameters.len; ++i) {
-                InstRef param_inst_ref = inst.func_call.parameters[i];
-                ACE_ASSERT(param_inst_ref.id > 0);
+                SIRInstRef param_inst_ref = inst.func_call.parameters[i];
+                SIR_ASSERT(param_inst_ref.id > 0);
 
-                Inst param_inst = param_inst_ref.get(this->module);
+                SIRInst param_inst = param_inst_ref.get(this->module);
 
                 if (i < called_func->param_types.len) {
-                    Type *param_type = called_func->param_types[i];
-                    ACE_ASSERT(param_type == param_inst.type);
+                    SIRType *param_type = called_func->param_types[i];
+                    SIR_ASSERT(param_type == param_inst.type);
                 }
 
                 MetaValue dest_param_value = {};
 
-                Type *param_type = param_inst.type;
+                SIRType *param_type = param_inst.type;
                 uint32_t param_align = param_type->align_of(this->module);
 
                 switch (param_type->kind) {
-                case TypeKind_Pointer: {
+                case SIRTypeKind_Pointer: {
                     if (used_int_regs <
-                        ACE_CARRAY_LENGTH(SYSV_INT_PARAM_REGS)) {
+                        SIR_CARRAY_LENGTH(SYSV_INT_PARAM_REGS)) {
                         dest_param_value = create_int_register_value(
                             8, SYSV_INT_PARAM_REGS[used_int_regs++]);
                     } else {
                         param_stack_offset =
-                            ACE_ROUND_UP(param_align, param_stack_offset);
+                            SIR_ROUND_UP(param_align, param_stack_offset);
                         dest_param_value = create_int_register_memory_value(
                             8,
                             RegisterIndex_RSP,
@@ -1821,15 +1819,15 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
                     }
                     break;
                 }
-                case TypeKind_Int: {
+                case SIRTypeKind_Int: {
                     if (used_int_regs <
-                        ACE_CARRAY_LENGTH(SYSV_INT_PARAM_REGS)) {
+                        SIR_CARRAY_LENGTH(SYSV_INT_PARAM_REGS)) {
                         dest_param_value = create_int_register_value(
                             param_inst.type->int_.bits >> 3,
                             SYSV_INT_PARAM_REGS[used_int_regs++]);
                     } else {
                         param_stack_offset =
-                            ACE_ROUND_UP(param_align, param_stack_offset);
+                            SIR_ROUND_UP(param_align, param_stack_offset);
                         dest_param_value = create_int_register_memory_value(
                             param_inst.type->int_.bits >> 3,
                             RegisterIndex_RSP,
@@ -1841,15 +1839,15 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
                     }
                     break;
                 }
-                case TypeKind_Float: {
+                case SIRTypeKind_Float: {
                     if (used_float_regs <
-                        ACE_CARRAY_LENGTH(SYSV_FLOAT_PARAM_REGS)) {
+                        SIR_CARRAY_LENGTH(SYSV_FLOAT_PARAM_REGS)) {
                         dest_param_value = create_float_register_value(
                             param_inst.type->float_.bits >> 3,
                             SYSV_FLOAT_PARAM_REGS[used_float_regs++]);
                     } else {
                         param_stack_offset =
-                            ACE_ROUND_UP(param_align, param_stack_offset);
+                            SIR_ROUND_UP(param_align, param_stack_offset);
                         dest_param_value = create_int_register_memory_value(
                             param_inst.type->float_.bits >> 3,
                             RegisterIndex_RSP,
@@ -1865,7 +1863,7 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
                     size_t param_size = param_type->size_of(this->module);
 
                     param_stack_offset =
-                        ACE_ROUND_UP(param_align, param_stack_offset);
+                        SIR_ROUND_UP(param_align, param_stack_offset);
                     dest_param_value = create_int_register_memory_value(
                         param_size,
                         RegisterIndex_RSP,
@@ -1900,11 +1898,11 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
         // Move returned values to result location
 
         switch (called_func->calling_convention) {
-        case CallingConvention_SystemV: {
+        case SIRCallingConvention_SystemV: {
             switch (called_func->return_type->kind) {
-            case TypeKind_Void: break;
+            case SIRTypeKind_Void: break;
 
-            case TypeKind_Int: {
+            case SIRTypeKind_Int: {
                 MetaValue returned_value = create_int_register_value(
                     called_func->return_type->int_.bits >> 3,
                     RegisterIndex_RAX);
@@ -1913,7 +1911,7 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
                 break;
             }
 
-            case TypeKind_Pointer: {
+            case SIRTypeKind_Pointer: {
                 MetaValue returned_value =
                     create_int_register_value(8, RegisterIndex_RAX);
                 this->encode_mnem(
@@ -1921,7 +1919,7 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
                 break;
             }
 
-            case TypeKind_Float: {
+            case SIRTypeKind_Float: {
                 MetaValue returned_value = create_float_register_value(
                     called_func->return_type->float_.bits >> 3,
                     RegisterIndex_XMM0);
@@ -1930,7 +1928,7 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
                 break;
             }
 
-            default: ACE_ASSERT(!"unhandled return type");
+            default: SIR_ASSERT(!"unhandled return type");
             }
             break;
         }
@@ -1939,32 +1937,32 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
         break;
     }
 
-    case InstKind_ReturnVoid: {
+    case SIRInstKind_ReturnVoid: {
         this->encode_function_ending(func_ref);
         break;
     }
 
-    case InstKind_ReturnValue: {
-        Inst returned_inst = inst.return_value.inst_ref.get(this->module);
+    case SIRInstKind_ReturnValue: {
+        SIRInst returned_inst = inst.return_value.inst_ref.get(this->module);
 
         // TODO: ABI compliance
         MetaValue result_location = {};
         switch (returned_inst.type->kind) {
-        case TypeKind_Int: {
+        case SIRTypeKind_Int: {
             result_location = create_int_register_value(
                 returned_inst.type->int_.bits >> 3, RegisterIndex_RAX);
             break;
         }
-        case TypeKind_Pointer: {
+        case SIRTypeKind_Pointer: {
             result_location = create_int_register_value(8, RegisterIndex_RAX);
             break;
         }
-        case TypeKind_Float: {
+        case SIRTypeKind_Float: {
             result_location =
                 create_float_register_value(8, RegisterIndex_XMM0);
             break;
         }
-        default: ACE_ASSERT(0); break;
+        default: SIR_ASSERT(0); break;
         }
 
         this->encode_mnem(
@@ -1976,7 +1974,7 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
         break;
     }
 
-    case InstKind_Jump: {
+    case SIRInstKind_Jump: {
         FuncJumpPatch patch = {
             .instruction = FE_JMP | FE_JMPL,
             .instruction_offset = this->get_code_offset(),
@@ -1988,7 +1986,7 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
 
         break;
     }
-    case InstKind_Branch: {
+    case SIRInstKind_Branch: {
         MetaValue al_value = create_int_register_value(1, RegisterIndex_RAX);
 
         this->encode_mnem(
@@ -2020,18 +2018,18 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
     }
 }
 
-MetaValue X86_64AsmBuilder::generate_global(uint32_t flags, Slice<uint8_t> data)
+MetaValue X86_64AsmBuilder::generate_global(uint32_t flags, SIRSlice<uint8_t> data)
 {
     ZoneScoped;
 
-    SectionType section_type = SectionType_Data;
-    if (!(flags & GlobalFlags_Initialized)) {
-        section_type = SectionType_BSS;
+    SIRSectionType section_type = SIRSectionType_Data;
+    if (!(flags & SIRGlobalFlags_Initialized)) {
+        section_type = SIRSectionType_BSS;
     } else {
-        if (flags & GlobalFlags_ReadOnly) {
-            section_type = SectionType_ROData;
+        if (flags & SIRGlobalFlags_ReadOnly) {
+            section_type = SIRSectionType_ROData;
         } else {
-            section_type = SectionType_Data;
+            section_type = SIRSectionType_Data;
         }
     }
 
@@ -2041,24 +2039,24 @@ MetaValue X86_64AsmBuilder::generate_global(uint32_t flags, Slice<uint8_t> data)
     return create_global_value(data.len, section_type, offset);
 }
 
-void X86_64AsmBuilder::generate_function(InstRef func_ref)
+void X86_64AsmBuilder::generate_function(SIRInstRef func_ref)
 {
     ZoneScoped;
 
-    Inst func_inst = func_ref.get(this->module);
-    ACE_ASSERT(func_inst.kind == InstKind_Function);
-    Function *func = func_inst.func;
-    ACE_ASSERT(func);
+    SIRInst func_inst = func_ref.get(this->module);
+    SIR_ASSERT(func_inst.kind == SIRInstKind_Function);
+    SIRFunction *func = func_inst.func;
+    SIR_ASSERT(func);
 
     MetaFunction *meta_func = this->module->arena->alloc<MetaFunction>();
     *meta_func = {};
 
-    meta_func->jump_patches = Array<FuncJumpPatch>::create(module->arena);
+    meta_func->jump_patches = SIRArray<FuncJumpPatch>::create(module->arena);
     meta_func->temp_int_register_stack =
-        Array<RegisterIndex>::create(module->arena);
+        SIRArray<RegisterIndex>::create(module->arena);
 
     switch (func->calling_convention) {
-    case CallingConvention_SystemV: {
+    case SIRCallingConvention_SystemV: {
         static RegisterIndex system_v_callee_saved[] = {
             RegisterIndex_RBX,
             RegisterIndex_R12,
@@ -2091,14 +2089,14 @@ void X86_64AsmBuilder::generate_function(InstRef func_ref)
     if (func->blocks.len == 0) {
         // Function without body
         meta_func->symbol_ref = obj_builder->add_symbol(
-            func->name, SectionType_None, SymbolType_None, Linkage_External);
+            func->name, SIRSectionType_None, SIRSymbolType_None, SIRLinkage_External);
     } else {
         // Function with body
         meta_func->symbol_ref = obj_builder->add_symbol(
             func->name,
-            SectionType_Text,
-            SymbolType_Function,
-            Linkage_External);
+            SIRSectionType_Text,
+            SIRSymbolType_Function,
+            SIRLinkage_External);
     }
 
     MetaValue *func_meta_inst = &this->meta_insts[func_ref.id];
@@ -2110,14 +2108,14 @@ void X86_64AsmBuilder::generate_function(InstRef func_ref)
         return;
     }
 
-    for (InstRef stack_slot_ref : func->stack_slots) {
-        Inst stack_slot = stack_slot_ref.get(this->module);
-        ACE_ASSERT(stack_slot.type->kind == TypeKind_Pointer);
+    for (SIRInstRef stack_slot_ref : func->stack_slots) {
+        SIRInst stack_slot = stack_slot_ref.get(this->module);
+        SIR_ASSERT(stack_slot.type->kind == SIRTypeKind_Pointer);
         uint32_t slot_size =
             stack_slot.type->pointer.sub->size_of(this->module);
         uint32_t slot_align =
             stack_slot.type->pointer.sub->align_of(this->module);
-        meta_func->stack_size = ACE_ROUND_UP(slot_align, meta_func->stack_size);
+        meta_func->stack_size = SIR_ROUND_UP(slot_align, meta_func->stack_size);
         meta_func->stack_size += slot_size;
 
         this->meta_insts[stack_slot_ref.id] =
@@ -2125,13 +2123,13 @@ void X86_64AsmBuilder::generate_function(InstRef func_ref)
     }
 
     // Create stack space for function parameters
-    for (InstRef param_inst_ref : func->param_insts) {
-        Inst param_inst = param_inst_ref.get(this->module);
+    for (SIRInstRef param_inst_ref : func->param_insts) {
+        SIRInst param_inst = param_inst_ref.get(this->module);
 
         uint32_t inst_size = param_inst.type->size_of(this->module);
         uint32_t inst_align = param_inst.type->align_of(this->module);
 
-        meta_func->stack_size = ACE_ROUND_UP(inst_align, meta_func->stack_size);
+        meta_func->stack_size = SIR_ROUND_UP(inst_align, meta_func->stack_size);
         meta_func->stack_size += inst_size;
 
         this->meta_insts[param_inst_ref.id] =
@@ -2141,55 +2139,55 @@ void X86_64AsmBuilder::generate_function(InstRef func_ref)
     size_t stack_params_size = 0;
 
     // Spill all elegible insts to stack
-    for (InstRef block_ref : func->blocks) {
-        Inst block = block_ref.get(this->module);
-        for (InstRef inst_ref : block.block.inst_refs) {
-            Inst inst = inst_ref.get(this->module);
+    for (SIRInstRef block_ref : func->blocks) {
+        SIRInst block = block_ref.get(this->module);
+        for (SIRInstRef inst_ref : block.block.inst_refs) {
+            SIRInst inst = inst_ref.get(this->module);
 
             switch (inst.kind) {
             // Invalid for this stage of generation:
-            case InstKind_Unknown:
-            case InstKind_Global:
-            case InstKind_StackSlot:
-            case InstKind_Block:
-            case InstKind_Function:
-            case InstKind_FunctionParameter: ACE_ASSERT(0); break;
+            case SIRInstKind_Unknown:
+            case SIRInstKind_Global:
+            case SIRInstKind_StackSlot:
+            case SIRInstKind_Block:
+            case SIRInstKind_Function:
+            case SIRInstKind_FunctionParameter: SIR_ASSERT(0); break;
 
             // Contain no data for spilling:
-            case InstKind_Store:
-            case InstKind_Jump:
-            case InstKind_Branch:
-            case InstKind_ReturnVoid:
-            case InstKind_ReturnValue: break;
+            case SIRInstKind_Store:
+            case SIRInstKind_Jump:
+            case SIRInstKind_Branch:
+            case SIRInstKind_ReturnVoid:
+            case SIRInstKind_ReturnValue: break;
 
             // Data already stored somewhere else:
-            case InstKind_ImmediateInt:
-            case InstKind_ImmediateFloat:
-            case InstKind_ImmediateBool:
-            case InstKind_PtrCast: break;
+            case SIRInstKind_ImmediateInt:
+            case SIRInstKind_ImmediateFloat:
+            case SIRInstKind_ImmediateBool:
+            case SIRInstKind_PtrCast: break;
 
             // Create stack space for these kinds:
-            case InstKind_ZExt:
-            case InstKind_SExt:
-            case InstKind_Trunc:
-            case InstKind_Binop:
-            case InstKind_ArrayElemPtr:
-            case InstKind_StructElemPtr:
-            case InstKind_ExtractArrayElem:
-            case InstKind_ExtractStructElem:
-            case InstKind_Load:
-            case InstKind_FuncCall: {
+            case SIRInstKind_ZExt:
+            case SIRInstKind_SExt:
+            case SIRInstKind_Trunc:
+            case SIRInstKind_Binop:
+            case SIRInstKind_ArrayElemPtr:
+            case SIRInstKind_StructElemPtr:
+            case SIRInstKind_ExtractArrayElem:
+            case SIRInstKind_ExtractStructElem:
+            case SIRInstKind_Load:
+            case SIRInstKind_FuncCall: {
                 uint32_t inst_size = inst.type->size_of(this->module);
                 uint32_t inst_align = inst.type->align_of(this->module);
 
                 meta_func->stack_size =
-                    ACE_ROUND_UP(inst_align, meta_func->stack_size);
+                    SIR_ROUND_UP(inst_align, meta_func->stack_size);
                 meta_func->stack_size += inst_size;
 
                 this->meta_insts[inst_ref.id] = create_stack_value(
                     inst_size, -((int32_t)meta_func->stack_size));
 
-                if (inst.kind == InstKind_FuncCall) {
+                if (inst.kind == SIRInstKind_FuncCall) {
                     size_t func_stack_params_size =
                         this->get_func_call_stack_parameters_size(inst_ref);
                     if (stack_params_size < func_stack_params_size) {
@@ -2210,7 +2208,7 @@ void X86_64AsmBuilder::generate_function(InstRef func_ref)
 
     for (uint32_t i = 0; i < RegisterIndex_COUNT; ++i) {
         if (meta_func->registers_used[i]) {
-            meta_func->stack_size = ACE_ROUND_UP(8, meta_func->stack_size);
+            meta_func->stack_size = SIR_ROUND_UP(8, meta_func->stack_size);
             meta_func->stack_size += 8;
 
             meta_func->saved_register_stack_offset[i] =
@@ -2219,31 +2217,31 @@ void X86_64AsmBuilder::generate_function(InstRef func_ref)
     }
 
     size_t function_start_offset =
-        this->obj_builder->get_section_size(SectionType_Text);
+        this->obj_builder->get_section_size(SIRSectionType_Text);
 
     // Begin stack frame
-    meta_func->stack_size = ACE_ROUND_UP(0x10, meta_func->stack_size);
+    meta_func->stack_size = SIR_ROUND_UP(0x10, meta_func->stack_size);
     this->encode(FE_PUSHr, FE_BP);
     this->encode(FE_MOV64rr, FE_BP, FE_SP);
     this->encode(FE_SUB64ri, FE_SP, meta_func->stack_size);
 
     // Move parameters to stack
     switch (func->calling_convention) {
-    case CallingConvention_SystemV: {
+    case SIRCallingConvention_SystemV: {
         uint32_t used_int_regs = 0;
         uint32_t used_float_regs = 0;
 
         uint32_t stack_param_offset = 16;
 
         for (uint32_t i = 0; i < func->param_types.len; ++i) {
-            Type *param_type = func->param_types[i];
-            InstRef param_inst_ref = func->param_insts[i];
+            SIRType *param_type = func->param_types[i];
+            SIRInstRef param_inst_ref = func->param_insts[i];
             MetaValue param_meta_inst = this->meta_insts[param_inst_ref.id];
 
             switch (param_type->kind) {
-            case TypeKind_Pointer: {
+            case SIRTypeKind_Pointer: {
                 MetaValue param_value = {};
-                if (used_int_regs < ACE_CARRAY_LENGTH(SYSV_INT_PARAM_REGS)) {
+                if (used_int_regs < SIR_CARRAY_LENGTH(SYSV_INT_PARAM_REGS)) {
                     param_value = create_int_register_value(
                         8, SYSV_INT_PARAM_REGS[used_int_regs++]);
                 } else {
@@ -2259,9 +2257,9 @@ void X86_64AsmBuilder::generate_function(InstRef func_ref)
                 this->encode_mnem(Mnem_MOV, param_value, param_meta_inst);
                 break;
             }
-            case TypeKind_Int: {
+            case SIRTypeKind_Int: {
                 MetaValue param_value = {};
-                if (used_int_regs < ACE_CARRAY_LENGTH(SYSV_INT_PARAM_REGS)) {
+                if (used_int_regs < SIR_CARRAY_LENGTH(SYSV_INT_PARAM_REGS)) {
                     param_value = create_int_register_value(
                         param_type->int_.bits >> 3,
                         SYSV_INT_PARAM_REGS[used_int_regs++]);
@@ -2278,10 +2276,10 @@ void X86_64AsmBuilder::generate_function(InstRef func_ref)
                 this->encode_mnem(Mnem_MOV, param_value, param_meta_inst);
                 break;
             }
-            case TypeKind_Float: {
+            case SIRTypeKind_Float: {
                 MetaValue param_value = {};
                 if (used_float_regs <
-                    ACE_CARRAY_LENGTH(SYSV_FLOAT_PARAM_REGS)) {
+                    SIR_CARRAY_LENGTH(SYSV_FLOAT_PARAM_REGS)) {
                     param_value = create_float_register_value(
                         param_type->float_.bits >> 3,
                         SYSV_FLOAT_PARAM_REGS[used_float_regs++]);
@@ -2336,14 +2334,14 @@ void X86_64AsmBuilder::generate_function(InstRef func_ref)
     }
 
     // Generate blocks
-    for (InstRef block_ref : func->blocks) {
-        Inst block = block_ref.get(this->module);
+    for (SIRInstRef block_ref : func->blocks) {
+        SIRInst block = block_ref.get(this->module);
         MetaValue *meta_block = &this->meta_insts[block_ref.id];
         *meta_block = {};
 
         meta_block->kind = MetaValueKind_Block;
         meta_block->block.offset = this->get_code_offset();
-        for (InstRef inst_ref : block.block.inst_refs) {
+        for (SIRInstRef inst_ref : block.block.inst_refs) {
             this->generate_inst(func_ref, inst_ref);
             /* this->encode(FE_NOP); */
         }
@@ -2360,7 +2358,7 @@ void X86_64AsmBuilder::generate_function(InstRef func_ref)
     }
 
     size_t function_end_offset =
-        this->obj_builder->get_section_size(SectionType_Text);
+        this->obj_builder->get_section_size(SIRSectionType_Text);
 
     size_t function_size = function_end_offset - function_start_offset;
 
@@ -2373,14 +2371,14 @@ void X86_64AsmBuilder::generate()
     ZoneScoped;
 
     // Generate globals
-    for (InstRef global_ref : this->module->globals) {
-        Inst global = global_ref.get(this->module);
+    for (SIRInstRef global_ref : this->module->globals) {
+        SIRInst global = global_ref.get(this->module);
         this->meta_insts[global_ref.id] =
             this->generate_global(global.global.flags, global.global.data);
     }
 
     // Generate functions
-    for (InstRef func_ref : this->module->functions) {
+    for (SIRInstRef func_ref : this->module->functions) {
         this->generate_function(func_ref);
     }
 }
@@ -2389,5 +2387,3 @@ void X86_64AsmBuilder::destroy()
 {
     this->meta_insts.destroy();
 }
-
-} // namespace ace

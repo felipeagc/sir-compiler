@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ace_base.hpp>
+#include <sir_base.hpp>
 
 struct Compiler;
 struct File;
@@ -44,21 +44,21 @@ struct TypeRef {
 struct Scope {
     FileRef file_ref;
     Scope *parent;
-    ace::StringMap<DeclRef> decl_refs;
+    SIRStringMap<DeclRef> decl_refs;
 
     static Scope *
     create(Compiler *compiler, FileRef file_ref, Scope *parent = nullptr);
     void add(Compiler *compiler, DeclRef decl_ref);
-    DeclRef lookup(const ace::String &name);
+    DeclRef lookup(const SIRString &name);
 };
 
 struct File {
-    ace::String path;
-    ace::String text;
+    SIRString path;
+    SIRString text;
     size_t line_count;
 
     Scope *scope;
-    ace::Array<DeclRef> top_level_decls;
+    SIRArray<DeclRef> top_level_decls;
 };
 
 struct Location {
@@ -71,7 +71,7 @@ struct Location {
 
 struct Error {
     Location loc;
-    ace::String message;
+    SIRString message;
 };
 
 enum TokenKind {
@@ -177,7 +177,7 @@ struct Token {
     TokenKind kind;
     Location loc;
     union {
-        ace::String str;
+        SIRString str;
         int64_t int_;
         double float_;
     };
@@ -209,7 +209,7 @@ enum TypeKind {
 
 struct Type {
     TypeKind kind;
-    ace::String str;
+    SIRString str;
     union {
         struct {
             uint32_t bits;
@@ -219,12 +219,12 @@ struct Type {
             uint32_t bits;
         } float_;
         struct {
-            ace::Slice<TypeRef> field_types;
-            ace::Slice<ace::String> field_names;
-            ace::StringMap<uint32_t> field_map;
+            SIRSlice<TypeRef> field_types;
+            SIRSlice<SIRString> field_names;
+            SIRStringMap<uint32_t> field_map;
         } struct_;
         struct {
-            ace::Slice<TypeRef> field_types;
+            SIRSlice<TypeRef> field_types;
         } tuple;
         struct {
             TypeRef sub_type;
@@ -238,12 +238,12 @@ struct Type {
         } slice;
         struct {
             TypeRef return_type;
-            ace::Slice<TypeRef> param_types;
+            SIRSlice<TypeRef> param_types;
             bool vararg;
         } func;
     };
 
-    ace::String to_string(Compiler *compiler);
+    SIRString to_string(Compiler *compiler);
     uint32_t align_of(Compiler *compiler);
     uint32_t size_of(Compiler *compiler);
 };
@@ -335,11 +335,11 @@ struct Expr {
     Location loc;
     union {
         struct {
-            ace::String str;
+            SIRString str;
             DeclRef decl_ref;
         } ident;
         struct {
-            ace::String str;
+            SIRString str;
         } str_literal;
         struct {
             int64_t i64;
@@ -352,17 +352,17 @@ struct Expr {
         } bool_literal;
         struct {
             uint32_t flags;
-            ace::Array<ExprRef> return_type_expr_refs;
-            ace::Array<DeclRef> param_decl_refs;
-            ace::Array<StmtRef> body_stmts;
+            SIRArray<ExprRef> return_type_expr_refs;
+            SIRArray<DeclRef> param_decl_refs;
+            SIRArray<StmtRef> body_stmts;
         } func;
         struct {
             ExprRef func_expr_ref;
-            ace::Array<ExprRef> param_refs;
+            SIRArray<ExprRef> param_refs;
         } func_call;
         struct {
             BuiltinFunction builtin;
-            ace::Array<ExprRef> param_refs;
+            SIRArray<ExprRef> param_refs;
         } builtin_call;
         struct {
             ExprRef sub_expr_ref;
@@ -382,8 +382,8 @@ struct Expr {
             ExprRef size_expr_ref;
         } array_type;
         struct {
-            ace::Array<ace::String> field_names;
-            ace::Array<ExprRef> field_type_expr_refs;
+            SIRArray<SIRString> field_names;
+            SIRArray<ExprRef> field_type_expr_refs;
         } struct_type;
         struct {
             ExprRef left_ref;
@@ -421,7 +421,7 @@ struct Stmt {
     Location loc;
     union {
         struct {
-            ace::Array<StmtRef> stmt_refs;
+            SIRArray<StmtRef> stmt_refs;
         } block;
         struct {
             ExprRef expr_ref;
@@ -463,14 +463,14 @@ struct Decl {
     TypeRef decl_type_ref;
     TypeRef as_type_ref;
     Location loc;
-    ace::String name;
+    SIRString name;
     union {
         struct {
             Scope *scope;
             uint32_t flags;
-            ace::Array<ExprRef> return_type_expr_refs;
-            ace::Array<DeclRef> param_decl_refs;
-            ace::Array<StmtRef> body_stmts;
+            SIRArray<ExprRef> return_type_expr_refs;
+            SIRArray<DeclRef> param_decl_refs;
+            SIRArray<StmtRef> body_stmts;
         } func;
         struct {
             ExprRef type_expr;
@@ -494,18 +494,18 @@ struct Decl {
 };
 
 struct Compiler {
-    ace::ArenaAllocator *arena;
-    ace::StringMap<TokenKind> keyword_map;
-    ace::StringMap<BuiltinFunction> builtin_function_map;
-    ace::Array<Error> errors;
-    ace::StringBuilder sb;
+    SIRArenaAllocator *arena;
+    SIRStringMap<TokenKind> keyword_map;
+    SIRStringMap<BuiltinFunction> builtin_function_map;
+    SIRArray<Error> errors;
+    SIRStringBuilder sb;
 
-    ace::Array<File> files;
-    ace::StringMap<TypeRef> type_map;
-    ace::Array<Type> types;
-    ace::Array<Decl> decls;
-    ace::Array<Stmt> stmts;
-    ace::Array<Expr> exprs;
+    SIRArray<File> files;
+    SIRStringMap<TypeRef> type_map;
+    SIRArray<Type> types;
+    SIRArray<Decl> decls;
+    SIRArray<Stmt> stmts;
+    SIRArray<Expr> exprs;
 
     TypeRef void_type;
     TypeRef type_type;
@@ -529,21 +529,21 @@ struct Compiler {
     TypeRef get_cached_type(Type &type);
     TypeRef create_pointer_type(TypeRef sub);
     TypeRef create_struct_type(
-        ace::Slice<TypeRef> fields, ace::Slice<ace::String> field_names);
-    TypeRef create_tuple_type(ace::Slice<TypeRef> fields);
+        SIRSlice<TypeRef> fields, SIRSlice<SIRString> field_names);
+    TypeRef create_tuple_type(SIRSlice<TypeRef> fields);
     TypeRef create_array_type(TypeRef sub, size_t size);
     TypeRef create_slice_type(TypeRef sub);
     TypeRef create_func_type(
-        TypeRef return_type, ace::Slice<TypeRef> param_types, bool vararg);
+        TypeRef return_type, SIRSlice<TypeRef> param_types, bool vararg);
 
     size_t get_error_checkpoint();
     void restore_error_checkpoint(size_t checkpoint);
-    ACE_PRINTF_FORMATTING(3, 4)
+    SIR_PRINTF_FORMATTING(3, 4)
     void add_error(const Location &loc, const char *fmt, ...);
     void halt_compilation();
     void print_errors();
 
-    ACE_INLINE
+    SIR_INLINE
     FileRef add_file(const File &file)
     {
         FileRef ref = {(uint32_t)this->files.len};
@@ -551,52 +551,52 @@ struct Compiler {
         return ref;
     }
 
-    ACE_INLINE
+    SIR_INLINE
     ExprRef add_expr(const Expr &expr)
     {
-        ACE_ASSERT(expr.kind != ExprKind_Unknown);
+        SIR_ASSERT(expr.kind != ExprKind_Unknown);
         ExprRef ref = {(uint32_t)this->exprs.len};
         this->exprs.push_back(expr);
         return ref;
     }
 
-    ACE_INLINE
+    SIR_INLINE
     StmtRef add_stmt(const Stmt &stmt)
     {
-        ACE_ASSERT(stmt.kind != StmtKind_Unknown);
+        SIR_ASSERT(stmt.kind != StmtKind_Unknown);
         StmtRef ref = {(uint32_t)this->stmts.len};
         this->stmts.push_back(stmt);
         return ref;
     }
 
-    ACE_INLINE
+    SIR_INLINE
     DeclRef add_decl(const Decl &decl)
     {
-        ACE_ASSERT(decl.kind != DeclKind_Unknown);
+        SIR_ASSERT(decl.kind != DeclKind_Unknown);
         DeclRef ref = {(uint32_t)this->decls.len};
         this->decls.push_back(decl);
         return ref;
     }
 
-    ACE_INLINE
+    SIR_INLINE
     Expr *get_expr(ExprRef ref)
     {
         return &this->exprs[ref.id];
     }
 
-    ACE_INLINE
+    SIR_INLINE
     Stmt *get_stmt(StmtRef ref)
     {
         return &this->stmts[ref.id];
     }
 
-    ACE_INLINE
+    SIR_INLINE
     Decl *get_decl(DeclRef ref)
     {
         return &this->decls[ref.id];
     }
 
-    void compile(ace::String path);
+    void compile(SIRString path);
 };
 
 void init_parser_tables();

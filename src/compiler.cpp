@@ -52,14 +52,14 @@ Scope *Scope::create(Compiler *compiler, FileRef file_ref, Scope *parent)
 
     scope->file_ref = file_ref;
     scope->parent = parent;
-    scope->decl_refs = ace::StringMap<DeclRef>::create(compiler->arena);
+    scope->decl_refs = SIRStringMap<DeclRef>::create(compiler->arena);
 
     return scope;
 }
 
 void Scope::add(Compiler *compiler, DeclRef decl_ref)
 {
-    ace::String name = compiler->decls[decl_ref.id].name;
+    SIRString name = compiler->decls[decl_ref.id].name;
     if (name != "_") {
         DeclRef found_decl = this->lookup(name);
         if (found_decl.id != 0) {
@@ -75,7 +75,7 @@ void Scope::add(Compiler *compiler, DeclRef decl_ref)
     }
 }
 
-DeclRef Scope::lookup(const ace::String &name)
+DeclRef Scope::lookup(const SIRString &name)
 {
     if (name == "_") return {0};
 
@@ -95,38 +95,38 @@ Compiler Compiler::create()
 {
     init_parser_tables();
 
-    ace::ArenaAllocator *arena =
-        ace::ArenaAllocator::create(ace::MallocAllocator::get_instance());
+    SIRArenaAllocator *arena =
+        SIRArenaAllocator::create(SIRMallocAllocator::get_instance());
 
-    ace::StringMap<TokenKind> keyword_map =
-        ace::StringMap<TokenKind>::create(ace::MallocAllocator::get_instance());
-    ace::StringMap<BuiltinFunction> builtin_function_map =
-        ace::StringMap<BuiltinFunction>::create(
-            ace::MallocAllocator::get_instance());
-    ace::Array<Error> errors = ace::Array<Error>::create(arena);
+    SIRStringMap<TokenKind> keyword_map =
+        SIRStringMap<TokenKind>::create(SIRMallocAllocator::get_instance());
+    SIRStringMap<BuiltinFunction> builtin_function_map =
+        SIRStringMap<BuiltinFunction>::create(
+            SIRMallocAllocator::get_instance());
+    SIRArray<Error> errors = SIRArray<Error>::create(arena);
 
-    ace::StringBuilder sb =
-        ace::StringBuilder::create(ace::MallocAllocator::get_instance());
+    SIRStringBuilder sb =
+        SIRStringBuilder::create(SIRMallocAllocator::get_instance());
 
-    ace::Array<File> files =
-        ace::Array<File>::create(ace::MallocAllocator::get_instance());
+    SIRArray<File> files =
+        SIRArray<File>::create(SIRMallocAllocator::get_instance());
     files.push_back({}); // 0th file
 
-    ace::StringMap<TypeRef> type_map =
-        ace::StringMap<TypeRef>::create(ace::MallocAllocator::get_instance());
-    ace::Array<Type> types =
-        ace::Array<Type>::create(ace::MallocAllocator::get_instance());
+    SIRStringMap<TypeRef> type_map =
+        SIRStringMap<TypeRef>::create(SIRMallocAllocator::get_instance());
+    SIRArray<Type> types =
+        SIRArray<Type>::create(SIRMallocAllocator::get_instance());
 
-    ace::Array<Decl> decls =
-        ace::Array<Decl>::create(ace::MallocAllocator::get_instance());
+    SIRArray<Decl> decls =
+        SIRArray<Decl>::create(SIRMallocAllocator::get_instance());
     decls.push_back({}); // 0th decl
 
-    ace::Array<Stmt> stmts =
-        ace::Array<Stmt>::create(ace::MallocAllocator::get_instance());
+    SIRArray<Stmt> stmts =
+        SIRArray<Stmt>::create(SIRMallocAllocator::get_instance());
     stmts.push_back({}); // 0th decl
 
-    ace::Array<Expr> exprs =
-        ace::Array<Expr>::create(ace::MallocAllocator::get_instance());
+    SIRArray<Expr> exprs =
+        SIRArray<Expr>::create(SIRMallocAllocator::get_instance());
     exprs.push_back({}); // 0th expr
 
     keyword_map.set("extern", TokenKind_Extern);
@@ -344,7 +344,7 @@ void Compiler::add_error(const Location &loc, const char *fmt, ...)
 {
     va_list args;
     va_start(args, fmt);
-    ace::String message = this->arena->vsprintf(fmt, args);
+    SIRString message = this->arena->vsprintf(fmt, args);
     va_end(args);
 
     Error err = {
@@ -361,7 +361,7 @@ void Compiler::halt_compilation()
 
 void Compiler::print_errors()
 {
-    ACE_ASSERT(this->errors.len > 0);
+    SIR_ASSERT(this->errors.len > 0);
 
     for (Error &err : this->errors) {
         if (err.loc.file_ref.id) {
@@ -397,7 +397,7 @@ print_time_taken(const char *task_name, timespec start_time, timespec end_time)
     printf("%s time: %.3lf seconds\n", task_name, time);
 }
 
-void Compiler::compile(ace::String path)
+void Compiler::compile(SIRString path)
 {
     try {
         FILE *f = fopen(this->arena->null_terminate(path), "rb");
@@ -413,7 +413,7 @@ void Compiler::compile(ace::String path)
         size_t file_size = ftell(f);
         fseek(f, 0, SEEK_SET);
 
-        ace::Slice<char> file_content = this->arena->alloc<char>(file_size + 1);
+        SIRSlice<char> file_content = this->arena->alloc<char>(file_size + 1);
         size_t bytes_read = fread(file_content.ptr, 1, file_size, f);
         file_content[file_size] = '\0';
 
@@ -431,10 +431,10 @@ void Compiler::compile(ace::String path)
         FileRef file_ref = this->add_file({});
         this->files[file_ref.id] = {
             .path = path,
-            .text = ace::String{file_content.ptr, file_content.len},
+            .text = SIRString{file_content.ptr, file_content.len},
             .line_count = 0,
             .scope = Scope::create(this, file_ref),
-            .top_level_decls = ace::Array<DeclRef>::create(this->arena),
+            .top_level_decls = SIRArray<DeclRef>::create(this->arena),
         };
 
         timespec total_start_time, total_end_time;
@@ -484,7 +484,7 @@ void Compiler::compile(ace::String path)
 
 TypeRef Compiler::get_cached_type(Type &type)
 {
-    ace::String type_string = type.to_string(this);
+    SIRString type_string = type.to_string(this);
     TypeRef existing_type_ref = {0};
     if (this->type_map.get(type_string, &existing_type_ref)) {
         return existing_type_ref;
@@ -505,20 +505,20 @@ TypeRef Compiler::create_pointer_type(TypeRef sub)
 }
 
 TypeRef Compiler::create_struct_type(
-    ace::Slice<TypeRef> fields, ace::Slice<ace::String> field_names)
+    SIRSlice<TypeRef> fields, SIRSlice<SIRString> field_names)
 {
     Type type = {};
     type.kind = TypeKind_Struct;
     type.struct_.field_types = fields;
     type.struct_.field_names = field_names;
-    type.struct_.field_map = ace::StringMap<uint32_t>::create(this->arena, 32);
+    type.struct_.field_map = SIRStringMap<uint32_t>::create(this->arena, 32);
     for (size_t i = 0; i < field_names.len; ++i) {
         type.struct_.field_map.set(field_names[i], (uint32_t)i);
     }
     return this->get_cached_type(type);
 }
 
-TypeRef Compiler::create_tuple_type(ace::Slice<TypeRef> fields)
+TypeRef Compiler::create_tuple_type(SIRSlice<TypeRef> fields)
 {
     Type type = {};
     type.kind = TypeKind_Tuple;
@@ -544,7 +544,7 @@ TypeRef Compiler::create_slice_type(TypeRef sub)
 }
 
 TypeRef Compiler::create_func_type(
-    TypeRef return_type, ace::Slice<TypeRef> param_types, bool vararg)
+    TypeRef return_type, SIRSlice<TypeRef> param_types, bool vararg)
 {
     Type type = {};
     type.kind = TypeKind_Function;
@@ -554,7 +554,7 @@ TypeRef Compiler::create_func_type(
     return this->get_cached_type(type);
 }
 
-ace::String Type::to_string(Compiler *compiler)
+SIRString Type::to_string(Compiler *compiler)
 {
     if (this->str.len > 0) {
         return this->str;
@@ -598,29 +598,29 @@ ace::String Type::to_string(Compiler *compiler)
         break;
     }
     case TypeKind_Pointer: {
-        ace::String sub_str =
+        SIRString sub_str =
             compiler->types[this->pointer.sub_type.id].to_string(compiler);
         this->str = compiler->arena->sprintf(
             "@ptr(%.*s)", (int)sub_str.len, sub_str.ptr);
         break;
     }
     case TypeKind_Array: {
-        ace::String sub_str =
+        SIRString sub_str =
             compiler->types[this->array.sub_type.id].to_string(compiler);
         this->str = compiler->arena->sprintf(
             "@arr(%.*s, %lu)", (int)sub_str.len, sub_str.ptr, this->array.size);
         break;
     }
     case TypeKind_Slice: {
-        ace::String sub_str =
+        SIRString sub_str =
             compiler->types[this->slice.sub_type.id].to_string(compiler);
         this->str = compiler->arena->sprintf(
             "@slice(%.*s)", (int)sub_str.len, sub_str.ptr);
         break;
     }
     case TypeKind_Tuple: {
-        ace::StringBuilder sb =
-            ace::StringBuilder::create(ace::MallocAllocator::get_instance());
+        SIRStringBuilder sb =
+            SIRStringBuilder::create(SIRMallocAllocator::get_instance());
 
         sb.append("@tuple(");
 
@@ -630,7 +630,7 @@ ace::String Type::to_string(Compiler *compiler)
             if (i > 0) {
                 sb.append(", ");
             }
-            ace::String field_str = field_type->to_string(compiler);
+            SIRString field_str = field_type->to_string(compiler);
             sb.append(field_str);
         }
 
@@ -642,8 +642,8 @@ ace::String Type::to_string(Compiler *compiler)
         break;
     }
     case TypeKind_Struct: {
-        ace::StringBuilder sb =
-            ace::StringBuilder::create(ace::MallocAllocator::get_instance());
+        SIRStringBuilder sb =
+            SIRStringBuilder::create(SIRMallocAllocator::get_instance());
 
         sb.append("@struct(");
 
@@ -659,7 +659,7 @@ ace::String Type::to_string(Compiler *compiler)
             sb.append(field_name);
             sb.append(":");
 
-            ace::String field_str = field_type->to_string(compiler);
+            SIRString field_str = field_type->to_string(compiler);
             sb.append(field_str);
         }
 
@@ -671,8 +671,8 @@ ace::String Type::to_string(Compiler *compiler)
         break;
     }
     case TypeKind_Function: {
-        ace::StringBuilder sb =
-            ace::StringBuilder::create(ace::MallocAllocator::get_instance());
+        SIRStringBuilder sb =
+            SIRStringBuilder::create(SIRMallocAllocator::get_instance());
 
         if (!this->func.vararg) {
             sb.append("@func(");
@@ -695,7 +695,7 @@ ace::String Type::to_string(Compiler *compiler)
                 sb.append(",");
             }
 
-            ace::String field_str = field_type->to_string(compiler);
+            SIRString field_str = field_type->to_string(compiler);
             sb.append(field_str);
         }
 
@@ -739,7 +739,7 @@ uint32_t Type::size_of(Compiler *compiler)
             this->array.sub_type.get(compiler).size_of(compiler);
         uint32_t subtype_alignment =
             this->array.sub_type.get(compiler).align_of(compiler);
-        uint32_t stride = ACE_ROUND_UP(subtype_alignment, subtype_size);
+        uint32_t stride = SIR_ROUND_UP(subtype_alignment, subtype_size);
         size = stride * this->array.size;
         break;
     }
@@ -760,7 +760,7 @@ uint32_t Type::size_of(Compiler *compiler)
         for (TypeRef field_type_ref : this->struct_.field_types) {
             Type field_type = field_type_ref.get(compiler);
             uint32_t field_align = field_type.align_of(compiler);
-            size = ACE_ROUND_UP(field_align, size); // Add padding
+            size = SIR_ROUND_UP(field_align, size); // Add padding
 
             uint32_t field_size = field_type.size_of(compiler);
             size += field_size;
@@ -772,7 +772,7 @@ uint32_t Type::size_of(Compiler *compiler)
         for (TypeRef field_type_ref : this->tuple.field_types) {
             Type field_type = field_type_ref.get(compiler);
             uint32_t field_align = field_type.align_of(compiler);
-            size = ACE_ROUND_UP(field_align, size); // Add padding
+            size = SIR_ROUND_UP(field_align, size); // Add padding
 
             uint32_t field_size = field_type.size_of(compiler);
             size += field_size;
@@ -782,7 +782,7 @@ uint32_t Type::size_of(Compiler *compiler)
     }
 
     uint32_t self_alignment = this->align_of(compiler);
-    size = ACE_ROUND_UP(self_alignment, size); // Round size up for alignment
+    size = SIR_ROUND_UP(self_alignment, size); // Round size up for alignment
 
     return size;
 }

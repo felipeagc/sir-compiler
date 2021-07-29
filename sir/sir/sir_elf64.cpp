@@ -1,15 +1,13 @@
-#include "ace_obj.hpp"
+#include "sir_obj.hpp"
 #include <Tracy.hpp>
 
-namespace ace {
+#define SIR_ELF64_ST_BIND(info) ((info) >> 4)
+#define SIR_ELF64_ST_TYPE(info) ((info)&0xf)
+#define SIR_ELF64_ST_INFO(bind, type) (((bind) << 4) + ((type)&0xf))
 
-#define ACE_ELF64_ST_BIND(info) ((info) >> 4)
-#define ACE_ELF64_ST_TYPE(info) ((info)&0xf)
-#define ACE_ELF64_ST_INFO(bind, type) (((bind) << 4) + ((type)&0xf))
-
-#define ACE_ELF64_R_SYM(i) ((i) >> 32)
-#define ACE_ELF64_R_TYPE(i) ((i)&0xffffffffL)
-#define ACE_ELF64_R_INFO(s, t) (((s) << 32) + ((t)&0xffffffffL))
+#define SIR_ELF64_R_SYM(i) ((i) >> 32)
+#define SIR_ELF64_R_TYPE(i) ((i)&0xffffffffL)
+#define SIR_ELF64_R_INFO(s, t) (((s) << 32) + ((t)&0xffffffffL))
 
 enum Elf64SectionType : uint32_t {
     Elf64SectionType_Null = 0x0,
@@ -121,24 +119,24 @@ enum Elf64RelaTypeX86_64 : uint32_t {
 
 struct Section {
     Elf64SectionHeader header;
-    Array<uint8_t> data;
+    SIRArray<uint8_t> data;
 };
 
 struct Symbol {
-    SymbolType type;
-    SectionType section_type;
-    Linkage linkage;
-    String name;
+    SIRSymbolType type;
+    SIRSectionType section_type;
+    SIRLinkage linkage;
+    SIRString name;
     size_t offset = 0;
     size_t size = 0;
     size_t final_index = 0;
 };
 
-struct Elf64Builder : ObjectBuilder {
-    Module *module;
+struct Elf64Builder : SIRObjectBuilder {
+    SIRModule *module;
     Elf64Header header;
-    Array<Section> sections;
-    Array<Symbol> symbols;
+    SIRArray<Section> sections;
+    SIRArray<Symbol> symbols;
     uint16_t null_index = 0;     // Null section
     uint16_t shstrtab_index = 0; // String table
     uint16_t strtab_index = 0;   // String table
@@ -149,46 +147,46 @@ struct Elf64Builder : ObjectBuilder {
     uint16_t data_index = 0;      // Initalizad data RW
     uint16_t bss_index = 0;       // Uninitialized data RW
 
-    SymbolRef text_symbol_ref = {0};
-    SymbolRef data_symbol_ref = {0};
-    SymbolRef bss_symbol_ref = {0};
-    SymbolRef rodata_symbol_ref = {0};
+    SIRSymbolRef text_symbol_ref = {0};
+    SIRSymbolRef data_symbol_ref = {0};
+    SIRSymbolRef bss_symbol_ref = {0};
+    SIRSymbolRef rodata_symbol_ref = {0};
 
     uint64_t output_symbol_count = 0;
 
-    virtual void add_to_section(SectionType, Slice<uint8_t> data) override;
+    virtual void add_to_section(SIRSectionType, SIRSlice<uint8_t> data) override;
     virtual void set_section_data(
-        SectionType type, size_t offset, Slice<uint8_t> data) override;
-    virtual size_t get_section_size(SectionType type) override;
+        SIRSectionType type, size_t offset, SIRSlice<uint8_t> data) override;
+    virtual size_t get_section_size(SIRSectionType type) override;
     virtual void add_data_relocation(
-        SectionType source_section,
+        SIRSectionType source_section,
         int64_t source_data_offset,
         uint64_t destination_offset,
         size_t dest_addr_size) override;
     virtual void add_procedure_relocation(
-        SymbolRef function_symbol,
+        SIRSymbolRef function_symbol,
         uint64_t destination_offset,
         size_t dest_addr_size) override;
-    virtual SymbolRef add_symbol(
-        String name,
-        SectionType section_type,
-        SymbolType type,
-        Linkage linkage) override;
+    virtual SIRSymbolRef add_symbol(
+        SIRString name,
+        SIRSectionType section_type,
+        SIRSymbolType type,
+        SIRLinkage linkage) override;
     virtual void set_symbol_region(
-        SymbolRef symbol_ref, size_t offset, size_t size) override;
+        SIRSymbolRef symbol_ref, size_t offset, size_t size) override;
 
-    virtual bool output_to_file(String path) override;
+    virtual bool output_to_file(SIRString path) override;
     virtual void destroy() override;
 };
 
 static uint32_t
-elf_add_string(Elf64Builder *builder, uint16_t string_section_index, String str)
+elf_add_string(Elf64Builder *builder, uint16_t string_section_index, SIRString str)
 {
     ZoneScoped;
 
-    ACE_ASSERT(string_section_index < builder->sections.len);
+    SIR_ASSERT(string_section_index < builder->sections.len);
     Section *str_section = &builder->sections[string_section_index];
-    ACE_ASSERT(str_section->header.sh_type == Elf64SectionType_StrTab);
+    SIR_ASSERT(str_section->header.sh_type == Elf64SectionType_StrTab);
 
     uint32_t string_offset = (uint32_t)str_section->data.len;
     str_section->data.push_many({(uint8_t *)str.ptr, str.len});
@@ -200,16 +198,16 @@ elf_add_string(Elf64Builder *builder, uint16_t string_section_index, String str)
 static void elf_init_section(
     Elf64Builder *builder,
     uint16_t section_index,
-    String name,
+    SIRString name,
     Elf64SectionHeader header_template)
 {
     ZoneScoped;
 
-    ACE_ASSERT(section_index < builder->sections.len);
+    SIR_ASSERT(section_index < builder->sections.len);
     Section *section = &builder->sections[section_index];
     *section = {
         header_template,
-        Array<uint8_t>::create(MallocAllocator::get_instance()),
+        SIRArray<uint8_t>::create(SIRMallocAllocator::get_instance()),
     };
 
     if (section->header.sh_type == Elf64SectionType_StrTab) {
@@ -230,25 +228,25 @@ static void elf_output_symbol(Elf64Builder *builder, size_t symbol_index)
     Symbol *symbol = &builder->symbols[symbol_index];
     uint16_t section_index = 0;
     switch (symbol->section_type) {
-    case SectionType_None: section_index = builder->null_index; break;
-    case SectionType_Text: section_index = builder->text_index; break;
-    case SectionType_Data: section_index = builder->data_index; break;
-    case SectionType_BSS: section_index = builder->bss_index; break;
-    case SectionType_ROData: section_index = builder->rodata_index; break;
+    case SIRSectionType_None: section_index = builder->null_index; break;
+    case SIRSectionType_Text: section_index = builder->text_index; break;
+    case SIRSectionType_Data: section_index = builder->data_index; break;
+    case SIRSectionType_BSS: section_index = builder->bss_index; break;
+    case SIRSectionType_ROData: section_index = builder->rodata_index; break;
     }
 
     Elf64SymbolBinding binding;
     Elf64SymbolType type;
 
     switch (symbol->linkage) {
-    case Linkage_Internal: binding = Elf64SymbolBinding_Local; break;
-    case Linkage_External: binding = Elf64SymbolBinding_Global; break;
+    case SIRLinkage_Internal: binding = Elf64SymbolBinding_Local; break;
+    case SIRLinkage_External: binding = Elf64SymbolBinding_Global; break;
     }
 
     switch (symbol->type) {
-    case SymbolType_None: type = Elf64SymbolType_NoType; break;
-    case SymbolType_Section: type = Elf64SymbolType_Section; break;
-    case SymbolType_Function: type = Elf64SymbolType_Func; break;
+    case SIRSymbolType_None: type = Elf64SymbolType_NoType; break;
+    case SIRSymbolType_Section: type = Elf64SymbolType_Section; break;
+    case SIRSymbolType_Function: type = Elf64SymbolType_Func; break;
     }
 
     Section *symtab = &builder->sections[builder->symtab_index];
@@ -262,7 +260,7 @@ static void elf_output_symbol(Elf64Builder *builder, size_t symbol_index)
         elf_symbol.st_value = symbol->offset;
         elf_symbol.st_size = symbol->size;
         elf_symbol.st_shndx = section_index;
-        elf_symbol.st_info = ACE_ELF64_ST_INFO(binding, type);
+        elf_symbol.st_info = SIR_ELF64_ST_INFO(binding, type);
     }
 
     symtab->data.push_many({(uint8_t *)&elf_symbol, sizeof(Elf64Symbol)});
@@ -271,15 +269,15 @@ static void elf_output_symbol(Elf64Builder *builder, size_t symbol_index)
     builder->output_symbol_count++;
 }
 
-ObjectBuilder *create_elf64_builder(Module *module)
+SIRObjectBuilder *SIRCreateELF64Bbuilder(SIRModule *module)
 {
     ZoneScoped;
 
     Elf64Builder *builder = module->arena->alloc_init<Elf64Builder>();
     builder->module = module;
     builder->header = Elf64Header{};
-    builder->sections = Array<Section>::create(MallocAllocator::get_instance());
-    builder->symbols = Array<Symbol>::create(MallocAllocator::get_instance());
+    builder->sections = SIRArray<Section>::create(SIRMallocAllocator::get_instance());
+    builder->symbols = SIRArray<Symbol>::create(SIRMallocAllocator::get_instance());
 
     // Zero out the header
     memset(&builder->header, 0, sizeof(builder->header));
@@ -293,11 +291,11 @@ ObjectBuilder *create_elf64_builder(Module *module)
     builder->header.e_ident[4] = 2; // Little endian
 
     switch (module->endianness) {
-    case Endianness_LittleEndian: {
+    case SIREndianness_LittleEndian: {
         builder->header.e_ident[5] = 1;
         break;
     }
-    case Endianness_BigEndian: {
+    case SIREndianness_BigEndian: {
         builder->header.e_ident[5] = 2;
         break;
     }
@@ -310,7 +308,7 @@ ObjectBuilder *create_elf64_builder(Module *module)
     builder->header.e_type = 0x01; // Type: relocatable
 
     switch (module->target_arch) {
-    case TargetArch_X86_64: {
+    case SIRTargetArch_X86_64: {
         builder->header.e_machine = 0x3E; // Arch: x86-64
         break;
     }
@@ -377,7 +375,7 @@ ObjectBuilder *create_elf64_builder(Module *module)
         });
 
     switch (module->target_arch) {
-    case TargetArch_X86_64: {
+    case SIRTargetArch_X86_64: {
         elf_init_section(
             builder,
             builder->text_index,
@@ -439,24 +437,24 @@ ObjectBuilder *create_elf64_builder(Module *module)
     builder->symbols.push_back(Symbol{}); // Null symbol
 
     builder->text_symbol_ref = builder->add_symbol(
-        "", SectionType_Text, SymbolType_Section, Linkage_Internal);
+        "", SIRSectionType_Text, SIRSymbolType_Section, SIRLinkage_Internal);
     builder->data_symbol_ref = builder->add_symbol(
-        "", SectionType_Data, SymbolType_Section, Linkage_Internal);
+        "", SIRSectionType_Data, SIRSymbolType_Section, SIRLinkage_Internal);
     builder->bss_symbol_ref = builder->add_symbol(
-        "", SectionType_BSS, SymbolType_Section, Linkage_Internal);
+        "", SIRSectionType_BSS, SIRSymbolType_Section, SIRLinkage_Internal);
     builder->rodata_symbol_ref = builder->add_symbol(
-        "", SectionType_ROData, SymbolType_Section, Linkage_Internal);
+        "", SIRSectionType_ROData, SIRSymbolType_Section, SIRLinkage_Internal);
 
     return builder;
 }
 
-bool Elf64Builder::output_to_file(String path)
+bool Elf64Builder::output_to_file(SIRString path)
 {
     ZoneScoped;
 
     for (size_t i = 0; i < this->symbols.len; ++i) {
         Symbol *symbol = &this->symbols[i];
-        if (symbol->linkage == Linkage_Internal) {
+        if (symbol->linkage == SIRLinkage_Internal) {
             elf_output_symbol(this, i);
         }
     }
@@ -470,7 +468,7 @@ bool Elf64Builder::output_to_file(String path)
 
     for (size_t i = 0; i < this->symbols.len; ++i) {
         Symbol *symbol = &this->symbols[i];
-        if (symbol->linkage != Linkage_Internal) {
+        if (symbol->linkage != SIRLinkage_Internal) {
             elf_output_symbol(this, i);
         }
     }
@@ -480,10 +478,10 @@ bool Elf64Builder::output_to_file(String path)
     size_t rela_entry_count = rela_text_section->data.len / sizeof(Elf64Rela);
     for (size_t i = 0; i < rela_entry_count; ++i) {
         Elf64Rela *rela = &relas[i];
-        uint64_t type = ACE_ELF64_R_TYPE(rela->r_info);
-        uint64_t old_sym_index = ACE_ELF64_R_SYM(rela->r_info);
+        uint64_t type = SIR_ELF64_R_TYPE(rela->r_info);
+        uint64_t old_sym_index = SIR_ELF64_R_SYM(rela->r_info);
         uint64_t new_sym_index = this->symbols[old_sym_index].final_index;
-        rela->r_info = ACE_ELF64_R_INFO(new_sym_index, type);
+        rela->r_info = SIR_ELF64_R_INFO(new_sym_index, type);
     }
 
     FILE *f = fopen(this->module->arena->null_terminate(path), "wb");
@@ -539,17 +537,17 @@ void Elf64Builder::destroy()
     this->symbols.destroy();
 }
 
-void Elf64Builder::add_to_section(SectionType type, Slice<uint8_t> data)
+void Elf64Builder::add_to_section(SIRSectionType type, SIRSlice<uint8_t> data)
 {
     ZoneScoped;
 
     size_t section_index = 0;
     switch (type) {
-    case SectionType_None: ACE_ASSERT(0); break;
-    case SectionType_Text: section_index = this->text_index; break;
-    case SectionType_Data: section_index = this->data_index; break;
-    case SectionType_BSS: section_index = this->bss_index; break;
-    case SectionType_ROData: section_index = this->rodata_index; break;
+    case SIRSectionType_None: SIR_ASSERT(0); break;
+    case SIRSectionType_Text: section_index = this->text_index; break;
+    case SIRSectionType_Data: section_index = this->data_index; break;
+    case SIRSectionType_BSS: section_index = this->bss_index; break;
+    case SIRSectionType_ROData: section_index = this->rodata_index; break;
     }
 
     Section *section = &this->sections[section_index];
@@ -557,39 +555,39 @@ void Elf64Builder::add_to_section(SectionType type, Slice<uint8_t> data)
 }
 
 void Elf64Builder::set_section_data(
-    SectionType type, size_t offset, Slice<uint8_t> data)
+    SIRSectionType type, size_t offset, SIRSlice<uint8_t> data)
 {
     ZoneScoped;
 
     size_t section_index = 0;
     switch (type) {
-    case SectionType_None: ACE_ASSERT(0); break;
-    case SectionType_Text: section_index = this->text_index; break;
-    case SectionType_Data: section_index = this->data_index; break;
-    case SectionType_BSS: section_index = this->bss_index; break;
-    case SectionType_ROData: section_index = this->rodata_index; break;
+    case SIRSectionType_None: SIR_ASSERT(0); break;
+    case SIRSectionType_Text: section_index = this->text_index; break;
+    case SIRSectionType_Data: section_index = this->data_index; break;
+    case SIRSectionType_BSS: section_index = this->bss_index; break;
+    case SIRSectionType_ROData: section_index = this->rodata_index; break;
     }
 
     Section *section = &this->sections[section_index];
 
-    ACE_ASSERT(offset + data.len <= section->data.len);
+    SIR_ASSERT(offset + data.len <= section->data.len);
 
     for (size_t i = 0; i < data.len; ++i) {
         section->data.ptr[offset + i] = data.ptr[i];
     }
 }
 
-size_t Elf64Builder::get_section_size(SectionType type)
+size_t Elf64Builder::get_section_size(SIRSectionType type)
 {
     ZoneScoped;
 
     size_t section_index = 0;
     switch (type) {
-    case SectionType_None: ACE_ASSERT(0); break;
-    case SectionType_Text: section_index = this->text_index; break;
-    case SectionType_Data: section_index = this->data_index; break;
-    case SectionType_BSS: section_index = this->bss_index; break;
-    case SectionType_ROData: section_index = this->rodata_index; break;
+    case SIRSectionType_None: SIR_ASSERT(0); break;
+    case SIRSectionType_Text: section_index = this->text_index; break;
+    case SIRSectionType_Data: section_index = this->data_index; break;
+    case SIRSectionType_BSS: section_index = this->bss_index; break;
+    case SIRSectionType_ROData: section_index = this->rodata_index; break;
     }
 
     Section *section = &this->sections[section_index];
@@ -597,7 +595,7 @@ size_t Elf64Builder::get_section_size(SectionType type)
 }
 
 void Elf64Builder::add_data_relocation(
-    SectionType source_section,
+    SIRSectionType source_section,
     int64_t source_data_offset,
     uint64_t destination_offset,
     size_t dest_addr_size)
@@ -606,11 +604,11 @@ void Elf64Builder::add_data_relocation(
 
     uint64_t section_sym_index = 0;
     switch (source_section) {
-    case SectionType_None: ACE_ASSERT(0); break;
-    case SectionType_Text: section_sym_index = this->text_symbol_ref.id; break;
-    case SectionType_Data: section_sym_index = this->data_symbol_ref.id; break;
-    case SectionType_BSS: section_sym_index = this->bss_symbol_ref.id; break;
-    case SectionType_ROData:
+    case SIRSectionType_None: SIR_ASSERT(0); break;
+    case SIRSectionType_Text: section_sym_index = this->text_symbol_ref.id; break;
+    case SIRSectionType_Data: section_sym_index = this->data_symbol_ref.id; break;
+    case SIRSectionType_BSS: section_sym_index = this->bss_symbol_ref.id; break;
+    case SIRSectionType_ROData:
         section_sym_index = this->rodata_symbol_ref.id;
         break;
     }
@@ -618,16 +616,16 @@ void Elf64Builder::add_data_relocation(
     Elf64Rela rela{};
 
     switch (this->module->target_arch) {
-    case TargetArch_X86_64: {
+    case SIRTargetArch_X86_64: {
         switch (dest_addr_size) {
         case 4: {
             rela.r_offset = destination_offset;
             rela.r_addend = source_data_offset - 4;
             rela.r_info =
-                ACE_ELF64_R_INFO(section_sym_index, Elf64RelaTypeX86_64_PC32);
+                SIR_ELF64_R_INFO(section_sym_index, Elf64RelaTypeX86_64_PC32);
             break;
         }
-        default: ACE_ASSERT(0);
+        default: SIR_ASSERT(0);
         }
         break;
     }
@@ -638,7 +636,7 @@ void Elf64Builder::add_data_relocation(
 }
 
 void Elf64Builder::add_procedure_relocation(
-    SymbolRef function_symbol,
+    SIRSymbolRef function_symbol,
     uint64_t destination_offset,
     size_t dest_addr_size)
 {
@@ -647,16 +645,16 @@ void Elf64Builder::add_procedure_relocation(
     Elf64Rela rela{};
 
     switch (this->module->target_arch) {
-    case TargetArch_X86_64: {
+    case SIRTargetArch_X86_64: {
         switch (dest_addr_size) {
         case 4: {
             rela.r_offset = destination_offset;
             rela.r_addend = -4;
-            rela.r_info = ACE_ELF64_R_INFO(
+            rela.r_info = SIR_ELF64_R_INFO(
                 (uint64_t)function_symbol.id, Elf64RelaTypeX86_64_PLT32);
             break;
         }
-        default: ACE_ASSERT(0);
+        default: SIR_ASSERT(0);
         }
         break;
     }
@@ -666,8 +664,8 @@ void Elf64Builder::add_procedure_relocation(
     rela_text_section->data.push_many({(uint8_t *)&rela, sizeof(rela)});
 }
 
-SymbolRef Elf64Builder::add_symbol(
-    String name, SectionType section_type, SymbolType type, Linkage linkage)
+SIRSymbolRef Elf64Builder::add_symbol(
+    SIRString name, SIRSectionType section_type, SIRSymbolType type, SIRLinkage linkage)
 {
     ZoneScoped;
 
@@ -678,18 +676,16 @@ SymbolRef Elf64Builder::add_symbol(
         .name = name,
     };
 
-    SymbolRef ref = {(uint32_t)this->symbols.len};
+    SIRSymbolRef ref = {(uint32_t)this->symbols.len};
     this->symbols.push_back(symbol);
     return ref;
 }
 
 void Elf64Builder::set_symbol_region(
-    SymbolRef symbol_ref, size_t offset, size_t size)
+    SIRSymbolRef symbol_ref, size_t offset, size_t size)
 {
     ZoneScoped;
     Symbol *symbol = &this->symbols[symbol_ref.id];
     symbol->offset = offset;
     symbol->size = size;
 }
-
-} // namespace ace

@@ -1,8 +1,6 @@
 #include "compiler.hpp"
 #include <Tracy.hpp>
 
-using namespace ace;
-
 const char *token_kind_to_string(TokenKind kind)
 {
     switch (kind) {
@@ -108,7 +106,7 @@ const char *token_kind_to_string(TokenKind kind)
     return "<unknown>";
 }
 
-static ace::String token_to_string(Compiler *compiler, const Token &token)
+static SIRString token_to_string(Compiler *compiler, const Token &token)
 {
     switch (token.kind) {
     case TokenKind_Error:
@@ -123,33 +121,33 @@ static ace::String token_to_string(Compiler *compiler, const Token &token)
     default: return token_kind_to_string(token.kind);
     }
 
-    ACE_ASSERT(0);
+    SIR_ASSERT(0);
     return "";
 }
 
-ACE_INLINE static bool is_whitespace(char c)
+SIR_INLINE static bool is_whitespace(char c)
 {
     return c == ' ' || c == '\t' || c == '\r' || c == '\n';
 }
 
-ACE_INLINE static bool is_alpha(char c)
+SIR_INLINE static bool is_alpha(char c)
 {
     return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c == '_');
 }
 
-ACE_INLINE static bool is_alpha_num(char c)
+SIR_INLINE static bool is_alpha_num(char c)
 {
     return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c == '_') ||
            (c >= '0' && c <= '9');
 }
 
-ACE_INLINE static bool is_hex(char c)
+SIR_INLINE static bool is_hex(char c)
 {
     return (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F') ||
            (c >= '0' && c <= '9');
 }
 
-ACE_INLINE static bool is_num(char c)
+SIR_INLINE static bool is_num(char c)
 {
     return (c >= '0' && c <= '9');
 }
@@ -346,7 +344,7 @@ struct TokenizerState {
         Token token = {};
         *this = this->next_token(compiler, &token);
         if (token.kind != token_kind) {
-            ace::String token_string = token_to_string(compiler, token);
+            SIRString token_string = token_to_string(compiler, token);
             if (token.kind == TokenKind_Error) {
                 compiler->add_error(
                     token.loc,
@@ -373,7 +371,7 @@ struct TokenizerState {
         ZoneScoped;
 
         TokenizerState state = *this;
-        Allocator *allocator = compiler->arena;
+        SIRAllocator *allocator = compiler->arena;
 
         State mstate = State_WhitespaceStart;
 
@@ -414,24 +412,24 @@ struct TokenizerState {
 
         switch (token->kind) {
         case TokenKind_Identifier: {
-            String ident_str =
-                String{&state.text[token->loc.offset], token->loc.len};
+            SIRString ident_str =
+                SIRString{&state.text[token->loc.offset], token->loc.len};
             if (!compiler->keyword_map.get(ident_str, &token->kind)) {
                 token->str = ident_str;
             }
             break;
         }
         case TokenKind_BuiltinIdentifier: {
-            String ident_str =
-                String{&state.text[token->loc.offset + 1], token->loc.len - 1};
+            SIRString ident_str =
+                SIRString{&state.text[token->loc.offset + 1], token->loc.len - 1};
             if (!compiler->keyword_map.get(ident_str, &token->kind)) {
                 token->str = ident_str;
             }
             break;
         }
         case TokenKind_StringLiteral: {
-            String ident_str =
-                String{&state.text[token->loc.offset + 1], token->loc.len - 2};
+            SIRString ident_str =
+                SIRString{&state.text[token->loc.offset + 1], token->loc.len - 2};
 
             compiler->sb.reset();
             for (size_t i = 0; i < ident_str.len; ++i) {
@@ -469,15 +467,15 @@ struct TokenizerState {
             break;
         }
         case TokenKind_FloatLiteral: {
-            String ident_str =
-                String{&state.text[token->loc.offset], token->loc.len};
+            SIRString ident_str =
+                SIRString{&state.text[token->loc.offset], token->loc.len};
             const char *strz = allocator->null_terminate(ident_str);
             token->float_ = strtod(strz, NULL);
             break;
         }
         case TokenKind_IntLiteral: {
-            String ident_str =
-                String{&state.text[token->loc.offset], token->loc.len};
+            SIRString ident_str =
+                SIRString{&state.text[token->loc.offset], token->loc.len};
             const char *strz = allocator->null_terminate(ident_str);
             token->int_ = strtol(strz, NULL, 10);
             break;
@@ -630,7 +628,7 @@ static Expr parse_primary_expr(Compiler *compiler, TokenizerState *state)
         case TokenKind_U16: expr.int_type.bits = 16; break;
         case TokenKind_U32: expr.int_type.bits = 32; break;
         case TokenKind_U64: expr.int_type.bits = 64; break;
-        default: ACE_ASSERT(0);
+        default: SIR_ASSERT(0);
         }
 
         break;
@@ -650,7 +648,7 @@ static Expr parse_primary_expr(Compiler *compiler, TokenizerState *state)
         case TokenKind_I16: expr.int_type.bits = 16; break;
         case TokenKind_I32: expr.int_type.bits = 32; break;
         case TokenKind_I64: expr.int_type.bits = 64; break;
-        default: ACE_ASSERT(0);
+        default: SIR_ASSERT(0);
         }
 
         break;
@@ -665,7 +663,7 @@ static Expr parse_primary_expr(Compiler *compiler, TokenizerState *state)
         switch (next_token.kind) {
         case TokenKind_F32: expr.float_type.bits = 32; break;
         case TokenKind_F64: expr.float_type.bits = 64; break;
-        default: ACE_ASSERT(0);
+        default: SIR_ASSERT(0);
         }
 
         break;
@@ -690,7 +688,7 @@ static Expr parse_primary_expr(Compiler *compiler, TokenizerState *state)
         expr.loc = ident_token.loc;
         expr.builtin_call.builtin = builtin_func;
         expr.builtin_call.param_refs =
-            ace::Array<ExprRef>::create(compiler->arena);
+            SIRArray<ExprRef>::create(compiler->arena);
 
         state->next_token(compiler, &next_token);
         while (next_token.kind != TokenKind_RParen) {
@@ -716,9 +714,9 @@ static Expr parse_primary_expr(Compiler *compiler, TokenizerState *state)
         expr.kind = ExprKind_StructType;
         expr.loc = struct_token.loc;
         expr.struct_type.field_names =
-            ace::Array<ace::String>::create(compiler->arena);
+            SIRArray<SIRString>::create(compiler->arena);
         expr.struct_type.field_type_expr_refs =
-            ace::Array<ExprRef>::create(compiler->arena);
+            SIRArray<ExprRef>::create(compiler->arena);
 
         state->consume_token(compiler, TokenKind_LCurly);
 
@@ -745,7 +743,7 @@ static Expr parse_primary_expr(Compiler *compiler, TokenizerState *state)
         break;
     }
     default: {
-        ace::String token_string = token_to_string(compiler, next_token);
+        SIRString token_string = token_to_string(compiler, next_token);
         compiler->add_error(
             next_token.loc,
             "unexpected token: '%.*s', expecting primary expression",
@@ -771,9 +769,9 @@ static Expr parse_func_expr(Compiler *compiler, TokenizerState *state)
     expr.loc = next_token.loc;
     expr.func = {};
 
-    expr.func.param_decl_refs = ace::Array<DeclRef>::create(compiler->arena);
+    expr.func.param_decl_refs = SIRArray<DeclRef>::create(compiler->arena);
     expr.func.return_type_expr_refs =
-        ace::Array<ExprRef>::create(compiler->arena);
+        SIRArray<ExprRef>::create(compiler->arena);
 
     switch (next_token.kind) {
     case TokenKind_Inline: {
@@ -782,7 +780,7 @@ static Expr parse_func_expr(Compiler *compiler, TokenizerState *state)
         break;
     }
     default: {
-        ace::String token_string = token_to_string(compiler, next_token);
+        SIRString token_string = token_to_string(compiler, next_token);
         compiler->add_error(
             next_token.loc,
             "unexpected token: '%.*s', expecting function literal",
@@ -904,7 +902,7 @@ static Expr parse_func_call_expr(Compiler *compiler, TokenizerState *state)
             expr.kind = ExprKind_FunctionCall;
             expr.func_call.func_expr_ref = func_expr_ref;
             expr.func_call.param_refs =
-                ace::Array<ExprRef>::create(compiler->arena);
+                SIRArray<ExprRef>::create(compiler->arena);
 
             state->next_token(compiler, &next_token);
             while (next_token.kind != TokenKind_RParen) {
@@ -991,7 +989,7 @@ static Expr parse_unary_expr(Compiler *compiler, TokenizerState *state)
         case TokenKind_Sub: op = UnaryOp_Negate; break;
         case TokenKind_Not: op = UnaryOp_Not; break;
         case TokenKind_BitAnd: op = UnaryOp_AddressOf; break;
-        default: ACE_ASSERT(0); break;
+        default: SIR_ASSERT(0); break;
         }
 
         Expr expr = {};
@@ -1054,10 +1052,10 @@ static Expr parse_binary_expr(Compiler *compiler, TokenizerState *state)
     default: return expr;
     }
 
-    ace::Array<BinaryOp> op_stack =
-        ace::Array<BinaryOp>::create(MallocAllocator::get_instance());
-    ace::Array<BinaryOpSymbol> symbol_queue =
-        ace::Array<BinaryOpSymbol>::create(MallocAllocator::get_instance());
+    SIRArray<BinaryOp> op_stack =
+        SIRArray<BinaryOp>::create(SIRMallocAllocator::get_instance());
+    SIRArray<BinaryOpSymbol> symbol_queue =
+        SIRArray<BinaryOpSymbol>::create(SIRMallocAllocator::get_instance());
 
     static uint8_t precedences[BinaryOp_MAX] = {
         0,  // BinaryOp_Unknown,
@@ -1147,13 +1145,13 @@ static Expr parse_binary_expr(Compiler *compiler, TokenizerState *state)
         symbol_queue.push_back(op_symbol);
     }
 
-    ace::Array<Expr> expr_stack =
-        ace::Array<Expr>::create(MallocAllocator::get_instance());
+    SIRArray<Expr> expr_stack =
+        SIRArray<Expr>::create(SIRMallocAllocator::get_instance());
 
     for (size_t i = 0; i < symbol_queue.len; ++i) {
         BinaryOpSymbol symbol = symbol_queue[i];
         if (symbol.kind == BinaryOpSymbol_Operator) {
-            ACE_ASSERT(expr_stack.len >= 2);
+            SIR_ASSERT(expr_stack.len >= 2);
             Expr right_expr = expr_stack[expr_stack.len - 1];
             Expr left_expr = expr_stack[expr_stack.len - 2];
             expr_stack.pop();
@@ -1172,7 +1170,7 @@ static Expr parse_binary_expr(Compiler *compiler, TokenizerState *state)
         }
     }
 
-    ACE_ASSERT(expr_stack.len == 1);
+    SIR_ASSERT(expr_stack.len == 1);
 
     Expr result_expr = expr_stack[0];
 
@@ -1263,7 +1261,7 @@ static Stmt parse_stmt(Compiler *compiler, TokenizerState *state)
 
         stmt.kind = StmtKind_Block;
         stmt.loc = lcurly_token.loc;
-        stmt.block.stmt_refs = ace::Array<StmtRef>::create(compiler->arena);
+        stmt.block.stmt_refs = SIRArray<StmtRef>::create(compiler->arena);
 
         state->next_token(compiler, &next_token);
         while (next_token.kind != TokenKind_RCurly) {
@@ -1305,7 +1303,7 @@ static Stmt parse_stmt(Compiler *compiler, TokenizerState *state)
             value_expr_ref = compiler->add_expr(parse_expr(compiler, state));
         }
 
-        ACE_ASSERT(type_expr_ref.id > 0 || value_expr_ref.id > 0);
+        SIR_ASSERT(type_expr_ref.id > 0 || value_expr_ref.id > 0);
 
         Decl var_decl = {};
         var_decl.kind = DeclKind_GlobalVarDecl;
@@ -1375,7 +1373,7 @@ static Stmt parse_stmt(Compiler *compiler, TokenizerState *state)
                     compiler->add_expr(parse_expr(compiler, state));
             }
 
-            ACE_ASSERT(type_expr_ref.id > 0 || value_expr_ref.id > 0);
+            SIR_ASSERT(type_expr_ref.id > 0 || value_expr_ref.id > 0);
 
             Decl var_decl = {};
             var_decl.kind = DeclKind_LocalVarDecl;
@@ -1413,14 +1411,14 @@ static Stmt parse_stmt(Compiler *compiler, TokenizerState *state)
     }
     }
 
-    ACE_ASSERT(stmt.kind != StmtKind_Unknown);
+    SIR_ASSERT(stmt.kind != StmtKind_Unknown);
     return stmt;
 }
 
 static void parse_top_level_decl(
     Compiler *compiler,
     TokenizerState *state,
-    ace::Array<DeclRef> *top_level_decls)
+    SIRArray<DeclRef> *top_level_decls)
 {
     ZoneScoped;
 
@@ -1436,11 +1434,11 @@ static void parse_top_level_decl(
         func_decl.func = {};
 
         func_decl.func.param_decl_refs =
-            ace::Array<DeclRef>::create(compiler->arena);
+            SIRArray<DeclRef>::create(compiler->arena);
         func_decl.func.return_type_expr_refs =
-            ace::Array<ExprRef>::create(compiler->arena);
+            SIRArray<ExprRef>::create(compiler->arena);
         func_decl.func.body_stmts =
-            ace::Array<StmtRef>::create(compiler->arena);
+            SIRArray<StmtRef>::create(compiler->arena);
 
         state->next_token(compiler, &next_token);
         switch (next_token.kind) {
@@ -1578,7 +1576,7 @@ static void parse_top_level_decl(
             value_expr_ref = compiler->add_expr(parse_expr(compiler, state));
         }
 
-        ACE_ASSERT(type_expr_ref.id > 0 || value_expr_ref.id > 0);
+        SIR_ASSERT(type_expr_ref.id > 0 || value_expr_ref.id > 0);
 
         Decl var_decl = {};
         var_decl.kind = DeclKind_GlobalVarDecl;
@@ -1614,7 +1612,7 @@ static void parse_top_level_decl(
         break;
     }
     default: {
-        ace::String token_string = token_to_string(compiler, next_token);
+        SIRString token_string = token_to_string(compiler, next_token);
         compiler->add_error(
             next_token.loc,
             "unexpected token: '%.*s', expecting top level declaration",
@@ -1892,7 +1890,7 @@ void parse_file(Compiler *compiler, FileRef file_ref)
         Token token = {};
         state.next_token(compiler, &token);
         if (token.kind == TokenKind_Error) {
-            ace::String token_string = token_to_string(compiler, token);
+            SIRString token_string = token_to_string(compiler, token);
             compiler->add_error(
                 token.loc,
                 "unexpected token: '%.*s'",

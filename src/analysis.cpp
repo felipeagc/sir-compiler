@@ -3,8 +3,8 @@
 
 struct AnalyzerState {
     FileRef file_ref;
-    ace::Array<Scope *> scope_stack;
-    ace::Array<DeclRef> func_stack;
+    SIRArray<Scope *> scope_stack;
+    SIRArray<DeclRef> func_stack;
 };
 
 static bool
@@ -45,12 +45,12 @@ static void analyze_expr(
 {
     ZoneScoped;
 
-    ACE_ASSERT(expr_ref.id > 0);
+    SIR_ASSERT(expr_ref.id > 0);
     Expr expr = compiler->exprs[expr_ref.id];
 
     switch (expr.kind) {
     case ExprKind_Unknown: {
-        ACE_ASSERT(0);
+        SIR_ASSERT(0);
         break;
     }
 
@@ -139,7 +139,7 @@ static void analyze_expr(
             InterpValue interp_value = {};
             if (interp_expr(
                     compiler, expr.array_type.size_expr_ref, &interp_value)) {
-                ACE_ASSERT(
+                SIR_ASSERT(
                     interp_value.type_ref.id == compiler->untyped_int_type.id);
                 expr.expr_type_ref = compiler->type_type;
                 expr.as_type_ref =
@@ -155,7 +155,7 @@ static void analyze_expr(
     }
 
     case ExprKind_StructType: {
-        ACE_ASSERT(
+        SIR_ASSERT(
             expr.struct_type.field_type_expr_refs.len ==
             expr.struct_type.field_names.len);
 
@@ -170,8 +170,8 @@ static void analyze_expr(
             }
         }
 
-        ace::StringMap<uint32_t> field_map =
-            ace::StringMap<uint32_t>::create(compiler->arena, 32);
+        SIRStringMap<uint32_t> field_map =
+            SIRStringMap<uint32_t>::create(compiler->arena, 32);
 
         bool has_conflict = false;
 
@@ -191,7 +191,7 @@ static void analyze_expr(
 
         if (has_conflict || has_invalid_type) break;
 
-        ace::Slice<TypeRef> field_types = compiler->arena->alloc<TypeRef>(
+        SIRSlice<TypeRef> field_types = compiler->arena->alloc<TypeRef>(
             expr.struct_type.field_type_expr_refs.len);
         for (size_t i = 0; i < expr.struct_type.field_type_expr_refs.len; ++i) {
             field_types[i] = expr.struct_type.field_type_expr_refs[i]
@@ -345,7 +345,7 @@ static void analyze_expr(
                 break;
             }
 
-            ACE_ASSERT(func_expr.as_type_ref.id != 0);
+            SIR_ASSERT(func_expr.as_type_ref.id != 0);
 
             Type dest_type = func_expr.as_type_ref.get(compiler);
 
@@ -393,7 +393,7 @@ static void analyze_expr(
 
     case ExprKind_BuiltinCall: {
         switch (expr.builtin_call.builtin) {
-        case BuiltinFunction_Unknown: ACE_ASSERT(0); break;
+        case BuiltinFunction_Unknown: SIR_ASSERT(0); break;
         case BuiltinFunction_Sizeof: {
             if (expr.builtin_call.param_refs.len != 1) {
                 compiler->add_error(
@@ -487,7 +487,7 @@ static void analyze_expr(
         TypeRef indexed_type_ref = left_expr.expr_type_ref;
         TypeRef index_type_ref = right_expr.expr_type_ref;
         if (index_type_ref.id == 0 || indexed_type_ref.id == 0) {
-            ACE_ASSERT(compiler->errors.len > 0);
+            SIR_ASSERT(compiler->errors.len > 0);
             break;
         }
 
@@ -516,7 +516,7 @@ static void analyze_expr(
             expr.expr_type_ref = indexed_type.slice.sub_type;
             break;
         }
-        default: ACE_ASSERT(0);
+        default: SIR_ASSERT(0);
         }
 
         break;
@@ -527,11 +527,11 @@ static void analyze_expr(
 
         Type accessed_type =
             expr.access.left_ref.get(compiler).expr_type_ref.get(compiler);
-        ace::String type_name = accessed_type.to_string(compiler);
+        SIRString type_name = accessed_type.to_string(compiler);
 
         Expr ident_expr = expr.access.accessed_ident_ref.get(compiler);
-        ACE_ASSERT(ident_expr.kind == ExprKind_Identifier);
-        ace::String accessed_field = ident_expr.ident.str;
+        SIR_ASSERT(ident_expr.kind == ExprKind_Identifier);
+        SIRString accessed_field = ident_expr.ident.str;
 
         switch (accessed_type.kind) {
         case TypeKind_Struct: {
@@ -568,7 +568,7 @@ static void analyze_expr(
 
     case ExprKind_Unary: {
         switch (expr.unary.op) {
-        case UnaryOp_Unknown: ACE_ASSERT(0); break;
+        case UnaryOp_Unknown: SIR_ASSERT(0); break;
         case UnaryOp_AddressOf: {
             analyze_expr(compiler, state, expr.unary.left_ref);
 
@@ -576,7 +576,7 @@ static void analyze_expr(
                 expr.unary.left_ref.get(compiler).expr_type_ref;
             if (!subtype_ref.is_runtime(compiler)) {
                 Type subtype = subtype_ref.get(compiler);
-                ace::String type_string = subtype.to_string(compiler);
+                SIRString type_string = subtype.to_string(compiler);
                 compiler->add_error(
                     expr.loc,
                     "cannot take address of variable of non-runtime type: "
@@ -606,7 +606,7 @@ static void analyze_expr(
             Type subtype = subtype_ref.get(compiler);
 
             if (subtype.kind != TypeKind_Pointer) {
-                ace::String type_string = subtype.to_string(compiler);
+                SIRString type_string = subtype.to_string(compiler);
                 compiler->add_error(
                     expr.loc,
                     "cannot dereference variable of type: '%.*s'",
@@ -636,7 +636,7 @@ static void analyze_expr(
 
         switch (expr.binary.op) {
         case BinaryOp_Unknown:
-        case BinaryOp_MAX: ACE_ASSERT(0); break;
+        case BinaryOp_MAX: SIR_ASSERT(0); break;
 
         case BinaryOp_Add:
         case BinaryOp_Sub:
@@ -751,7 +751,7 @@ static void analyze_expr(
             Type type = left_type;
             if (type.kind == TypeKind_UntypedInt ||
                 type.kind == TypeKind_UntypedFloat) {
-                ace::String type_string = type.to_string(compiler);
+                SIRString type_string = type.to_string(compiler);
                 compiler->add_error(
                     expr.loc,
                     "bitwise expression expects runtime numeric types, "
@@ -791,7 +791,7 @@ static void analyze_expr(
             Type type = left.expr_type_ref.get(compiler);
             if (type.kind == TypeKind_UntypedInt ||
                 type.kind == TypeKind_UntypedFloat) {
-                ace::String type_string = type.to_string(compiler);
+                SIRString type_string = type.to_string(compiler);
                 compiler->add_error(
                     expr.loc,
                     "comparison expression expects runtime numeric types, "
@@ -820,7 +820,7 @@ static void analyze_expr(
 
             Type left_type = left.expr_type_ref.get(compiler);
             if (left_type.kind != TypeKind_Int) {
-                ace::String type_string = left_type.to_string(compiler);
+                SIRString type_string = left_type.to_string(compiler);
                 compiler->add_error(
                     left.loc,
                     "bit shift expects runtime numeric types, instead "
@@ -832,7 +832,7 @@ static void analyze_expr(
 
             Type right_type = right.expr_type_ref.get(compiler);
             if (right_type.kind != TypeKind_Int) {
-                ace::String type_string = right_type.to_string(compiler);
+                SIRString type_string = right_type.to_string(compiler);
                 compiler->add_error(
                     right.loc,
                     "bit shift expects runtime numeric types, instead "
@@ -863,8 +863,8 @@ static void analyze_expr(
         Type expected_type = expected_type_ref.get(compiler);
         Type expr_type = expr.expr_type_ref.get(compiler);
 
-        ace::String expected_type_str = expected_type.to_string(compiler);
-        ace::String expr_type_str = expr_type.to_string(compiler);
+        SIRString expected_type_str = expected_type.to_string(compiler);
+        SIRString expr_type_str = expr_type.to_string(compiler);
 
         compiler->add_error(
             expr.loc,
@@ -883,12 +883,12 @@ analyze_stmt(Compiler *compiler, AnalyzerState *state, StmtRef stmt_ref)
 {
     ZoneScoped;
 
-    ACE_ASSERT(stmt_ref.id > 0);
+    SIR_ASSERT(stmt_ref.id > 0);
     Stmt stmt = compiler->stmts[stmt_ref.id];
 
     switch (stmt.kind) {
     case StmtKind_Unknown: {
-        ACE_ASSERT(0);
+        SIR_ASSERT(0);
         break;
     }
 
@@ -934,11 +934,11 @@ analyze_stmt(Compiler *compiler, AnalyzerState *state, StmtRef stmt_ref)
     }
 
     case StmtKind_Return: {
-        ACE_ASSERT(state->func_stack.len > 0);
+        SIR_ASSERT(state->func_stack.len > 0);
 
         Decl func_decl = state->func_stack.last()->get(compiler);
         Type func_type = func_decl.decl_type_ref.get(compiler);
-        ACE_ASSERT(func_type.kind == TypeKind_Function);
+        SIR_ASSERT(func_type.kind == TypeKind_Function);
 
         if (func_type.func.return_type.id == 0) {
             if (stmt.return_.returned_expr_ref.id > 0) {
@@ -996,12 +996,12 @@ analyze_decl(Compiler *compiler, AnalyzerState *state, DeclRef decl_ref)
 {
     ZoneScoped;
 
-    ACE_ASSERT(decl_ref.id > 0);
+    SIR_ASSERT(decl_ref.id > 0);
     Decl decl = compiler->decls[decl_ref.id];
 
     switch (decl.kind) {
     case DeclKind_Unknown: {
-        ACE_ASSERT(0);
+        SIR_ASSERT(0);
         break;
     }
 
@@ -1043,7 +1043,7 @@ analyze_decl(Compiler *compiler, AnalyzerState *state, DeclRef decl_ref)
             return_type =
                 decl.func.return_type_expr_refs[0].get(compiler).as_type_ref;
         } else {
-            ace::Slice<TypeRef> fields = compiler->arena->alloc<TypeRef>(
+            SIRSlice<TypeRef> fields = compiler->arena->alloc<TypeRef>(
                 decl.func.return_type_expr_refs.len);
 
             for (size_t i = 0; i < decl.func.return_type_expr_refs.len; ++i) {
@@ -1055,7 +1055,7 @@ analyze_decl(Compiler *compiler, AnalyzerState *state, DeclRef decl_ref)
             return_type = compiler->create_tuple_type(fields);
         }
 
-        ace::Slice<TypeRef> param_types =
+        SIRSlice<TypeRef> param_types =
             compiler->arena->alloc<TypeRef>(decl.func.param_decl_refs.len);
 
         for (size_t i = 0; i < decl.func.param_decl_refs.len; ++i) {
@@ -1124,7 +1124,7 @@ analyze_decl(Compiler *compiler, AnalyzerState *state, DeclRef decl_ref)
 
         if (!decl.decl_type_ref.is_runtime(compiler)) {
             Type decl_type = decl.decl_type_ref.get(compiler);
-            ace::String type_string = decl_type.to_string(compiler);
+            SIRString type_string = decl_type.to_string(compiler);
             compiler->add_error(
                 decl.loc,
                 "cannot create variable of non-runtime type: "
@@ -1176,7 +1176,7 @@ analyze_decl(Compiler *compiler, AnalyzerState *state, DeclRef decl_ref)
 
         if (!decl.decl_type_ref.is_runtime(compiler)) {
             Type decl_type = decl.decl_type_ref.get(compiler);
-            ace::String type_string = decl_type.to_string(compiler);
+            SIRString type_string = decl_type.to_string(compiler);
             compiler->add_error(
                 decl.loc,
                 "cannot create variable of non-runtime type: "
@@ -1200,8 +1200,8 @@ void analyze_file(Compiler *compiler, FileRef file_ref)
 
     AnalyzerState state = {};
     state.file_ref = file_ref;
-    state.scope_stack = ace::Array<Scope *>::create(compiler->arena);
-    state.func_stack = ace::Array<DeclRef>::create(compiler->arena);
+    state.scope_stack = SIRArray<Scope *>::create(compiler->arena);
+    state.func_stack = SIRArray<DeclRef>::create(compiler->arena);
 
     state.scope_stack.push_back(file.scope);
 
@@ -1216,7 +1216,7 @@ void analyze_file(Compiler *compiler, FileRef file_ref)
 
     state.scope_stack.pop();
 
-    ACE_ASSERT(state.scope_stack.len == 0);
+    SIR_ASSERT(state.scope_stack.len == 0);
 
     compiler->files[file_ref.id] = file;
 

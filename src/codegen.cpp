@@ -1,31 +1,31 @@
 #include "compiler.hpp"
 #include <Tracy.hpp>
 
-#include <ace_ir.hpp>
-#include <ace_obj.hpp>
+#include <sir_ir.hpp>
+#include <sir_obj.hpp>
 
 struct CodegenContext;
 
 struct CodegenValue {
     bool is_lvalue;
-    ace::InstRef inst_ref;
+    SIRInstRef inst_ref;
 };
 
 struct CodegenContext {
     FileRef file_ref;
-    ace::Module *module;
-    ace::Builder builder;
-    ace::Array<ace::Type *> type_values;
-    ace::Array<CodegenValue> expr_values;
-    ace::Array<CodegenValue> decl_values;
+    SIRModule *module;
+    SIRBuilder builder;
+    SIRArray<SIRType *> type_values;
+    SIRArray<CodegenValue> expr_values;
+    SIRArray<CodegenValue> decl_values;
 
-    ace::Array<ace::InstRef> function_stack;
+    SIRArray<SIRInstRef> function_stack;
 };
 
 static void
 codegen_decl(Compiler *compiler, CodegenContext *ctx, DeclRef decl_ref);
 
-static ace::InstRef load_lvalue(CodegenContext *ctx, const CodegenValue &value)
+static SIRInstRef load_lvalue(CodegenContext *ctx, const CodegenValue &value)
 {
     if (value.is_lvalue) {
         return ctx->builder.insert_load(value.inst_ref);
@@ -33,20 +33,20 @@ static ace::InstRef load_lvalue(CodegenContext *ctx, const CodegenValue &value)
     return value.inst_ref;
 }
 
-static ace::InstRef value_into_bool(CodegenContext *ctx, ace::InstRef inst_ref)
+static SIRInstRef value_into_bool(CodegenContext *ctx, SIRInstRef inst_ref)
 {
-    ace::Type *type = inst_ref.get(ctx->module).type;
-    if (type->kind == ace::TypeKind_Int) {
+    SIRType *type = inst_ref.get(ctx->module).type;
+    if (type->kind == SIRTypeKind_Int) {
         return ctx->builder.insert_binop(
-            ace::BinaryOperation_INE,
+            SIRBinaryOperation_INE,
             inst_ref,
             ctx->builder.insert_imm_int(type, 0));
     }
     return inst_ref;
 }
 
-static ace::Type *
-get_ir_type(Compiler *compiler, ace::Module *module, const Type &type)
+static SIRType *
+get_ir_type(Compiler *compiler, SIRModule *module, const Type &type)
 {
     (void)compiler;
 
@@ -80,7 +80,7 @@ get_ir_type(Compiler *compiler, ace::Module *module, const Type &type)
         break;
     }
     case TypeKind_Pointer: {
-        ace::Type *subtype =
+        SIRType *subtype =
             get_ir_type(compiler, module, type.pointer.sub_type.get(compiler));
         return module->create_pointer_type(subtype);
     }
@@ -97,13 +97,13 @@ get_ir_type(Compiler *compiler, ace::Module *module, const Type &type)
             false);
     }
     case TypeKind_Array: {
-        ace::Type *subtype =
+        SIRType *subtype =
             get_ir_type(compiler, module, type.array.sub_type.get(compiler));
         return module->create_array_type(subtype, type.array.size);
     }
     case TypeKind_Tuple: {
-        ace::Slice<ace::Type *> field_types =
-            compiler->arena->alloc<ace::Type *>(type.tuple.field_types.len);
+        SIRSlice<SIRType *> field_types =
+            compiler->arena->alloc<SIRType *>(type.tuple.field_types.len);
 
         for (size_t i = 0; i < type.tuple.field_types.len; ++i) {
             field_types[i] = get_ir_type(
@@ -113,8 +113,8 @@ get_ir_type(Compiler *compiler, ace::Module *module, const Type &type)
         return module->create_struct_type(field_types, false);
     }
     case TypeKind_Struct: {
-        ace::Slice<ace::Type *> field_types =
-            compiler->arena->alloc<ace::Type *>(type.struct_.field_types.len);
+        SIRSlice<SIRType *> field_types =
+            compiler->arena->alloc<SIRType *>(type.struct_.field_types.len);
 
         for (size_t i = 0; i < type.struct_.field_types.len; ++i) {
             field_types[i] = get_ir_type(
@@ -137,7 +137,7 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
     CodegenValue value = {};
 
     switch (expr.kind) {
-    case ExprKind_Unknown: ACE_ASSERT(0); break;
+    case ExprKind_Unknown: SIR_ASSERT(0); break;
 
     case ExprKind_VoidLiteral:
     case ExprKind_VoidType:
@@ -174,14 +174,14 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
                     (double)expr.int_literal.i64)};
             break;
         }
-        default: ACE_ASSERT(0);
+        default: SIR_ASSERT(0);
         }
 
         break;
     }
 
     case ExprKind_FloatLiteral: {
-        ACE_ASSERT(expr.expr_type_ref.get(compiler).kind == TypeKind_Float);
+        SIR_ASSERT(expr.expr_type_ref.get(compiler).kind == TypeKind_Float);
 
         value = {
             false,
@@ -193,7 +193,7 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
     }
 
     case ExprKind_NullLiteral: {
-        ACE_ASSERT(!"unimplemented");
+        SIR_ASSERT(!"unimplemented");
         break;
     }
 
@@ -202,7 +202,7 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
 
         switch (type.kind) {
         case TypeKind_Pointer: {
-            ACE_ASSERT(type.pointer.sub_type.id == compiler->u8_type.id);
+            SIR_ASSERT(type.pointer.sub_type.id == compiler->u8_type.id);
 
             value = {
                 false, ctx->module->add_global_string(expr.str_literal.str)};
@@ -211,18 +211,18 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
         }
 
         case TypeKind_Slice: {
-            ACE_ASSERT(!"unimplemented");
+            SIR_ASSERT(!"unimplemented");
             break;
         }
 
-        default: ACE_ASSERT(0); break;
+        default: SIR_ASSERT(0); break;
         }
 
         break;
     }
 
     case ExprKind_Identifier: {
-        ACE_ASSERT(expr.ident.decl_ref.id > 0);
+        SIR_ASSERT(expr.ident.decl_ref.id > 0);
 
         Decl decl = expr.ident.decl_ref.get(compiler);
         switch (decl.kind) {
@@ -242,14 +242,14 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
             break;
         }
 
-        default: ACE_ASSERT(0); break;
+        default: SIR_ASSERT(0); break;
         }
 
         break;
     }
 
     case ExprKind_Function: {
-        ACE_ASSERT(!"unimplemented");
+        SIR_ASSERT(!"unimplemented");
         break;
     }
 
@@ -261,8 +261,8 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
         case TypeKind_Function: {
             // Actual function call
 
-            ace::Slice<ace::InstRef> params =
-                compiler->arena->alloc<ace::InstRef>(
+            SIRSlice<SIRInstRef> params =
+                compiler->arena->alloc<SIRInstRef>(
                     expr.func_call.param_refs.len);
 
             for (size_t i = 0; i < expr.func_call.param_refs.len; ++i) {
@@ -275,9 +275,9 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
             CodegenValue func_value =
                 codegen_expr(compiler, ctx, expr.func_call.func_expr_ref);
 
-            ace::Inst func_inst = func_value.inst_ref.get(ctx->module);
+            SIRInst func_inst = func_value.inst_ref.get(ctx->module);
             switch (func_inst.kind) {
-            case ace::InstKind_Function: {
+            case SIRInstKind_Function: {
                 value = {
                     false,
                     ctx->builder.insert_func_call(
@@ -285,7 +285,7 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
                 break;
             }
 
-            default: ACE_ASSERT(0); break;
+            default: SIR_ASSERT(0); break;
             }
 
             break;
@@ -294,14 +294,14 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
         case TypeKind_Type: {
             // Type cast
 
-            ACE_ASSERT(expr.func_call.param_refs.len == 1);
+            SIR_ASSERT(expr.func_call.param_refs.len == 1);
 
             Expr param_expr = expr.func_call.param_refs[0].get(compiler);
 
             Type dest_type = expr.expr_type_ref.get(compiler);
             Type source_type = param_expr.expr_type_ref.get(compiler);
 
-            ace::InstRef source_value = load_lvalue(
+            SIRInstRef source_value = load_lvalue(
                 ctx, codegen_expr(compiler, ctx, expr.func_call.param_refs[0]));
 
             if (param_expr.expr_type_ref.id == expr.expr_type_ref.id) {
@@ -334,12 +334,12 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
                     value = {false, source_value};
                 }
             } else {
-                ACE_ASSERT(!"type cast unimplemented");
+                SIR_ASSERT(!"type cast unimplemented");
             }
             break;
         }
 
-        default: ACE_ASSERT(0); break;
+        default: SIR_ASSERT(0); break;
         }
 
         break;
@@ -347,7 +347,7 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
 
     case ExprKind_BuiltinCall: {
         switch (expr.builtin_call.builtin) {
-        case BuiltinFunction_Unknown: ACE_ASSERT(0); break;
+        case BuiltinFunction_Unknown: SIR_ASSERT(0); break;
         case BuiltinFunction_Sizeof: {
             Expr param0 = expr.builtin_call.param_refs[0].get(compiler);
             uint64_t size = param0.as_type_ref.get(compiler).size_of(compiler);
@@ -414,8 +414,8 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
         Type accessed_type =
             expr.access.left_ref.get(compiler).expr_type_ref.get(compiler);
         Expr ident_expr = expr.access.accessed_ident_ref.get(compiler);
-        ACE_ASSERT(ident_expr.kind == ExprKind_Identifier);
-        ace::String accessed_field = ident_expr.ident.str;
+        SIR_ASSERT(ident_expr.kind == ExprKind_Identifier);
+        SIRString accessed_field = ident_expr.ident.str;
 
         switch (accessed_type.kind) {
         case TypeKind_Struct: {
@@ -425,7 +425,7 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
             uint32_t field_index = 0;
             if (!accessed_type.struct_.field_map.get(
                     accessed_field, &field_index)) {
-                ACE_ASSERT(0);
+                SIR_ASSERT(0);
             }
 
             if (accessed_ref.is_lvalue) {
@@ -446,7 +446,7 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
             break;
         }
         default: {
-            ACE_ASSERT(0);
+            SIR_ASSERT(0);
             break;
         }
         }
@@ -457,16 +457,16 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
     case ExprKind_Unary: {
 
         switch (expr.unary.op) {
-        case UnaryOp_Unknown: ACE_ASSERT(0); break;
+        case UnaryOp_Unknown: SIR_ASSERT(0); break;
         case UnaryOp_AddressOf: {
             CodegenValue operand_value =
                 codegen_expr(compiler, ctx, expr.unary.left_ref);
 
             if (!operand_value.is_lvalue) {
-                ace::InstRef func_ref = *ctx->function_stack.last();
+                SIRInstRef func_ref = *ctx->function_stack.last();
 
                 Expr left_expr = expr.unary.left_ref.get(compiler);
-                ace::Type *ir_type =
+                SIRType *ir_type =
                     ctx->type_values[left_expr.expr_type_ref.id];
 
                 value = {false, ctx->module->add_stack_slot(func_ref, ir_type)};
@@ -479,18 +479,18 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
         case UnaryOp_Dereference: {
             CodegenValue operand_value =
                 codegen_expr(compiler, ctx, expr.unary.left_ref);
-            ACE_ASSERT(operand_value.is_lvalue);
+            SIR_ASSERT(operand_value.is_lvalue);
 
             value = {true, ctx->builder.insert_load(operand_value.inst_ref)};
 
             break;
         }
         case UnaryOp_Negate: {
-            ACE_ASSERT(!"unimplemented");
+            SIR_ASSERT(!"unimplemented");
             break;
         }
         case UnaryOp_Not: {
-            ACE_ASSERT(!"unimplemented");
+            SIR_ASSERT(!"unimplemented");
             break;
         }
         }
@@ -504,41 +504,41 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
         CodegenValue right_val =
             codegen_expr(compiler, ctx, expr.binary.right_ref);
 
-        ace::InstRef left_inst = load_lvalue(ctx, left_val);
-        ace::InstRef right_inst = load_lvalue(ctx, right_val);
+        SIRInstRef left_inst = load_lvalue(ctx, left_val);
+        SIRInstRef right_inst = load_lvalue(ctx, right_val);
 
-        ace::BinaryOperation op = {};
+        SIRBinaryOperation op = {};
 
         Expr left = expr.binary.left_ref.get(compiler);
         Type operand_type = left.expr_type_ref.get(compiler);
 
         switch (expr.binary.op) {
         case BinaryOp_Unknown:
-        case BinaryOp_MAX: ACE_ASSERT(0); break;
+        case BinaryOp_MAX: SIR_ASSERT(0); break;
 
         case BinaryOp_Add: {
             switch (operand_type.kind) {
-            case TypeKind_Int: op = ace::BinaryOperation_IAdd; break;
-            case TypeKind_Float: op = ace::BinaryOperation_FAdd; break;
-            default: ACE_ASSERT(0);
+            case TypeKind_Int: op = SIRBinaryOperation_IAdd; break;
+            case TypeKind_Float: op = SIRBinaryOperation_FAdd; break;
+            default: SIR_ASSERT(0);
             }
             break;
         }
 
         case BinaryOp_Sub: {
             switch (operand_type.kind) {
-            case TypeKind_Int: op = ace::BinaryOperation_ISub; break;
-            case TypeKind_Float: op = ace::BinaryOperation_FSub; break;
-            default: ACE_ASSERT(0);
+            case TypeKind_Int: op = SIRBinaryOperation_ISub; break;
+            case TypeKind_Float: op = SIRBinaryOperation_FSub; break;
+            default: SIR_ASSERT(0);
             }
             break;
         }
 
         case BinaryOp_Mul: {
             switch (operand_type.kind) {
-            case TypeKind_Int: op = ace::BinaryOperation_IMul; break;
-            case TypeKind_Float: op = ace::BinaryOperation_FMul; break;
-            default: ACE_ASSERT(0);
+            case TypeKind_Int: op = SIRBinaryOperation_IMul; break;
+            case TypeKind_Float: op = SIRBinaryOperation_FMul; break;
+            default: SIR_ASSERT(0);
             }
             break;
         }
@@ -546,40 +546,40 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
         case BinaryOp_Div: {
             switch (operand_type.kind) {
             case TypeKind_Int:
-                op = (operand_type.int_.is_signed) ? ace::BinaryOperation_SDiv
-                                                   : ace::BinaryOperation_UDiv;
+                op = (operand_type.int_.is_signed) ? SIRBinaryOperation_SDiv
+                                                   : SIRBinaryOperation_UDiv;
                 break;
-            case TypeKind_Float: op = ace::BinaryOperation_FDiv; break;
-            default: ACE_ASSERT(0);
+            case TypeKind_Float: op = SIRBinaryOperation_FDiv; break;
+            default: SIR_ASSERT(0);
             }
             break;
         }
         case BinaryOp_Mod: {
             switch (operand_type.kind) {
             case TypeKind_Int:
-                op = (operand_type.int_.is_signed) ? ace::BinaryOperation_SRem
-                                                   : ace::BinaryOperation_URem;
+                op = (operand_type.int_.is_signed) ? SIRBinaryOperation_SRem
+                                                   : SIRBinaryOperation_URem;
                 break;
-            case TypeKind_Float: op = ace::BinaryOperation_FRem; break;
-            default: ACE_ASSERT(0);
+            case TypeKind_Float: op = SIRBinaryOperation_FRem; break;
+            default: SIR_ASSERT(0);
             }
             break;
         }
 
         case BinaryOp_Equal: {
             switch (operand_type.kind) {
-            case TypeKind_Int: op = ace::BinaryOperation_IEQ; break;
-            case TypeKind_Float: op = ace::BinaryOperation_FEQ; break;
-            default: ACE_ASSERT(0);
+            case TypeKind_Int: op = SIRBinaryOperation_IEQ; break;
+            case TypeKind_Float: op = SIRBinaryOperation_FEQ; break;
+            default: SIR_ASSERT(0);
             }
             break;
         }
 
         case BinaryOp_NotEqual: {
             switch (operand_type.kind) {
-            case TypeKind_Int: op = ace::BinaryOperation_INE; break;
-            case TypeKind_Float: op = ace::BinaryOperation_FNE; break;
-            default: ACE_ASSERT(0);
+            case TypeKind_Int: op = SIRBinaryOperation_INE; break;
+            case TypeKind_Float: op = SIRBinaryOperation_FNE; break;
+            default: SIR_ASSERT(0);
             }
             break;
         }
@@ -587,11 +587,11 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
         case BinaryOp_Greater: {
             switch (operand_type.kind) {
             case TypeKind_Int:
-                op = (operand_type.int_.is_signed) ? ace::BinaryOperation_SGT
-                                                   : ace::BinaryOperation_UGT;
+                op = (operand_type.int_.is_signed) ? SIRBinaryOperation_SGT
+                                                   : SIRBinaryOperation_UGT;
                 break;
-            case TypeKind_Float: op = ace::BinaryOperation_FGT; break;
-            default: ACE_ASSERT(0);
+            case TypeKind_Float: op = SIRBinaryOperation_FGT; break;
+            default: SIR_ASSERT(0);
             }
             break;
         }
@@ -599,11 +599,11 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
         case BinaryOp_GreaterEqual: {
             switch (operand_type.kind) {
             case TypeKind_Int:
-                op = (operand_type.int_.is_signed) ? ace::BinaryOperation_SGE
-                                                   : ace::BinaryOperation_UGE;
+                op = (operand_type.int_.is_signed) ? SIRBinaryOperation_SGE
+                                                   : SIRBinaryOperation_UGE;
                 break;
-            case TypeKind_Float: op = ace::BinaryOperation_FGE; break;
-            default: ACE_ASSERT(0);
+            case TypeKind_Float: op = SIRBinaryOperation_FGE; break;
+            default: SIR_ASSERT(0);
             }
             break;
         }
@@ -611,11 +611,11 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
         case BinaryOp_Less: {
             switch (operand_type.kind) {
             case TypeKind_Int:
-                op = (operand_type.int_.is_signed) ? ace::BinaryOperation_SLT
-                                                   : ace::BinaryOperation_ULT;
+                op = (operand_type.int_.is_signed) ? SIRBinaryOperation_SLT
+                                                   : SIRBinaryOperation_ULT;
                 break;
-            case TypeKind_Float: op = ace::BinaryOperation_FLT; break;
-            default: ACE_ASSERT(0);
+            case TypeKind_Float: op = SIRBinaryOperation_FLT; break;
+            default: SIR_ASSERT(0);
             }
             break;
         }
@@ -623,43 +623,43 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
         case BinaryOp_LessEqual: {
             switch (operand_type.kind) {
             case TypeKind_Int:
-                op = (operand_type.int_.is_signed) ? ace::BinaryOperation_SLE
-                                                   : ace::BinaryOperation_ULE;
+                op = (operand_type.int_.is_signed) ? SIRBinaryOperation_SLE
+                                                   : SIRBinaryOperation_ULE;
                 break;
-            case TypeKind_Float: op = ace::BinaryOperation_FLE; break;
-            default: ACE_ASSERT(0);
+            case TypeKind_Float: op = SIRBinaryOperation_FLE; break;
+            default: SIR_ASSERT(0);
             }
             break;
         }
 
         case BinaryOp_LShift: {
-            ACE_ASSERT(operand_type.kind == TypeKind_Int);
-            op = ace::BinaryOperation_Shl;
+            SIR_ASSERT(operand_type.kind == TypeKind_Int);
+            op = SIRBinaryOperation_Shl;
             break;
         }
 
         case BinaryOp_RShift: {
-            ACE_ASSERT(operand_type.kind == TypeKind_Int);
-            op = (operand_type.int_.is_signed) ? ace::BinaryOperation_AShr
-                                               : ace::BinaryOperation_LShr;
+            SIR_ASSERT(operand_type.kind == TypeKind_Int);
+            op = (operand_type.int_.is_signed) ? SIRBinaryOperation_AShr
+                                               : SIRBinaryOperation_LShr;
             break;
         }
 
         case BinaryOp_BitAnd: {
-            ACE_ASSERT(operand_type.kind == TypeKind_Int);
-            op = ace::BinaryOperation_And;
+            SIR_ASSERT(operand_type.kind == TypeKind_Int);
+            op = SIRBinaryOperation_And;
             break;
         }
 
         case BinaryOp_BitOr: {
-            ACE_ASSERT(operand_type.kind == TypeKind_Int);
-            op = ace::BinaryOperation_Or;
+            SIR_ASSERT(operand_type.kind == TypeKind_Int);
+            op = SIRBinaryOperation_Or;
             break;
         }
 
         case BinaryOp_BitXor: {
-            ACE_ASSERT(operand_type.kind == TypeKind_Int);
-            op = ace::BinaryOperation_Xor;
+            SIR_ASSERT(operand_type.kind == TypeKind_Int);
+            op = SIRBinaryOperation_Xor;
             break;
         }
         }
@@ -681,7 +681,7 @@ codegen_stmt(Compiler *compiler, CodegenContext *ctx, StmtRef stmt_ref)
 
     Stmt stmt = stmt_ref.get(compiler);
     switch (stmt.kind) {
-    case StmtKind_Unknown: ACE_ASSERT(0); break;
+    case StmtKind_Unknown: SIR_ASSERT(0); break;
 
     case StmtKind_Expr: {
         codegen_expr(compiler, ctx, stmt.expr.expr_ref);
@@ -699,7 +699,7 @@ codegen_stmt(Compiler *compiler, CodegenContext *ctx, StmtRef stmt_ref)
         CodegenValue value =
             codegen_expr(compiler, ctx, stmt.assign.value_expr_ref);
 
-        ACE_ASSERT(receiver_value.is_lvalue);
+        SIR_ASSERT(receiver_value.is_lvalue);
 
         ctx->builder.insert_store(
             receiver_value.inst_ref, load_lvalue(ctx, value));
@@ -715,7 +715,7 @@ codegen_stmt(Compiler *compiler, CodegenContext *ctx, StmtRef stmt_ref)
 
     case StmtKind_Return: {
         if (stmt.return_.returned_expr_ref.id > 0) {
-            ace::InstRef returned_value = load_lvalue(
+            SIRInstRef returned_value = load_lvalue(
                 ctx,
                 codegen_expr(compiler, ctx, stmt.return_.returned_expr_ref));
             ctx->builder.insert_return_value(returned_value);
@@ -726,7 +726,7 @@ codegen_stmt(Compiler *compiler, CodegenContext *ctx, StmtRef stmt_ref)
     }
 
     case StmtKind_If: {
-        ace::InstRef cond_value = load_lvalue(
+        SIRInstRef cond_value = load_lvalue(
             ctx, codegen_expr(compiler, ctx, stmt.if_.cond_expr_ref));
         cond_value = value_into_bool(ctx, cond_value);
 
@@ -774,7 +774,7 @@ codegen_stmt(Compiler *compiler, CodegenContext *ctx, StmtRef stmt_ref)
         ctx->builder.insert_jump(cond_block);
         ctx->builder.position_at_end(cond_block);
 
-        ace::InstRef cond_value = load_lvalue(
+        SIRInstRef cond_value = load_lvalue(
             ctx, codegen_expr(compiler, ctx, stmt.while_.cond_expr_ref));
 
         ctx->builder.insert_branch(cond_value, true_block, merge_block);
@@ -795,19 +795,19 @@ codegen_decl(Compiler *compiler, CodegenContext *ctx, DeclRef decl_ref)
 {
     ZoneScoped;
 
-    ace::Module *module = ctx->module;
+    SIRModule *module = ctx->module;
     Decl decl = decl_ref.get(compiler);
     CodegenValue value = {};
 
     switch (decl.kind) {
-    case DeclKind_Unknown: ACE_ASSERT(0); break;
+    case DeclKind_Unknown: SIR_ASSERT(0); break;
 
     case DeclKind_Type: {
         break;
     }
 
     case DeclKind_ConstDecl: {
-        ACE_ASSERT(!"unimplemented");
+        SIR_ASSERT(!"unimplemented");
         break;
     }
 
@@ -815,26 +815,26 @@ codegen_decl(Compiler *compiler, CodegenContext *ctx, DeclRef decl_ref)
         TypeRef func_type_ref = decl.decl_type_ref;
         Type func_type = func_type_ref.get(compiler);
 
-        ace::Slice<ace::Type *> param_types =
-            compiler->arena->alloc<ace::Type *>(func_type.func.param_types.len);
+        SIRSlice<SIRType *> param_types =
+            compiler->arena->alloc<SIRType *>(func_type.func.param_types.len);
         for (size_t i = 0; i < func_type.func.param_types.len; ++i) {
             param_types[i] = ctx->type_values[func_type.func.param_types[i].id];
         }
 
-        ace::Type *return_type =
+        SIRType *return_type =
             ctx->type_values[func_type.func.return_type.id];
 
-        ace::Linkage linkage = ace::Linkage_Internal;
+        SIRLinkage linkage = SIRLinkage_Internal;
         if ((decl.func.flags & FunctionFlags_Exported) ||
             (decl.func.flags & FunctionFlags_Extern)) {
-            linkage = ace::Linkage_External;
+            linkage = SIRLinkage_External;
         }
 
         value = {
             false,
             module->add_function(
                 decl.name,
-                ace::CallingConvention_SystemV,
+                SIRCallingConvention_SystemV,
                 linkage,
                 func_type.func.vararg,
                 param_types,
@@ -847,7 +847,7 @@ codegen_decl(Compiler *compiler, CodegenContext *ctx, DeclRef decl_ref)
         for (size_t i = 0; i < decl.func.param_decl_refs.len; ++i) {
             DeclRef param_decl_ref = decl.func.param_decl_refs[i];
 
-            ace::InstRef param_value = {};
+            SIRInstRef param_value = {};
             param_value = module->get_func_param(value.inst_ref, i);
             ctx->decl_values[param_decl_ref.id] = {false, param_value};
         }
@@ -862,17 +862,17 @@ codegen_decl(Compiler *compiler, CodegenContext *ctx, DeclRef decl_ref)
                 codegen_stmt(compiler, ctx, stmt_ref);
             }
 
-            ace::Inst last_block = ctx->builder.current_block_ref.get(module);
-            if (return_type->kind == ace::TypeKind_Void) {
+            SIRInst last_block = ctx->builder.current_block_ref.get(module);
+            if (return_type->kind == SIRTypeKind_Void) {
                 if (last_block.block.inst_refs.len == 0 ||
                     last_block.block.inst_refs.last()->get(module).kind !=
-                        ace::InstKind_ReturnVoid) {
+                        SIRInstKind_ReturnVoid) {
                     ctx->builder.insert_return_void();
                 }
             } else {
                 if (last_block.block.inst_refs.len == 0 ||
                     last_block.block.inst_refs.last()->get(module).kind !=
-                        ace::InstKind_ReturnValue) {
+                        SIRInstKind_ReturnValue) {
                     compiler->add_error(
                         decl.loc,
                         "no return statement for '%.*s'",
@@ -889,14 +889,14 @@ codegen_decl(Compiler *compiler, CodegenContext *ctx, DeclRef decl_ref)
 
     case DeclKind_FunctionParameter: {
         // No need to implement this
-        ACE_ASSERT(0);
+        SIR_ASSERT(0);
         break;
     }
 
     case DeclKind_LocalVarDecl: {
-        ace::InstRef func_ref = *ctx->function_stack.last();
-        ace::Type *ir_type = ctx->type_values[decl.decl_type_ref.id];
-        ACE_ASSERT(ir_type);
+        SIRInstRef func_ref = *ctx->function_stack.last();
+        SIRType *ir_type = ctx->type_values[decl.decl_type_ref.id];
+        SIR_ASSERT(ir_type);
 
         value = {true, module->add_stack_slot(func_ref, ir_type)};
 
@@ -914,20 +914,20 @@ codegen_decl(Compiler *compiler, CodegenContext *ctx, DeclRef decl_ref)
     }
 
     case DeclKind_GlobalVarDecl: {
-        ace::Type *ir_type = ctx->type_values[decl.decl_type_ref.id];
+        SIRType *ir_type = ctx->type_values[decl.decl_type_ref.id];
 
-        ace::Slice<uint8_t> global_data =
+        SIRSlice<uint8_t> global_data =
             compiler->arena->alloc<uint8_t>(ir_type->size_of(ctx->module));
 
         value = {
             true,
             module->add_global(
-                ir_type, ace::GlobalFlags_Initialized, global_data)};
+                ir_type, SIRGlobalFlags_Initialized, global_data)};
 
         ctx->decl_values[decl_ref.id] = value;
 
         if (decl.local_var_decl.value_expr.id) {
-            ACE_ASSERT(!"unimplemented");
+            SIR_ASSERT(!"unimplemented");
         }
 
         break;
@@ -944,12 +944,12 @@ void codegen_file(Compiler *compiler, FileRef file_ref)
     File file = compiler->files[file_ref.id];
 
     ctx.file_ref = file_ref;
-    ctx.module = ace::Module::create(
-        ace::TargetArch_X86_64, ace::Endianness_LittleEndian);
-    ctx.builder = ace::Builder::create(ctx.module);
+    ctx.module = SIRModule::create(
+        SIRTargetArch_X86_64, SIREndianness_LittleEndian);
+    ctx.builder = SIRBuilder::create(ctx.module);
 
     ctx.type_values =
-        ace::Array<ace::Type *>::create(ace::MallocAllocator::get_instance());
+        SIRArray<SIRType *>::create(SIRMallocAllocator::get_instance());
     ctx.type_values.resize(compiler->types.len);
     for (size_t i = 0; i < compiler->types.len; ++i) {
         ctx.type_values[i] =
@@ -957,20 +957,20 @@ void codegen_file(Compiler *compiler, FileRef file_ref)
     }
 
     ctx.decl_values =
-        ace::Array<CodegenValue>::create(ace::MallocAllocator::get_instance());
+        SIRArray<CodegenValue>::create(SIRMallocAllocator::get_instance());
     ctx.decl_values.resize(compiler->decls.len);
     for (size_t i = 0; i < compiler->decls.len; ++i) {
         ctx.decl_values[i] = {};
     }
 
     ctx.expr_values =
-        ace::Array<CodegenValue>::create(ace::MallocAllocator::get_instance());
+        SIRArray<CodegenValue>::create(SIRMallocAllocator::get_instance());
     ctx.expr_values.resize(compiler->exprs.len);
     for (size_t i = 0; i < compiler->exprs.len; ++i) {
         ctx.expr_values[i] = {};
     }
 
-    ctx.function_stack = ace::Array<ace::InstRef>::create(ctx.module->arena);
+    ctx.function_stack = SIRArray<SIRInstRef>::create(ctx.module->arena);
 
     for (DeclRef decl_ref : file.top_level_decls) {
         codegen_decl(compiler, &ctx, decl_ref);
@@ -982,16 +982,16 @@ void codegen_file(Compiler *compiler, FileRef file_ref)
 
 #if !NDEBUG
     {
-        auto allocator = ace::MallocAllocator::get_instance();
-        ace::String str = ctx.module->print_alloc(allocator);
+        auto allocator = SIRMallocAllocator::get_instance();
+        SIRString str = ctx.module->print_alloc(allocator);
         printf("%.*s", (int)str.len, str.ptr);
         allocator->free(str);
     }
 #endif
 
-    ace::ObjectBuilder *obj_builder = ace::create_elf64_builder(ctx.module);
-    ace::AsmBuilder *asm_builder =
-        ace::create_x86_64_builder(ctx.module, obj_builder);
+    SIRObjectBuilder *obj_builder = SIRCreateELF64Bbuilder(ctx.module);
+    SIRAsmBuilder *asm_builder =
+        SIRCreateX86_64Builder(ctx.module, obj_builder);
 
     asm_builder->generate();
 

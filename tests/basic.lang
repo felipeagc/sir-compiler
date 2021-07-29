@@ -30,6 +30,18 @@ def test_stack_params(
 	);
 }
 
+type StructParam struct {
+	a i32,
+	b i32,
+	c i32,
+	d i32,
+	e i32,
+};
+
+def test_large_params(s: StructParam) {
+	printf("s.a = %d, s.b = %d, s.c = %d\n", s.a, s.b, s.c);
+}
+
 def export main() {
 	printf("Hello, world!\n");
 	printf("%d\n", i32(123));
@@ -171,7 +183,6 @@ def export main() {
 			c i32,
 		};
 
-
 		a: S;
 		a.a = 1;
 		a.b = 2;
@@ -199,5 +210,14 @@ def export main() {
 		printf("g.a = 4, g.b = 5, g.c = 6\n", g.a, g.b, g.c);
 
 		printf("b.a = 7, b.b = 8, b.c = 9\n", b.a, b.b, b.c);
+	}
+
+	{
+		s: StructParam;
+		s.a = 111;
+		s.b = 222;
+		s.c = 333;
+
+		test_large_params(s);
 	}
 }

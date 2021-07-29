@@ -646,7 +646,9 @@ X86_64AsmBuilder::get_func_call_stack_parameters_size(InstRef func_call_ref)
                 break;
             }
             default: {
-                ACE_ASSERT(!"unhandled parameter type");
+                // TODO: proper ABI handling of other parameter types
+                size_t param_size = param_type->size_of(this->module);
+                stack_parameters_size += param_size;
                 break;
             }
             }
@@ -678,7 +680,22 @@ void X86_64AsmBuilder::move_inst_rvalue(
         break;
     }
     default: {
-        this->encode_mnem(Mnem_MOV, this->meta_insts[inst_ref.id], dest_value);
+        size_t value_size = inst.type->size_of(this->module);
+        switch (value_size) {
+        case 1:
+        case 2:
+        case 4:
+        case 8: {
+            this->encode_mnem(
+                Mnem_MOV, this->meta_insts[inst_ref.id], dest_value);
+            break;
+        }
+        default: {
+            this->encode_memcpy(
+                value_size, this->meta_insts[inst_ref.id], dest_value);
+            break;
+        }
+        }
         break;
     }
     }
@@ -1526,12 +1543,87 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
     }
 
     case InstKind_ExtractArrayElem: {
-        ACE_ASSERT(!"unimplemented extract_array_elem");
+        size_t value_size = inst.type->size_of(this->module);
+
+        MetaValue accessed_value =
+            this->meta_insts[inst.extract_array_elem.accessed_ref.id];
+        ACE_ASSERT(accessed_value.kind == MetaValueKind_IRegisterMemory);
+        MetaValue ptr_value = create_int_register_value(8, RegisterIndex_RAX);
+        this->encode_mnem(Mnem_LEA, accessed_value, ptr_value);
+
+        size_t index_size = inst.extract_array_elem.index_ref.get(this->module)
+                                .type->size_of(this->module);
+
+        MetaValue index_value =
+            create_int_register_value(index_size, RegisterIndex_RCX);
+        this->encode_mnem(
+            Mnem_MOV,
+            this->meta_insts[inst.extract_array_elem.index_ref.id],
+            index_value);
+
+        MetaValue value_addr = create_int_register_memory_value(
+            value_size, RegisterIndex_RAX, value_size, RegisterIndex_RCX, 0);
+
+        switch (value_size) {
+        case 1:
+        case 2:
+        case 4:
+        case 8: {
+            this->encode_mnem(
+                Mnem_MOV, value_addr, this->meta_insts[inst_ref.id]);
+            break;
+        }
+        default: {
+            this->encode_memcpy(
+                value_size, value_addr, this->meta_insts[inst_ref.id]);
+            break;
+        }
+        }
         break;
     }
 
     case InstKind_ExtractStructElem: {
-        ACE_ASSERT(!"unimplemented extract_struct_elem");
+        size_t value_size = inst.type->size_of(this->module);
+
+        uint32_t field_index = inst.extract_struct_elem.field_index;
+        ace::Type *struct_type =
+            inst.extract_struct_elem.accessed_ref.get(this->module).type;
+
+        uint32_t field_offset = 0;
+        for (uint32_t i = 0; i <= field_index; ++i) {
+            ace::Type *field_type = struct_type->struct_.fields[i];
+            uint32_t field_align = field_type->align_of(module);
+            field_offset =
+                ACE_ROUND_UP(field_align, field_offset); // Add padding
+
+            if (i != field_index) {
+                field_offset += field_type->size_of(module);
+            }
+        }
+
+        MetaValue ptr_mem_value =
+            this->meta_insts[inst.extract_struct_elem.accessed_ref.id];
+        ACE_ASSERT(ptr_mem_value.kind == MetaValueKind_IRegisterMemory);
+        ptr_mem_value.regmem.offset += field_offset;
+
+        switch (value_size) {
+        case 1:
+        case 2:
+        case 4:
+        case 8: {
+            ptr_mem_value.size_class = SIZE_CLASSES[value_size];
+            this->encode_mnem(
+                Mnem_MOV, ptr_mem_value, this->meta_insts[inst_ref.id]);
+            break;
+        }
+        default: {
+            ptr_mem_value.size_class = SizeClass_None;
+            this->encode_memcpy(
+                value_size, ptr_mem_value, this->meta_insts[inst_ref.id]);
+            break;
+        }
+        }
+
         break;
     }
 
@@ -1668,7 +1760,8 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
                     0, RegisterIndex_RCX, 0, RegisterIndex_None, 0);
             }
 
-            this->encode_memcpy(value_size, source_ptr_mem_value, dest_ptr_mem_value);
+            this->encode_memcpy(
+                value_size, source_ptr_mem_value, dest_ptr_mem_value);
 
             break;
         }
@@ -1743,7 +1836,8 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
                             0,
                             RegisterIndex_None,
                             param_stack_offset);
-                        param_stack_offset += 8;
+                        param_stack_offset +=
+                            8; // pretty sure this should always be 8
                     }
                     break;
                 }
@@ -1762,21 +1856,30 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
                             0,
                             RegisterIndex_None,
                             param_stack_offset);
-                        param_stack_offset += 8;
+                        param_stack_offset +=
+                            8; // pretty sure this should always be 8
                     }
                     break;
                 }
                 default: {
-                    ACE_ASSERT(!"unhandled parameter type");
+                    size_t param_size = param_type->size_of(this->module);
+
+                    param_stack_offset =
+                        ACE_ROUND_UP(param_align, param_stack_offset);
+                    dest_param_value = create_int_register_memory_value(
+                        param_size,
+                        RegisterIndex_RSP,
+                        0,
+                        RegisterIndex_None,
+                        param_stack_offset);
+                    param_stack_offset +=
+                        param_size; // TODO: not sure if this should have
+                                    // alignment added to it
                     break;
                 }
                 }
 
                 this->move_inst_rvalue(param_inst_ref, dest_param_value);
-                /* this->encode_mnem(Mnem_MOV,  */
-                /*     param_inst.type->size_of(this->module), */
-                /*     this->meta_insts[param_inst_ref.id], */
-                /*     dest_param_value); */
             }
 
             if (called_func->variadic) {
@@ -2197,7 +2300,18 @@ void X86_64AsmBuilder::generate_function(InstRef func_ref)
                 break;
             }
             default: {
-                ACE_ASSERT(!"unhandled parameter type");
+                // TODO: proper ABI handling of other parameter types
+
+                size_t param_size = param_type->size_of(this->module);
+                MetaValue param_value = create_int_register_memory_value(
+                    param_size,
+                    RegisterIndex_RBP,
+                    0,
+                    RegisterIndex_None,
+                    stack_param_offset);
+                stack_param_offset += param_size;
+
+                this->encode_memcpy(param_size, param_value, param_meta_inst);
                 break;
             }
             }

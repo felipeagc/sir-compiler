@@ -44,3 +44,8 @@ register params: 1 2 3 4 5 6
 stack params: 7 8
 register params: 1.0 2.0 3.0 4.0 5.0 6.0 7.0 8.0
 stack params: 9.0 10.0
+a.a = 1, a.b = 2, a.c = 3
+a.a = 4, a.b = 5, a.c = 6
+g.a = 7, g.b = 8, g.c = 9
+g.a = 4, g.b = 5, g.c = 6
+b.a = 7, b.b = 8, b.c = 9

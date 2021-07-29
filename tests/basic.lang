@@ -163,4 +163,41 @@ def export main() {
 			1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
 		);
 	}
+
+	{
+		type S struct {
+			a i32,
+			b i32,
+			c i32,
+		};
+
+
+		a: S;
+		a.a = 1;
+		a.b = 2;
+		a.c = 3;
+
+		b: S;
+		b.a = 4;
+		b.b = 5;
+		b.c = 6;
+
+		printf("a.a = 1, a.b = 2, a.c = 3\n", a.a, a.b, a.c);
+
+		a = b;
+		printf("a.a = 4, a.b = 5, a.c = 6\n", a.a, a.b, a.c);
+
+		global g: S;
+		g.a = 7;
+		g.b = 8;
+		g.c = 9;
+
+		b = g;
+
+		printf("g.a = 7, g.b = 8, g.c = 9\n", g.a, g.b, g.c);
+		g = a;
+		printf("g.a = 4, g.b = 5, g.c = 6\n", g.a, g.b, g.c);
+
+		printf("b.a = 7, b.b = 8, b.c = 9\n", b.a, b.b, b.c);
+	}
 }

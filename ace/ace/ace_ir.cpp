@@ -22,7 +22,7 @@ String ace::linkage_to_string(Linkage linkage)
     ACE_ASSERT(0);
 }
 
-const char *binop_to_string(BinaryOperation op)
+static const char *binop_to_string(BinaryOperation op)
 {
     switch (op) {
     case BinaryOperation_Unknown:
@@ -76,7 +76,6 @@ print_instruction(Module *module, InstRef inst_ref, StringBuilder *sb)
 {
     ZoneScoped;
 
-    (void)module;
     Inst inst = module->insts[inst_ref.id];
 
     switch (inst.kind) {

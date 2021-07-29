@@ -670,7 +670,7 @@ struct StringBuilder {
         chars[chars.len - 1] = '\0';
         return String{
             chars.ptr,
-            chars.len,
+            chars.len - 1,
         };
     }
 

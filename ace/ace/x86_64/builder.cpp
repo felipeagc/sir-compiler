@@ -1525,6 +1525,16 @@ void X86_64AsmBuilder::generate_inst(InstRef func_ref, InstRef inst_ref)
         break;
     }
 
+    case InstKind_ExtractArrayElem: {
+        ACE_ASSERT(!"unimplemented extract_array_elem");
+        break;
+    }
+
+    case InstKind_ExtractStructElem: {
+        ACE_ASSERT(!"unimplemented extract_struct_elem");
+        break;
+    }
+
     case InstKind_Store: {
         size_t value_size =
             inst.store.value_ref.get(this->module).type->size_of(this->module);
@@ -2062,6 +2072,8 @@ void X86_64AsmBuilder::generate_function(InstRef func_ref)
             case InstKind_Binop:
             case InstKind_ArrayElemPtr:
             case InstKind_StructElemPtr:
+            case InstKind_ExtractArrayElem:
+            case InstKind_ExtractStructElem:
             case InstKind_Load:
             case InstKind_FuncCall: {
                 uint32_t inst_size = inst.type->size_of(this->module);

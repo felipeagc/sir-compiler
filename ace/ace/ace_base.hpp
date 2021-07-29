@@ -125,12 +125,14 @@ struct String {
 
     bool operator==(const String &other) const
     {
+        ZoneScoped;
         if (this->len != other.len) return false;
         return (memcmp(this->ptr, other.ptr, this->len) == 0);
     }
 
     bool operator!=(const String &other) const
     {
+        ZoneScoped;
         if (this->len != other.len) return true;
         return (memcmp(this->ptr, other.ptr, this->len) != 0);
     }
@@ -716,6 +718,7 @@ static const int log2_tab64[64] = {
 
 ACE_INLINE static int log2_64(uint64_t value)
 {
+    ZoneScoped;
     value |= value >> 1;
     value |= value >> 2;
     value |= value >> 4;
@@ -777,6 +780,8 @@ template <typename T> struct StringMap {
 
     void grow()
     {
+        ZoneScoped;
+
         StringMap<T> new_map =
             StringMap<T>::create(this->allocator, this->size * 2);
 

@@ -210,6 +210,30 @@ print_instruction(Module *module, InstRef inst_ref, StringBuilder *sb)
         break;
     }
 
+    case InstKind_ExtractArrayElem: {
+        String type_string = inst.type->to_string(module);
+        sb->sprintf(
+            "%%r%u = extract_array_elem %.*s %%r%u %%r%u",
+            inst_ref.id,
+            (int)type_string.len,
+            type_string.ptr,
+            inst.extract_array_elem.accessed_ref.id,
+            inst.extract_array_elem.index_ref.id);
+        break;
+    }
+
+    case InstKind_ExtractStructElem: {
+        String type_string = inst.type->to_string(module);
+        sb->sprintf(
+            "%%r%u = extract_struct_elem %.*s %%r%u %u",
+            inst_ref.id,
+            (int)type_string.len,
+            type_string.ptr,
+            inst.extract_struct_elem.accessed_ref.id,
+            inst.extract_struct_elem.field_index);
+        break;
+    }
+
     case InstKind_FuncCall: {
         sb->sprintf(
             "%%r%u = func_call %%r%u (",
@@ -361,12 +385,11 @@ Module *Module::create(TargetArch target_arch, Endianness endianness)
     auto insts = Array<Inst>::create(MallocAllocator::get_instance());
     auto globals = Array<InstRef>::create(MallocAllocator::get_instance());
     auto functions = Array<InstRef>::create(MallocAllocator::get_instance());
-    auto function_map = StringMap<InstRef>::create(
-        MallocAllocator::get_instance());
-    auto global_string_map = StringMap<InstRef>::create(
-        MallocAllocator::get_instance());
-    auto type_map = StringMap<Type *>::create(
-        MallocAllocator::get_instance());
+    auto function_map =
+        StringMap<InstRef>::create(MallocAllocator::get_instance());
+    auto global_string_map =
+        StringMap<InstRef>::create(MallocAllocator::get_instance());
+    auto type_map = StringMap<Type *>::create(MallocAllocator::get_instance());
 
     insts.push_back({}); // 0th inst
 
@@ -841,6 +864,40 @@ Builder::insert_struct_elem_ptr(InstRef accessed_ref, uint32_t field_index)
         accessed_inst.type->pointer.sub->struct_.fields[field_index]);
     inst.struct_elem_ptr.accessed_ref = accessed_ref;
     inst.struct_elem_ptr.field_index = field_index;
+
+    return builder_insert_inst(this, inst);
+}
+
+InstRef
+Builder::insert_extract_array_elem(InstRef accessed_ref, InstRef index_ref)
+{
+    ZoneScoped;
+
+    Inst accessed_inst = accessed_ref.get(this->module);
+    ACE_ASSERT(accessed_inst.type->kind == TypeKind_Array);
+
+    Inst inst = {};
+    inst.kind = InstKind_ExtractArrayElem;
+    inst.type = accessed_inst.type->array.sub;
+    inst.extract_array_elem.accessed_ref = accessed_ref;
+    inst.extract_array_elem.index_ref = index_ref;
+
+    return builder_insert_inst(this, inst);
+}
+
+InstRef
+Builder::insert_extract_struct_elem(InstRef accessed_ref, uint32_t field_index)
+{
+    ZoneScoped;
+
+    Inst accessed_inst = accessed_ref.get(this->module);
+    ACE_ASSERT(accessed_inst.type->kind == TypeKind_Struct);
+
+    Inst inst = {};
+    inst.kind = InstKind_ExtractStructElem;
+    inst.type = accessed_inst.type->struct_.fields[field_index];
+    inst.extract_struct_elem.accessed_ref = accessed_ref;
+    inst.extract_struct_elem.field_index = field_index;
 
     return builder_insert_inst(this, inst);
 }

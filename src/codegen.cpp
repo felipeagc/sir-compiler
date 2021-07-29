@@ -395,12 +395,17 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
         CodegenValue index_ref =
             codegen_expr(compiler, ctx, expr.subscript.right_ref);
 
-        ACE_ASSERT(indexed_ref.is_lvalue);
-
-        value = {
-            true,
-            ctx->builder.insert_array_elem_ptr(
-                indexed_ref.inst_ref, load_lvalue(ctx, index_ref))};
+        if (indexed_ref.is_lvalue) {
+            value = {
+                true,
+                ctx->builder.insert_array_elem_ptr(
+                    indexed_ref.inst_ref, load_lvalue(ctx, index_ref))};
+        } else {
+            value = {
+                false,
+                ctx->builder.insert_extract_array_elem(
+                    indexed_ref.inst_ref, load_lvalue(ctx, index_ref))};
+        }
 
         break;
     }
@@ -416,7 +421,6 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
         case TypeKind_Struct: {
             CodegenValue accessed_ref =
                 codegen_expr(compiler, ctx, expr.access.left_ref);
-            ACE_ASSERT(accessed_ref.is_lvalue);
 
             uint32_t field_index = 0;
             if (!accessed_type.struct_.field_map.get(
@@ -424,10 +428,17 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
                 ACE_ASSERT(0);
             }
 
-            value = {
-                true,
-                ctx->builder.insert_struct_elem_ptr(
-                    accessed_ref.inst_ref, field_index)};
+            if (accessed_ref.is_lvalue) {
+                value = {
+                    true,
+                    ctx->builder.insert_struct_elem_ptr(
+                        accessed_ref.inst_ref, field_index)};
+            } else {
+                value = {
+                    false,
+                    ctx->builder.insert_extract_struct_elem(
+                        accessed_ref.inst_ref, field_index)};
+            }
 
             TypeRef field_type = accessed_type.struct_.field_types[field_index];
             expr.expr_type_ref = field_type;

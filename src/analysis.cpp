@@ -586,6 +586,12 @@ static void analyze_expr(
                 break;
             }
 
+            if (!expr.unary.left_ref.is_lvalue(compiler)) {
+                compiler->add_error(
+                    expr.loc, "cannot take address of non-lvalue");
+                break;
+            }
+
             if (subtype_ref.id) {
                 expr.expr_type_ref = compiler->create_pointer_type(subtype_ref);
             }

@@ -1029,12 +1029,12 @@ void codegen_file(Compiler *compiler, FileRef file_ref)
     SIRAsmBuilder *asm_builder =
         SIRCreateX86_64Builder(ctx.module, obj_builder);
 
-    asm_builder->generate();
+    asm_builder->generate(asm_builder);
 
-    obj_builder->output_to_file("./main.o");
+    obj_builder->output_to_file(obj_builder, "./main.o");
 
-    asm_builder->destroy();
-    obj_builder->destroy();
+    asm_builder->destroy(asm_builder);
+    obj_builder->destroy(obj_builder);
 
     ctx.type_values.destroy();
     ctx.decl_values.destroy();

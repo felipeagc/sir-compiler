@@ -132,7 +132,8 @@ struct Symbol {
     size_t final_index = 0;
 };
 
-struct Elf64Builder : SIRObjectBuilder {
+struct Elf64Builder {
+    SIRObjectBuilder vt;
     SIRModule *module;
     Elf64Header header;
     SIRArray<Section> sections;
@@ -153,34 +154,10 @@ struct Elf64Builder : SIRObjectBuilder {
     SIRSymbolRef rodata_symbol_ref = {0};
 
     uint64_t output_symbol_count = 0;
-
-    virtual void add_to_section(SIRSectionType, SIRSlice<uint8_t> data) override;
-    virtual void set_section_data(
-        SIRSectionType type, size_t offset, SIRSlice<uint8_t> data) override;
-    virtual size_t get_section_size(SIRSectionType type) override;
-    virtual void add_data_relocation(
-        SIRSectionType source_section,
-        int64_t source_data_offset,
-        uint64_t destination_offset,
-        size_t dest_addr_size) override;
-    virtual void add_procedure_relocation(
-        SIRSymbolRef function_symbol,
-        uint64_t destination_offset,
-        size_t dest_addr_size) override;
-    virtual SIRSymbolRef add_symbol(
-        SIRString name,
-        SIRSectionType section_type,
-        SIRSymbolType type,
-        SIRLinkage linkage) override;
-    virtual void set_symbol_region(
-        SIRSymbolRef symbol_ref, size_t offset, size_t size) override;
-
-    virtual bool output_to_file(SIRString path) override;
-    virtual void destroy() override;
 };
 
-static uint32_t
-elf_add_string(Elf64Builder *builder, uint16_t string_section_index, SIRString str)
+static uint32_t elf_add_string(
+    Elf64Builder *builder, uint16_t string_section_index, SIRString str)
 {
     ZoneScoped;
 
@@ -269,15 +246,301 @@ static void elf_output_symbol(Elf64Builder *builder, size_t symbol_index)
     builder->output_symbol_count++;
 }
 
+static bool output_to_file(SIRObjectBuilder *obj_builder, SIRString path)
+{
+    ZoneScoped;
+    Elf64Builder *builder = (Elf64Builder *)obj_builder;
+
+    for (size_t i = 0; i < builder->symbols.len; ++i) {
+        Symbol *symbol = &builder->symbols[i];
+        if (symbol->linkage == SIRLinkage_Internal) {
+            elf_output_symbol(builder, i);
+        }
+    }
+
+    {
+        // Set symtab->header.sh_info, which is the index of the first non-local
+        // symbol
+        Section *symtab = &builder->sections[builder->symtab_index];
+        symtab->header.sh_info = builder->output_symbol_count;
+    }
+
+    for (size_t i = 0; i < builder->symbols.len; ++i) {
+        Symbol *symbol = &builder->symbols[i];
+        if (symbol->linkage != SIRLinkage_Internal) {
+            elf_output_symbol(builder, i);
+        }
+    }
+
+    Section *rela_text_section = &builder->sections[builder->rela_text_index];
+    Elf64Rela *relas = (Elf64Rela *)rela_text_section->data.ptr;
+    size_t rela_entry_count = rela_text_section->data.len / sizeof(Elf64Rela);
+    for (size_t i = 0; i < rela_entry_count; ++i) {
+        Elf64Rela *rela = &relas[i];
+        uint64_t type = SIR_ELF64_R_TYPE(rela->r_info);
+        uint64_t old_sym_index = SIR_ELF64_R_SYM(rela->r_info);
+        uint64_t new_sym_index = builder->symbols[old_sym_index].final_index;
+        rela->r_info = SIR_ELF64_R_INFO(new_sym_index, type);
+    }
+
+    FILE *f = fopen(builder->module->arena->null_terminate(path), "wb");
+    if (!f) {
+        fprintf(
+            stderr, "Failed to open file: '%.*s'\n", (int)path.len, path.ptr);
+        return false;
+    }
+
+    size_t total_section_data_size = 0;
+
+    for (auto &section : builder->sections) {
+        if (section.header.sh_addralign > 0) {
+            size_t section_data_padding =
+                section.data.len % section.header.sh_addralign;
+            for (size_t i = 0; i < section_data_padding; ++i) {
+                section.data.push_back(0);
+            }
+        }
+
+        section.header.sh_offset =
+            sizeof(Elf64Header) + total_section_data_size;
+        section.header.sh_size = section.data.len;
+
+        total_section_data_size += section.data.len;
+    }
+
+    builder->header.e_shoff = sizeof(Elf64Header) + total_section_data_size;
+    builder->header.e_shnum = builder->sections.len;
+
+    fwrite(&builder->header, 1, sizeof(builder->header), f);
+    for (auto &section : builder->sections) {
+        if (section.data.len > 0) {
+            fwrite(section.data.ptr, 1, section.data.len, f);
+        }
+    }
+
+    for (auto &section : builder->sections) {
+        fwrite(&section.header, 1, sizeof(Elf64SectionHeader), f);
+    }
+
+    fclose(f);
+
+    return true;
+}
+
+static void destroy(SIRObjectBuilder *obj_builder)
+{
+    Elf64Builder *builder = (Elf64Builder *)obj_builder;
+
+    for (auto &section : builder->sections) {
+        section.data.destroy();
+    }
+    builder->sections.destroy();
+    builder->symbols.destroy();
+}
+
+static void add_to_section(
+    SIRObjectBuilder *obj_builder, SIRSectionType type, SIRSlice<uint8_t> data)
+{
+    ZoneScoped;
+    Elf64Builder *builder = (Elf64Builder *)obj_builder;
+
+    size_t section_index = 0;
+    switch (type) {
+    case SIRSectionType_None: SIR_ASSERT(0); break;
+    case SIRSectionType_Text: section_index = builder->text_index; break;
+    case SIRSectionType_Data: section_index = builder->data_index; break;
+    case SIRSectionType_BSS: section_index = builder->bss_index; break;
+    case SIRSectionType_ROData: section_index = builder->rodata_index; break;
+    }
+
+    Section *section = &builder->sections[section_index];
+    section->data.push_many(data);
+}
+
+static void set_section_data(
+    SIRObjectBuilder *obj_builder,
+    SIRSectionType type,
+    size_t offset,
+    SIRSlice<uint8_t> data)
+{
+    ZoneScoped;
+    Elf64Builder *builder = (Elf64Builder *)obj_builder;
+
+    size_t section_index = 0;
+    switch (type) {
+    case SIRSectionType_None: SIR_ASSERT(0); break;
+    case SIRSectionType_Text: section_index = builder->text_index; break;
+    case SIRSectionType_Data: section_index = builder->data_index; break;
+    case SIRSectionType_BSS: section_index = builder->bss_index; break;
+    case SIRSectionType_ROData: section_index = builder->rodata_index; break;
+    }
+
+    Section *section = &builder->sections[section_index];
+
+    SIR_ASSERT(offset + data.len <= section->data.len);
+
+    for (size_t i = 0; i < data.len; ++i) {
+        section->data.ptr[offset + i] = data.ptr[i];
+    }
+}
+
+static size_t
+get_section_size(SIRObjectBuilder *obj_builder, SIRSectionType type)
+{
+    ZoneScoped;
+    Elf64Builder *builder = (Elf64Builder *)obj_builder;
+
+    size_t section_index = 0;
+    switch (type) {
+    case SIRSectionType_None: SIR_ASSERT(0); break;
+    case SIRSectionType_Text: section_index = builder->text_index; break;
+    case SIRSectionType_Data: section_index = builder->data_index; break;
+    case SIRSectionType_BSS: section_index = builder->bss_index; break;
+    case SIRSectionType_ROData: section_index = builder->rodata_index; break;
+    }
+
+    Section *section = &builder->sections[section_index];
+    return section->data.len;
+}
+
+static void add_data_relocation(
+    SIRObjectBuilder *obj_builder,
+    SIRSectionType source_section,
+    int64_t source_data_offset,
+    uint64_t destination_offset,
+    size_t dest_addr_size)
+{
+    ZoneScoped;
+    Elf64Builder *builder = (Elf64Builder *)obj_builder;
+
+    uint64_t section_sym_index = 0;
+    switch (source_section) {
+    case SIRSectionType_None: SIR_ASSERT(0); break;
+    case SIRSectionType_Text:
+        section_sym_index = builder->text_symbol_ref.id;
+        break;
+    case SIRSectionType_Data:
+        section_sym_index = builder->data_symbol_ref.id;
+        break;
+    case SIRSectionType_BSS:
+        section_sym_index = builder->bss_symbol_ref.id;
+        break;
+    case SIRSectionType_ROData:
+        section_sym_index = builder->rodata_symbol_ref.id;
+        break;
+    }
+
+    Elf64Rela rela{};
+
+    switch (builder->module->target_arch) {
+    case SIRTargetArch_X86_64: {
+        switch (dest_addr_size) {
+        case 4: {
+            rela.r_offset = destination_offset;
+            rela.r_addend = source_data_offset - 4;
+            rela.r_info =
+                SIR_ELF64_R_INFO(section_sym_index, Elf64RelaTypeX86_64_PC32);
+            break;
+        }
+        default: SIR_ASSERT(0);
+        }
+        break;
+    }
+    }
+
+    Section *rela_text_section = &builder->sections[builder->rela_text_index];
+    rela_text_section->data.push_many({(uint8_t *)&rela, sizeof(rela)});
+}
+
+static void add_procedure_relocation(
+    SIRObjectBuilder *obj_builder,
+    SIRSymbolRef function_symbol,
+    uint64_t destination_offset,
+    size_t dest_addr_size)
+{
+    ZoneScoped;
+    Elf64Builder *builder = (Elf64Builder *)obj_builder;
+
+    Elf64Rela rela{};
+
+    switch (builder->module->target_arch) {
+    case SIRTargetArch_X86_64: {
+        switch (dest_addr_size) {
+        case 4: {
+            rela.r_offset = destination_offset;
+            rela.r_addend = -4;
+            rela.r_info = SIR_ELF64_R_INFO(
+                (uint64_t)function_symbol.id, Elf64RelaTypeX86_64_PLT32);
+            break;
+        }
+        default: SIR_ASSERT(0);
+        }
+        break;
+    }
+    }
+
+    Section *rela_text_section = &builder->sections[builder->rela_text_index];
+    rela_text_section->data.push_many({(uint8_t *)&rela, sizeof(rela)});
+}
+
+static SIRSymbolRef add_symbol(
+    SIRObjectBuilder *obj_builder,
+    SIRString name,
+    SIRSectionType section_type,
+    SIRSymbolType type,
+    SIRLinkage linkage)
+{
+    ZoneScoped;
+    Elf64Builder *builder = (Elf64Builder *)obj_builder;
+
+    Symbol symbol{
+        .type = type,
+        .section_type = section_type,
+        .linkage = linkage,
+        .name = name,
+    };
+
+    SIRSymbolRef ref = {(uint32_t)builder->symbols.len};
+    builder->symbols.push_back(symbol);
+    return ref;
+}
+
+static void set_symbol_region(
+    SIRObjectBuilder *obj_builder,
+    SIRSymbolRef symbol_ref,
+    size_t offset,
+    size_t size)
+{
+    ZoneScoped;
+    Elf64Builder *builder = (Elf64Builder *)obj_builder;
+
+    Symbol *symbol = &builder->symbols[symbol_ref.id];
+    symbol->offset = offset;
+    symbol->size = size;
+}
+
 SIRObjectBuilder *SIRCreateELF64Bbuilder(SIRModule *module)
 {
     ZoneScoped;
 
     Elf64Builder *builder = module->arena->alloc_init<Elf64Builder>();
+
+    builder->vt.add_to_section = add_to_section;
+    builder->vt.set_section_data = set_section_data;
+    builder->vt.get_section_size = get_section_size;
+    builder->vt.add_data_relocation = add_data_relocation;
+    builder->vt.add_procedure_relocation = add_procedure_relocation;
+    builder->vt.add_symbol = add_symbol;
+    builder->vt.set_symbol_region = set_symbol_region;
+    builder->vt.output_to_file = output_to_file;
+    builder->vt.destroy = destroy;
+
     builder->module = module;
     builder->header = Elf64Header{};
-    builder->sections = SIRArray<Section>::create(SIRMallocAllocator::get_instance());
-    builder->symbols = SIRArray<Symbol>::create(SIRMallocAllocator::get_instance());
+    builder->sections =
+        SIRArray<Section>::create(SIRMallocAllocator::get_instance());
+    builder->symbols =
+        SIRArray<Symbol>::create(SIRMallocAllocator::get_instance());
 
     // Zero out the header
     memset(&builder->header, 0, sizeof(builder->header));
@@ -436,256 +699,30 @@ SIRObjectBuilder *SIRCreateELF64Bbuilder(SIRModule *module)
 
     builder->symbols.push_back(Symbol{}); // Null symbol
 
-    builder->text_symbol_ref = builder->add_symbol(
-        "", SIRSectionType_Text, SIRSymbolType_Section, SIRLinkage_Internal);
-    builder->data_symbol_ref = builder->add_symbol(
-        "", SIRSectionType_Data, SIRSymbolType_Section, SIRLinkage_Internal);
-    builder->bss_symbol_ref = builder->add_symbol(
-        "", SIRSectionType_BSS, SIRSymbolType_Section, SIRLinkage_Internal);
-    builder->rodata_symbol_ref = builder->add_symbol(
-        "", SIRSectionType_ROData, SIRSymbolType_Section, SIRLinkage_Internal);
+    builder->text_symbol_ref = builder->vt.add_symbol(
+        &builder->vt,
+        "",
+        SIRSectionType_Text,
+        SIRSymbolType_Section,
+        SIRLinkage_Internal);
+    builder->data_symbol_ref = builder->vt.add_symbol(
+        &builder->vt,
+        "",
+        SIRSectionType_Data,
+        SIRSymbolType_Section,
+        SIRLinkage_Internal);
+    builder->bss_symbol_ref = builder->vt.add_symbol(
+        &builder->vt,
+        "",
+        SIRSectionType_BSS,
+        SIRSymbolType_Section,
+        SIRLinkage_Internal);
+    builder->rodata_symbol_ref = builder->vt.add_symbol(
+        &builder->vt,
+        "",
+        SIRSectionType_ROData,
+        SIRSymbolType_Section,
+        SIRLinkage_Internal);
 
-    return builder;
-}
-
-bool Elf64Builder::output_to_file(SIRString path)
-{
-    ZoneScoped;
-
-    for (size_t i = 0; i < this->symbols.len; ++i) {
-        Symbol *symbol = &this->symbols[i];
-        if (symbol->linkage == SIRLinkage_Internal) {
-            elf_output_symbol(this, i);
-        }
-    }
-
-    {
-        // Set symtab->header.sh_info, which is the index of the first non-local
-        // symbol
-        Section *symtab = &this->sections[this->symtab_index];
-        symtab->header.sh_info = this->output_symbol_count;
-    }
-
-    for (size_t i = 0; i < this->symbols.len; ++i) {
-        Symbol *symbol = &this->symbols[i];
-        if (symbol->linkage != SIRLinkage_Internal) {
-            elf_output_symbol(this, i);
-        }
-    }
-
-    Section *rela_text_section = &this->sections[this->rela_text_index];
-    Elf64Rela *relas = (Elf64Rela *)rela_text_section->data.ptr;
-    size_t rela_entry_count = rela_text_section->data.len / sizeof(Elf64Rela);
-    for (size_t i = 0; i < rela_entry_count; ++i) {
-        Elf64Rela *rela = &relas[i];
-        uint64_t type = SIR_ELF64_R_TYPE(rela->r_info);
-        uint64_t old_sym_index = SIR_ELF64_R_SYM(rela->r_info);
-        uint64_t new_sym_index = this->symbols[old_sym_index].final_index;
-        rela->r_info = SIR_ELF64_R_INFO(new_sym_index, type);
-    }
-
-    FILE *f = fopen(this->module->arena->null_terminate(path), "wb");
-    if (!f) {
-        fprintf(
-            stderr, "Failed to open file: '%.*s'\n", (int)path.len, path.ptr);
-        return false;
-    }
-
-    size_t total_section_data_size = 0;
-
-    for (auto &section : this->sections) {
-        if (section.header.sh_addralign > 0) {
-            size_t section_data_padding =
-                section.data.len % section.header.sh_addralign;
-            for (size_t i = 0; i < section_data_padding; ++i) {
-                section.data.push_back(0);
-            }
-        }
-
-        section.header.sh_offset =
-            sizeof(Elf64Header) + total_section_data_size;
-        section.header.sh_size = section.data.len;
-
-        total_section_data_size += section.data.len;
-    }
-
-    this->header.e_shoff = sizeof(Elf64Header) + total_section_data_size;
-    this->header.e_shnum = this->sections.len;
-
-    fwrite(&this->header, 1, sizeof(this->header), f);
-    for (auto &section : this->sections) {
-        if (section.data.len > 0) {
-            fwrite(section.data.ptr, 1, section.data.len, f);
-        }
-    }
-
-    for (auto &section : this->sections) {
-        fwrite(&section.header, 1, sizeof(Elf64SectionHeader), f);
-    }
-
-    fclose(f);
-
-    return true;
-}
-
-void Elf64Builder::destroy()
-{
-    for (auto &section : this->sections) {
-        section.data.destroy();
-    }
-    this->sections.destroy();
-    this->symbols.destroy();
-}
-
-void Elf64Builder::add_to_section(SIRSectionType type, SIRSlice<uint8_t> data)
-{
-    ZoneScoped;
-
-    size_t section_index = 0;
-    switch (type) {
-    case SIRSectionType_None: SIR_ASSERT(0); break;
-    case SIRSectionType_Text: section_index = this->text_index; break;
-    case SIRSectionType_Data: section_index = this->data_index; break;
-    case SIRSectionType_BSS: section_index = this->bss_index; break;
-    case SIRSectionType_ROData: section_index = this->rodata_index; break;
-    }
-
-    Section *section = &this->sections[section_index];
-    section->data.push_many(data);
-}
-
-void Elf64Builder::set_section_data(
-    SIRSectionType type, size_t offset, SIRSlice<uint8_t> data)
-{
-    ZoneScoped;
-
-    size_t section_index = 0;
-    switch (type) {
-    case SIRSectionType_None: SIR_ASSERT(0); break;
-    case SIRSectionType_Text: section_index = this->text_index; break;
-    case SIRSectionType_Data: section_index = this->data_index; break;
-    case SIRSectionType_BSS: section_index = this->bss_index; break;
-    case SIRSectionType_ROData: section_index = this->rodata_index; break;
-    }
-
-    Section *section = &this->sections[section_index];
-
-    SIR_ASSERT(offset + data.len <= section->data.len);
-
-    for (size_t i = 0; i < data.len; ++i) {
-        section->data.ptr[offset + i] = data.ptr[i];
-    }
-}
-
-size_t Elf64Builder::get_section_size(SIRSectionType type)
-{
-    ZoneScoped;
-
-    size_t section_index = 0;
-    switch (type) {
-    case SIRSectionType_None: SIR_ASSERT(0); break;
-    case SIRSectionType_Text: section_index = this->text_index; break;
-    case SIRSectionType_Data: section_index = this->data_index; break;
-    case SIRSectionType_BSS: section_index = this->bss_index; break;
-    case SIRSectionType_ROData: section_index = this->rodata_index; break;
-    }
-
-    Section *section = &this->sections[section_index];
-    return section->data.len;
-}
-
-void Elf64Builder::add_data_relocation(
-    SIRSectionType source_section,
-    int64_t source_data_offset,
-    uint64_t destination_offset,
-    size_t dest_addr_size)
-{
-    ZoneScoped;
-
-    uint64_t section_sym_index = 0;
-    switch (source_section) {
-    case SIRSectionType_None: SIR_ASSERT(0); break;
-    case SIRSectionType_Text: section_sym_index = this->text_symbol_ref.id; break;
-    case SIRSectionType_Data: section_sym_index = this->data_symbol_ref.id; break;
-    case SIRSectionType_BSS: section_sym_index = this->bss_symbol_ref.id; break;
-    case SIRSectionType_ROData:
-        section_sym_index = this->rodata_symbol_ref.id;
-        break;
-    }
-
-    Elf64Rela rela{};
-
-    switch (this->module->target_arch) {
-    case SIRTargetArch_X86_64: {
-        switch (dest_addr_size) {
-        case 4: {
-            rela.r_offset = destination_offset;
-            rela.r_addend = source_data_offset - 4;
-            rela.r_info =
-                SIR_ELF64_R_INFO(section_sym_index, Elf64RelaTypeX86_64_PC32);
-            break;
-        }
-        default: SIR_ASSERT(0);
-        }
-        break;
-    }
-    }
-
-    Section *rela_text_section = &this->sections[this->rela_text_index];
-    rela_text_section->data.push_many({(uint8_t *)&rela, sizeof(rela)});
-}
-
-void Elf64Builder::add_procedure_relocation(
-    SIRSymbolRef function_symbol,
-    uint64_t destination_offset,
-    size_t dest_addr_size)
-{
-    ZoneScoped;
-
-    Elf64Rela rela{};
-
-    switch (this->module->target_arch) {
-    case SIRTargetArch_X86_64: {
-        switch (dest_addr_size) {
-        case 4: {
-            rela.r_offset = destination_offset;
-            rela.r_addend = -4;
-            rela.r_info = SIR_ELF64_R_INFO(
-                (uint64_t)function_symbol.id, Elf64RelaTypeX86_64_PLT32);
-            break;
-        }
-        default: SIR_ASSERT(0);
-        }
-        break;
-    }
-    }
-
-    Section *rela_text_section = &this->sections[this->rela_text_index];
-    rela_text_section->data.push_many({(uint8_t *)&rela, sizeof(rela)});
-}
-
-SIRSymbolRef Elf64Builder::add_symbol(
-    SIRString name, SIRSectionType section_type, SIRSymbolType type, SIRLinkage linkage)
-{
-    ZoneScoped;
-
-    Symbol symbol{
-        .type = type,
-        .section_type = section_type,
-        .linkage = linkage,
-        .name = name,
-    };
-
-    SIRSymbolRef ref = {(uint32_t)this->symbols.len};
-    this->symbols.push_back(symbol);
-    return ref;
-}
-
-void Elf64Builder::set_symbol_region(
-    SIRSymbolRef symbol_ref, size_t offset, size_t size)
-{
-    ZoneScoped;
-    Symbol *symbol = &this->symbols[symbol_ref.id];
-    symbol->offset = offset;
-    symbol->size = size;
+    return &builder->vt;
 }

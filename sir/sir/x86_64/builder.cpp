@@ -197,7 +197,8 @@ struct MetaFunction {
     SIRSymbolRef symbol_ref{};
 };
 
-struct X86_64AsmBuilder : SIRAsmBuilder {
+struct X86_64AsmBuilder {
+    SIRAsmBuilder vt;
     SIRModule *module;
     SIRObjectBuilder *obj_builder;
     SIRArray<MetaValue> meta_insts;
@@ -214,7 +215,7 @@ struct X86_64AsmBuilder : SIRAsmBuilder {
         FeOp op2 = 0,
         FeOp op3 = 0);
 
-    void encode_mnem(Mnem mnem, const MetaValue &source, const MetaValue &dest);
+    void encode_mnem(Mnem mnem, const MetaValue *source, const MetaValue *dest);
 
     size_t encode_direct_call(SIRInstRef func_ref);
     void encode_function_ending(SIRInstRef func_ref);
@@ -224,12 +225,9 @@ struct X86_64AsmBuilder : SIRAsmBuilder {
     void generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref);
 
     size_t get_func_call_stack_parameters_size(SIRInstRef func_call_ref);
-    void move_inst_rvalue(SIRInstRef inst_ref, const MetaValue &dest_value);
+    void move_inst_rvalue(SIRInstRef inst_ref, const MetaValue *dest_value);
     void encode_memcpy(
         size_t value_size, MetaValue source_value, MetaValue dest_value);
-
-    virtual void generate() override;
-    virtual void destroy() override;
 };
 
 SIR_INLINE void MetaValue::add_relocation(
@@ -244,129 +242,12 @@ SIR_INLINE void MetaValue::add_relocation(
         }
 
         builder->obj_builder->add_data_relocation(
+            builder->obj_builder,
             this->global.section_type,
             this->global.offset,
             relocation_offset,
             4);
     }
-}
-
-SIRAsmBuilder *
-SIRCreateX86_64Builder(SIRModule *module, SIRObjectBuilder *obj_builder)
-{
-    ZoneScoped;
-
-    auto asm_builder = module->arena->alloc_init<X86_64AsmBuilder>();
-    asm_builder->module = module;
-    asm_builder->obj_builder = obj_builder;
-
-    asm_builder->meta_insts =
-        SIRArray<MetaValue>::create(SIRMallocAllocator::get_instance());
-    asm_builder->meta_insts.resize(module->insts.len);
-
-    for (size_t i = 0; i < asm_builder->meta_insts.len; ++i) {
-        asm_builder->meta_insts[i] = {};
-    }
-
-    SIZE_CLASSES[1] = SizeClass_1;
-    SIZE_CLASSES[2] = SizeClass_2;
-    SIZE_CLASSES[4] = SizeClass_4;
-    SIZE_CLASSES[8] = SizeClass_8;
-
-    SIZE_CLASS_SIZES[SizeClass_1] = 1;
-    SIZE_CLASS_SIZES[SizeClass_2] = 2;
-    SIZE_CLASS_SIZES[SizeClass_4] = 4;
-    SIZE_CLASS_SIZES[SizeClass_8] = 8;
-
-    OPERAND_KINDS[MetaValueKind_IRegisterMemory] = OperandKind_Memory;
-    OPERAND_KINDS[MetaValueKind_IRegister] = OperandKind_Reg;
-    OPERAND_KINDS[MetaValueKind_FRegister] = OperandKind_FReg;
-    OPERAND_KINDS[MetaValueKind_Global] = OperandKind_Memory;
-    OPERAND_KINDS[MetaValueKind_ImmInt] = OperandKind_Imm;
-
-    ENCODING_ENTRIES[Mnem_MOV][OperandKind_Reg][SizeClass_8][OperandKind_Reg]
-                    [SizeClass_8] = FE_MOV64rr;
-    ENCODING_ENTRIES[Mnem_MOV][OperandKind_Reg][SizeClass_4][OperandKind_Reg]
-                    [SizeClass_4] = FE_MOV32rr;
-    ENCODING_ENTRIES[Mnem_MOV][OperandKind_Reg][SizeClass_2][OperandKind_Reg]
-                    [SizeClass_2] = FE_MOV16rr;
-    ENCODING_ENTRIES[Mnem_MOV][OperandKind_Reg][SizeClass_1][OperandKind_Reg]
-                    [SizeClass_1] = FE_MOV8rr;
-
-    ENCODING_ENTRIES[Mnem_MOV][OperandKind_Reg][SizeClass_8][OperandKind_Memory]
-                    [SizeClass_8] = FE_MOV64rm;
-    ENCODING_ENTRIES[Mnem_MOV][OperandKind_Reg][SizeClass_4][OperandKind_Memory]
-                    [SizeClass_4] = FE_MOV32rm;
-    ENCODING_ENTRIES[Mnem_MOV][OperandKind_Reg][SizeClass_2][OperandKind_Memory]
-                    [SizeClass_2] = FE_MOV16rm;
-    ENCODING_ENTRIES[Mnem_MOV][OperandKind_Reg][SizeClass_1][OperandKind_Memory]
-                    [SizeClass_1] = FE_MOV8rm;
-
-    ENCODING_ENTRIES[Mnem_MOV][OperandKind_Reg][SizeClass_8][OperandKind_Imm]
-                    [SizeClass_8] = FE_MOV64ri;
-    ENCODING_ENTRIES[Mnem_MOV][OperandKind_Reg][SizeClass_4][OperandKind_Imm]
-                    [SizeClass_4] = FE_MOV32ri;
-    ENCODING_ENTRIES[Mnem_MOV][OperandKind_Reg][SizeClass_2][OperandKind_Imm]
-                    [SizeClass_2] = FE_MOV16ri;
-    ENCODING_ENTRIES[Mnem_MOV][OperandKind_Reg][SizeClass_1][OperandKind_Imm]
-                    [SizeClass_1] = FE_MOV8ri;
-
-    /* ENCODING_ENTRIES[Mnem_MOV][OperandKind_Memory][SizeClass_8] */
-    /*                 [OperandKind_Imm][SizeClass_8] = FE_MOV64mi; */
-    ENCODING_ENTRIES[Mnem_MOV][OperandKind_Memory][SizeClass_4][OperandKind_Imm]
-                    [SizeClass_4] = FE_MOV32mi;
-    ENCODING_ENTRIES[Mnem_MOV][OperandKind_Memory][SizeClass_2][OperandKind_Imm]
-                    [SizeClass_2] = FE_MOV16mi;
-    ENCODING_ENTRIES[Mnem_MOV][OperandKind_Memory][SizeClass_1][OperandKind_Imm]
-                    [SizeClass_1] = FE_MOV8mi;
-
-    ENCODING_ENTRIES[Mnem_MOV][OperandKind_Memory][SizeClass_8][OperandKind_Reg]
-                    [SizeClass_8] = FE_MOV64mr;
-    ENCODING_ENTRIES[Mnem_MOV][OperandKind_Memory][SizeClass_4][OperandKind_Reg]
-                    [SizeClass_4] = FE_MOV32mr;
-    ENCODING_ENTRIES[Mnem_MOV][OperandKind_Memory][SizeClass_2][OperandKind_Reg]
-                    [SizeClass_2] = FE_MOV16mr;
-    ENCODING_ENTRIES[Mnem_MOV][OperandKind_Memory][SizeClass_1][OperandKind_Reg]
-                    [SizeClass_1] = FE_MOV8mr;
-
-    ENCODING_ENTRIES[Mnem_MOV][OperandKind_FReg][SizeClass_4][OperandKind_FReg]
-                    [SizeClass_4] = FE_SSE_MOVSSrr;
-    ENCODING_ENTRIES[Mnem_MOV][OperandKind_FReg][SizeClass_8][OperandKind_FReg]
-                    [SizeClass_8] = FE_SSE_MOVSDrr;
-
-    ENCODING_ENTRIES[Mnem_MOV][OperandKind_FReg][SizeClass_4]
-                    [OperandKind_Memory][SizeClass_4] = FE_SSE_MOVSSrm;
-    ENCODING_ENTRIES[Mnem_MOV][OperandKind_FReg][SizeClass_8]
-                    [OperandKind_Memory][SizeClass_8] = FE_SSE_MOVSDrm;
-
-    ENCODING_ENTRIES[Mnem_MOV][OperandKind_Memory][SizeClass_4]
-                    [OperandKind_FReg][SizeClass_4] = FE_SSE_MOVSSmr;
-    ENCODING_ENTRIES[Mnem_MOV][OperandKind_Memory][SizeClass_8]
-                    [OperandKind_FReg][SizeClass_8] = FE_SSE_MOVSDmr;
-
-    ENCODING_ENTRIES[Mnem_LEA][OperandKind_Reg][SizeClass_8][OperandKind_Memory]
-                    [SizeClass_1] = FE_LEA64rm;
-    ENCODING_ENTRIES[Mnem_LEA][OperandKind_Reg][SizeClass_8][OperandKind_Memory]
-                    [SizeClass_2] = FE_LEA64rm;
-    ENCODING_ENTRIES[Mnem_LEA][OperandKind_Reg][SizeClass_8][OperandKind_Memory]
-                    [SizeClass_4] = FE_LEA64rm;
-    ENCODING_ENTRIES[Mnem_LEA][OperandKind_Reg][SizeClass_8][OperandKind_Memory]
-                    [SizeClass_8] = FE_LEA64rm;
-    ENCODING_ENTRIES[Mnem_LEA][OperandKind_Reg][SizeClass_8][OperandKind_Memory]
-                    [SizeClass_None] = FE_LEA64rm;
-
-    ENCODING_ENTRIES[Mnem_LEA][OperandKind_Memory][SizeClass_8]
-                    [OperandKind_Memory][SizeClass_1] = FE_LEA64rm;
-    ENCODING_ENTRIES[Mnem_LEA][OperandKind_Memory][SizeClass_8]
-                    [OperandKind_Memory][SizeClass_2] = FE_LEA64rm;
-    ENCODING_ENTRIES[Mnem_LEA][OperandKind_Memory][SizeClass_8]
-                    [OperandKind_Memory][SizeClass_4] = FE_LEA64rm;
-    ENCODING_ENTRIES[Mnem_LEA][OperandKind_Memory][SizeClass_8]
-                    [OperandKind_Memory][SizeClass_8] = FE_LEA64rm;
-    ENCODING_ENTRIES[Mnem_LEA][OperandKind_Memory][SizeClass_8]
-                    [OperandKind_Memory][SizeClass_None] = FE_LEA64rm;
-
-    return asm_builder;
 }
 
 SIR_INLINE
@@ -481,7 +362,8 @@ MetaValue create_global_value(
 SIR_INLINE
 size_t X86_64AsmBuilder::get_code_offset()
 {
-    return this->obj_builder->get_section_size(SIRSectionType_Text);
+    return this->obj_builder->get_section_size(
+        this->obj_builder, SIRSectionType_Text);
 }
 
 SIR_INLINE
@@ -489,7 +371,8 @@ size_t X86_64AsmBuilder::encode_raw(const SIRSlice<uint8_t> &bytes)
 {
     ZoneScoped;
 
-    this->obj_builder->add_to_section(SIRSectionType_Text, bytes);
+    this->obj_builder->add_to_section(
+        this->obj_builder, SIRSectionType_Text, bytes);
     return bytes.len;
 }
 
@@ -506,7 +389,7 @@ X86_64AsmBuilder::encode(uint64_t mnem, FeOp op0, FeOp op1, FeOp op2, FeOp op3)
 
     size_t inst_len = (size_t)(ptr - temp);
     this->obj_builder->add_to_section(
-        SIRSectionType_Text, {&temp[0], inst_len});
+        this->obj_builder, SIRSectionType_Text, {&temp[0], inst_len});
     return inst_len;
 }
 
@@ -523,7 +406,7 @@ size_t X86_64AsmBuilder::encode_at(
 
     size_t inst_len = (size_t)(ptr - temp);
     this->obj_builder->set_section_data(
-        SIRSectionType_Text, offset, {&temp[0], inst_len});
+        this->obj_builder, SIRSectionType_Text, offset, {&temp[0], inst_len});
     return inst_len;
 }
 
@@ -538,8 +421,8 @@ size_t X86_64AsmBuilder::encode_direct_call(SIRInstRef func_ref)
 
     MetaValue *meta_inst = &this->meta_insts[func_ref.id];
 
-    obj_builder->add_procedure_relocation(
-        meta_inst->func->symbol_ref, curr_offset - 4, 4);
+    this->obj_builder->add_procedure_relocation(
+        this->obj_builder, meta_inst->func->symbol_ref, curr_offset - 4, 4);
 
     return inst_len;
 }
@@ -570,32 +453,31 @@ void X86_64AsmBuilder::encode_function_ending(SIRInstRef func_ref)
 }
 
 void X86_64AsmBuilder::encode_mnem(
-    Mnem mnem, const MetaValue &source, const MetaValue &dest)
+    Mnem mnem, const MetaValue *source, const MetaValue *dest)
 {
     ZoneScoped;
 
-    OperandKind source_opkind = OPERAND_KINDS[source.kind];
-    OperandKind dest_opkind = OPERAND_KINDS[dest.kind];
+    OperandKind source_opkind = OPERAND_KINDS[source->kind];
+    OperandKind dest_opkind = OPERAND_KINDS[dest->kind];
 
     if (source_opkind == OperandKind_Memory &&
         dest_opkind == OperandKind_Memory) {
         int64_t encoding1 =
-            ENCODING_ENTRIES[mnem][OperandKind_Reg][dest.size_class]
-                            [OperandKind_Memory][source.size_class];
+            ENCODING_ENTRIES[mnem][OperandKind_Reg][dest->size_class]
+                            [OperandKind_Memory][source->size_class];
         int64_t encoding2 =
-            ENCODING_ENTRIES[Mnem_MOV][OperandKind_Memory][dest.size_class]
-                            [OperandKind_Reg][dest.size_class];
-        this->encode(encoding1, FE_AX, source.into_operand());
-        source.add_relocation(this);
-        this->encode(encoding2, dest.into_operand(), FE_AX);
-        dest.add_relocation(this);
-
+            ENCODING_ENTRIES[Mnem_MOV][OperandKind_Memory][dest->size_class]
+                            [OperandKind_Reg][dest->size_class];
+        this->encode(encoding1, FE_AX, source->into_operand());
+        source->add_relocation(this);
+        this->encode(encoding2, dest->into_operand(), FE_AX);
+        dest->add_relocation(this);
     } else {
-        int64_t encoding = ENCODING_ENTRIES[mnem][dest_opkind][dest.size_class]
-                                           [source_opkind][source.size_class];
-        this->encode(encoding, dest.into_operand(), source.into_operand());
-        source.add_relocation(this, dest_opkind, dest.size_class);
-        dest.add_relocation(this, source_opkind, source.size_class);
+        int64_t encoding = ENCODING_ENTRIES[mnem][dest_opkind][dest->size_class]
+                                           [source_opkind][source->size_class];
+        this->encode(encoding, dest->into_operand(), source->into_operand());
+        source->add_relocation(this, dest_opkind, dest->size_class);
+        dest->add_relocation(this, source_opkind, source->size_class);
     }
 }
 
@@ -664,16 +546,16 @@ X86_64AsmBuilder::get_func_call_stack_parameters_size(SIRInstRef func_call_ref)
 }
 
 void X86_64AsmBuilder::move_inst_rvalue(
-    SIRInstRef inst_ref, const MetaValue &dest_value)
+    SIRInstRef inst_ref, const MetaValue *dest_value)
 {
     SIRInst inst = SIRModuleGetInst(this->module, inst_ref);
     switch (inst.kind) {
     case SIRInstKind_StackSlot: {
-        this->encode_mnem(Mnem_LEA, this->meta_insts[inst_ref.id], dest_value);
+        this->encode_mnem(Mnem_LEA, &this->meta_insts[inst_ref.id], dest_value);
         break;
     }
     case SIRInstKind_Global: {
-        this->encode_mnem(Mnem_LEA, this->meta_insts[inst_ref.id], dest_value);
+        this->encode_mnem(Mnem_LEA, &this->meta_insts[inst_ref.id], dest_value);
         break;
     }
     case SIRInstKind_PtrCast: {
@@ -688,12 +570,12 @@ void X86_64AsmBuilder::move_inst_rvalue(
         case 4:
         case 8: {
             this->encode_mnem(
-                Mnem_MOV, this->meta_insts[inst_ref.id], dest_value);
+                Mnem_MOV, &this->meta_insts[inst_ref.id], dest_value);
             break;
         }
         default: {
             this->encode_memcpy(
-                value_size, this->meta_insts[inst_ref.id], dest_value);
+                value_size, this->meta_insts[inst_ref.id], *dest_value);
             break;
         }
         }
@@ -722,7 +604,7 @@ void X86_64AsmBuilder::encode_memcpy(
         source_value.size_class = SIZE_CLASSES[multiple];
         dest_value.size_class = SIZE_CLASSES[multiple];
 
-        this->encode_mnem(Mnem_MOV, source_value, dest_value);
+        this->encode_mnem(Mnem_MOV, &source_value, &dest_value);
         source_value.regmem.offset += multiple;
         dest_value.regmem.offset += multiple;
     }
@@ -801,7 +683,7 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
         MetaValue ext_ax_value = create_int_register_value(
             SIRTypeSizeOf(this->module, dest_type), RegisterIndex_RAX);
 
-        this->move_inst_rvalue(inst.trunc.inst_ref, source_ax_value);
+        this->move_inst_rvalue(inst.trunc.inst_ref, &source_ax_value);
 
         size_t source_bytes = source_type->int_.bits >> 3;
         size_t dest_bytes = dest_type->int_.bits >> 3;
@@ -833,7 +715,7 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
             this->encode(x86_inst, FE_AX, FE_AX);
         }
 
-        this->encode_mnem(Mnem_MOV, ext_ax_value, dest_value);
+        this->encode_mnem(Mnem_MOV, &ext_ax_value, &dest_value);
         break;
     }
 
@@ -849,7 +731,7 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
         MetaValue ext_ax_value = create_int_register_value(
             SIRTypeSizeOf(this->module, dest_type), RegisterIndex_RAX);
 
-        this->move_inst_rvalue(inst.trunc.inst_ref, source_ax_value);
+        this->move_inst_rvalue(inst.trunc.inst_ref, &source_ax_value);
 
         size_t source_bytes = source_type->int_.bits >> 3;
         size_t dest_bytes = dest_type->int_.bits >> 3;
@@ -878,7 +760,7 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
         }
 
         this->encode(x86_inst, FE_AX, FE_AX);
-        this->encode_mnem(Mnem_MOV, ext_ax_value, dest_value);
+        this->encode_mnem(Mnem_MOV, &ext_ax_value, &dest_value);
         break;
     }
 
@@ -894,8 +776,8 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
 
         MetaValue trunc_ax_value = create_int_register_value(
             SIRTypeSizeOf(this->module, dest_type), RegisterIndex_RAX);
-        this->move_inst_rvalue(inst.trunc.inst_ref, source_ax_value);
-        this->encode_mnem(Mnem_MOV, trunc_ax_value, dest_value);
+        this->move_inst_rvalue(inst.trunc.inst_ref, &source_ax_value);
+        this->encode_mnem(Mnem_MOV, &trunc_ax_value, &dest_value);
 
         break;
     }
@@ -927,11 +809,11 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
             default: SIR_ASSERT(0); break;
             }
 
-            this->move_inst_rvalue(inst.binop.left_ref, ax_value);
-            this->move_inst_rvalue(inst.binop.right_ref, dx_value);
+            this->move_inst_rvalue(inst.binop.left_ref, &ax_value);
+            this->move_inst_rvalue(inst.binop.right_ref, &dx_value);
 
             this->encode(x86_inst, FE_AX, FE_DX);
-            this->encode_mnem(Mnem_MOV, ax_value, dest_value);
+            this->encode_mnem(Mnem_MOV, &ax_value, &dest_value);
 
             break;
         }
@@ -951,11 +833,11 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
             default: SIR_ASSERT(0); break;
             }
 
-            this->move_inst_rvalue(inst.binop.left_ref, ax_value);
-            this->move_inst_rvalue(inst.binop.right_ref, dx_value);
+            this->move_inst_rvalue(inst.binop.left_ref, &ax_value);
+            this->move_inst_rvalue(inst.binop.right_ref, &dx_value);
 
             this->encode(x86_inst, FE_AX, FE_DX);
-            this->encode_mnem(Mnem_MOV, ax_value, dest_value);
+            this->encode_mnem(Mnem_MOV, &ax_value, &dest_value);
 
             break;
         }
@@ -975,15 +857,15 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
             default: SIR_ASSERT(0); break;
             }
 
-            this->move_inst_rvalue(inst.binop.left_ref, ax_value);
-            this->move_inst_rvalue(inst.binop.right_ref, dx_value);
+            this->move_inst_rvalue(inst.binop.left_ref, &ax_value);
+            this->move_inst_rvalue(inst.binop.right_ref, &dx_value);
 
             if (size == 1) {
                 this->encode(x86_inst, FE_DX);
-                this->encode_mnem(Mnem_MOV, dx_value, dest_value);
+                this->encode_mnem(Mnem_MOV, &dx_value, &dest_value);
             } else {
                 this->encode(x86_inst, FE_AX, FE_DX);
-                this->encode_mnem(Mnem_MOV, ax_value, dest_value);
+                this->encode_mnem(Mnem_MOV, &ax_value, &dest_value);
             }
 
             break;
@@ -997,18 +879,18 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
 
             switch (operand_size) {
             case 1: {
-                this->move_inst_rvalue(inst.binop.left_ref, ax_value);
+                this->move_inst_rvalue(inst.binop.left_ref, &ax_value);
                 this->encode(FE_MOVSXr32r8, FE_AX, FE_AX);
                 break;
             }
             case 2: {
-                this->move_inst_rvalue(inst.binop.left_ref, ax_value);
+                this->move_inst_rvalue(inst.binop.left_ref, &ax_value);
                 this->encode(FE_MOVSXr32r16, FE_AX, FE_AX);
                 break;
             }
             case 4:
             case 8: {
-                this->move_inst_rvalue(inst.binop.left_ref, ax_value);
+                this->move_inst_rvalue(inst.binop.left_ref, &ax_value);
                 break;
             }
             default: SIR_ASSERT(0); break;
@@ -1035,18 +917,18 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
 
             switch (operand_size) {
             case 1: {
-                this->move_inst_rvalue(inst.binop.right_ref, cx_value);
+                this->move_inst_rvalue(inst.binop.right_ref, &cx_value);
                 this->encode(FE_MOVSXr32r8, FE_CX, FE_CX);
                 break;
             }
             case 2: {
-                this->move_inst_rvalue(inst.binop.right_ref, cx_value);
+                this->move_inst_rvalue(inst.binop.right_ref, &cx_value);
                 this->encode(FE_MOVSXr32r16, FE_CX, FE_CX);
                 break;
             }
             case 4:
             case 8: {
-                this->move_inst_rvalue(inst.binop.right_ref, cx_value);
+                this->move_inst_rvalue(inst.binop.right_ref, &cx_value);
                 break;
             }
             default: SIR_ASSERT(0); break;
@@ -1054,7 +936,7 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
 
             this->encode(div_inst, FE_CX);
 
-            this->encode_mnem(Mnem_MOV, ax_value, dest_value);
+            this->encode_mnem(Mnem_MOV, &ax_value, &dest_value);
             break;
         }
 
@@ -1066,18 +948,18 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
 
             switch (operand_size) {
             case 1: {
-                this->move_inst_rvalue(inst.binop.left_ref, ax_value);
+                this->move_inst_rvalue(inst.binop.left_ref, &ax_value);
                 this->encode(FE_MOVZXr32r8, FE_AX, FE_AX);
                 break;
             }
             case 2: {
-                this->move_inst_rvalue(inst.binop.left_ref, ax_value);
+                this->move_inst_rvalue(inst.binop.left_ref, &ax_value);
                 this->encode(FE_MOVZXr32r16, FE_AX, FE_AX);
                 break;
             }
             case 4:
             case 8: {
-                this->move_inst_rvalue(inst.binop.left_ref, ax_value);
+                this->move_inst_rvalue(inst.binop.left_ref, &ax_value);
                 break;
             }
             default: SIR_ASSERT(0); break;
@@ -1103,19 +985,19 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
 
             switch (operand_size) {
             case 1: {
-                this->move_inst_rvalue(inst.binop.right_ref, cx_value);
+                this->move_inst_rvalue(inst.binop.right_ref, &cx_value);
                 this->encode(FE_MOVZXr32r8, FE_CX, FE_CX);
                 break;
             }
             case 2: {
-                this->move_inst_rvalue(inst.binop.right_ref, cx_value);
+                this->move_inst_rvalue(inst.binop.right_ref, &cx_value);
                 this->encode(FE_MOVZXr32r16, FE_CX, FE_CX);
                 break;
             }
             case 4:
             case 8: {
                 this->encode(FE_XOR32rr, FE_DX, FE_DX);
-                this->move_inst_rvalue(inst.binop.right_ref, cx_value);
+                this->move_inst_rvalue(inst.binop.right_ref, &cx_value);
                 break;
             }
             default: SIR_ASSERT(0); break;
@@ -1123,7 +1005,7 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
 
             this->encode(div_inst, FE_CX);
 
-            this->encode_mnem(Mnem_MOV, ax_value, dest_value);
+            this->encode_mnem(Mnem_MOV, &ax_value, &dest_value);
             break;
         }
 
@@ -1137,18 +1019,18 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
 
             switch (operand_size) {
             case 1: {
-                this->move_inst_rvalue(inst.binop.left_ref, ax_value);
+                this->move_inst_rvalue(inst.binop.left_ref, &ax_value);
                 this->encode(FE_MOVSXr32r8, FE_AX, FE_AX);
                 break;
             }
             case 2: {
-                this->move_inst_rvalue(inst.binop.left_ref, ax_value);
+                this->move_inst_rvalue(inst.binop.left_ref, &ax_value);
                 this->encode(FE_MOVSXr32r16, FE_AX, FE_AX);
                 break;
             }
             case 4:
             case 8: {
-                this->move_inst_rvalue(inst.binop.left_ref, ax_value);
+                this->move_inst_rvalue(inst.binop.left_ref, &ax_value);
                 break;
             }
             default: SIR_ASSERT(0); break;
@@ -1175,18 +1057,18 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
 
             switch (operand_size) {
             case 1: {
-                this->move_inst_rvalue(inst.binop.right_ref, cx_value);
+                this->move_inst_rvalue(inst.binop.right_ref, &cx_value);
                 this->encode(FE_MOVSXr32r8, FE_CX, FE_CX);
                 break;
             }
             case 2: {
-                this->move_inst_rvalue(inst.binop.right_ref, cx_value);
+                this->move_inst_rvalue(inst.binop.right_ref, &cx_value);
                 this->encode(FE_MOVSXr32r16, FE_CX, FE_CX);
                 break;
             }
             case 4:
             case 8: {
-                this->move_inst_rvalue(inst.binop.right_ref, cx_value);
+                this->move_inst_rvalue(inst.binop.right_ref, &cx_value);
                 break;
             }
             default: SIR_ASSERT(0); break;
@@ -1194,7 +1076,7 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
 
             this->encode(div_inst, FE_CX);
 
-            this->encode_mnem(Mnem_MOV, dx_value, dest_value);
+            this->encode_mnem(Mnem_MOV, &dx_value, &dest_value);
             break;
         }
 
@@ -1208,18 +1090,18 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
 
             switch (operand_size) {
             case 1: {
-                this->move_inst_rvalue(inst.binop.left_ref, ax_value);
+                this->move_inst_rvalue(inst.binop.left_ref, &ax_value);
                 this->encode(FE_MOVZXr32r8, FE_AX, FE_AX);
                 break;
             }
             case 2: {
-                this->move_inst_rvalue(inst.binop.left_ref, ax_value);
+                this->move_inst_rvalue(inst.binop.left_ref, &ax_value);
                 this->encode(FE_MOVZXr32r16, FE_AX, FE_AX);
                 break;
             }
             case 4:
             case 8: {
-                this->move_inst_rvalue(inst.binop.left_ref, ax_value);
+                this->move_inst_rvalue(inst.binop.left_ref, &ax_value);
                 break;
             }
             default: SIR_ASSERT(0); break;
@@ -1245,19 +1127,19 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
 
             switch (operand_size) {
             case 1: {
-                this->move_inst_rvalue(inst.binop.right_ref, cx_value);
+                this->move_inst_rvalue(inst.binop.right_ref, &cx_value);
                 this->encode(FE_MOVZXr32r8, FE_CX, FE_CX);
                 break;
             }
             case 2: {
-                this->move_inst_rvalue(inst.binop.right_ref, cx_value);
+                this->move_inst_rvalue(inst.binop.right_ref, &cx_value);
                 this->encode(FE_MOVZXr32r16, FE_CX, FE_CX);
                 break;
             }
             case 4:
             case 8: {
                 this->encode(FE_XOR32rr, FE_DX, FE_DX);
-                this->move_inst_rvalue(inst.binop.right_ref, cx_value);
+                this->move_inst_rvalue(inst.binop.right_ref, &cx_value);
                 break;
             }
             default: SIR_ASSERT(0); break;
@@ -1265,7 +1147,7 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
 
             this->encode(div_inst, FE_CX);
 
-            this->encode_mnem(Mnem_MOV, dx_value, dest_value);
+            this->encode_mnem(Mnem_MOV, &dx_value, &dest_value);
             break;
         }
 
@@ -1309,8 +1191,8 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
             MetaValue dx_value =
                 create_int_register_value(operand_size, RegisterIndex_RDX);
 
-            this->move_inst_rvalue(inst.binop.left_ref, ax_value);
-            this->move_inst_rvalue(inst.binop.right_ref, dx_value);
+            this->move_inst_rvalue(inst.binop.left_ref, &ax_value);
+            this->move_inst_rvalue(inst.binop.right_ref, &dx_value);
 
             int64_t x86_inst = 0;
             switch (operand_size) {
@@ -1360,7 +1242,7 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
             MetaValue al_value =
                 create_int_register_value(1, RegisterIndex_RAX);
             this->encode(FE_AND8ri, FE_AX, 1);
-            this->encode_mnem(Mnem_MOV, al_value, dest_value);
+            this->encode_mnem(Mnem_MOV, &al_value, &dest_value);
             break;
         }
 
@@ -1382,8 +1264,8 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
             MetaValue dx_value =
                 create_int_register_value(operand_size, RegisterIndex_RDX);
 
-            this->move_inst_rvalue(inst.binop.left_ref, ax_value);
-            this->move_inst_rvalue(inst.binop.right_ref, dx_value);
+            this->move_inst_rvalue(inst.binop.left_ref, &ax_value);
+            this->move_inst_rvalue(inst.binop.right_ref, &dx_value);
 
             int64_t x86_inst = 0;
 
@@ -1422,7 +1304,7 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
             }
 
             this->encode(x86_inst, FE_AX, FE_DX);
-            this->encode_mnem(Mnem_MOV, ax_value, dest_value);
+            this->encode_mnem(Mnem_MOV, &ax_value, &dest_value);
             break;
             break;
         }
@@ -1441,8 +1323,8 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
                     SIRModuleGetInst(this->module, inst.binop.right_ref).type),
                 RegisterIndex_RCX);
 
-            this->move_inst_rvalue(inst.binop.left_ref, ax_value);
-            this->move_inst_rvalue(inst.binop.right_ref, cx_value);
+            this->move_inst_rvalue(inst.binop.left_ref, &ax_value);
+            this->move_inst_rvalue(inst.binop.right_ref, &cx_value);
 
             int64_t x86_inst = 0;
 
@@ -1481,7 +1363,7 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
             }
 
             this->encode(x86_inst, FE_AX, FE_CX);
-            this->encode_mnem(Mnem_MOV, ax_value, dest_value);
+            this->encode_mnem(Mnem_MOV, &ax_value, &dest_value);
             break;
         }
         }
@@ -1490,7 +1372,7 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
 
     case SIRInstKind_ArrayElemPtr: {
         MetaValue ptr_value = create_int_register_value(8, RegisterIndex_RAX);
-        this->move_inst_rvalue(inst.array_elem_ptr.accessed_ref, ptr_value);
+        this->move_inst_rvalue(inst.array_elem_ptr.accessed_ref, &ptr_value);
 
         size_t index_size = SIRTypeSizeOf(
             this->module,
@@ -1500,15 +1382,16 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
             create_int_register_value(index_size, RegisterIndex_RCX);
         this->encode_mnem(
             Mnem_MOV,
-            this->meta_insts[inst.array_elem_ptr.index_ref.id],
-            index_value);
+            &this->meta_insts[inst.array_elem_ptr.index_ref.id],
+            &index_value);
 
         int32_t scale = SIRTypeSizeOf(this->module, inst.type->pointer.sub);
 
         MetaValue value_addr = create_int_register_memory_value(
             8, RegisterIndex_RAX, scale, RegisterIndex_RCX, 0);
 
-        this->encode_mnem(Mnem_LEA, value_addr, this->meta_insts[inst_ref.id]);
+        this->encode_mnem(
+            Mnem_LEA, &value_addr, &this->meta_insts[inst_ref.id]);
 
         break;
     }
@@ -1535,9 +1418,10 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
             this->meta_insts[inst.struct_elem_ptr.accessed_ref.id];
         if (SIRModuleGetInst(this->module, inst.struct_elem_ptr.accessed_ref)
                 .kind != SIRInstKind_StackSlot) {
+            MetaValue rax_value =
+                create_int_register_value(8, RegisterIndex_RAX);
             this->move_inst_rvalue(
-                inst.struct_elem_ptr.accessed_ref,
-                create_int_register_value(8, RegisterIndex_RAX));
+                inst.struct_elem_ptr.accessed_ref, &rax_value);
             ptr_mem_value = create_int_register_memory_value(
                 8, RegisterIndex_RAX, 0, RegisterIndex_None, 0);
         }
@@ -1546,7 +1430,7 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
         ptr_mem_value.regmem.offset += field_offset;
 
         this->encode_mnem(
-            Mnem_LEA, ptr_mem_value, this->meta_insts[inst_ref.id]);
+            Mnem_LEA, &ptr_mem_value, &this->meta_insts[inst_ref.id]);
         break;
     }
 
@@ -1557,7 +1441,7 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
             this->meta_insts[inst.extract_array_elem.accessed_ref.id];
         SIR_ASSERT(accessed_value.kind == MetaValueKind_IRegisterMemory);
         MetaValue ptr_value = create_int_register_value(8, RegisterIndex_RAX);
-        this->encode_mnem(Mnem_LEA, accessed_value, ptr_value);
+        this->encode_mnem(Mnem_LEA, &accessed_value, &ptr_value);
 
         size_t index_size = SIRTypeSizeOf(
             this->module,
@@ -1568,8 +1452,8 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
             create_int_register_value(index_size, RegisterIndex_RCX);
         this->encode_mnem(
             Mnem_MOV,
-            this->meta_insts[inst.extract_array_elem.index_ref.id],
-            index_value);
+            &this->meta_insts[inst.extract_array_elem.index_ref.id],
+            &index_value);
 
         MetaValue value_addr = create_int_register_memory_value(
             value_size, RegisterIndex_RAX, value_size, RegisterIndex_RCX, 0);
@@ -1580,7 +1464,7 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
         case 4:
         case 8: {
             this->encode_mnem(
-                Mnem_MOV, value_addr, this->meta_insts[inst_ref.id]);
+                Mnem_MOV, &value_addr, &this->meta_insts[inst_ref.id]);
             break;
         }
         default: {
@@ -1625,7 +1509,7 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
         case 8: {
             ptr_mem_value.size_class = SIZE_CLASSES[value_size];
             this->encode_mnem(
-                Mnem_MOV, ptr_mem_value, this->meta_insts[inst_ref.id]);
+                Mnem_MOV, &ptr_mem_value, &this->meta_insts[inst_ref.id]);
             break;
         }
         default: {
@@ -1653,7 +1537,7 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
         case 8: {
             MetaValue stored_value =
                 create_int_register_value(value_size, RegisterIndex_RAX);
-            this->move_inst_rvalue(inst.store.value_ref, stored_value);
+            this->move_inst_rvalue(inst.store.value_ref, &stored_value);
 
             MetaValue ptr_value = {};
             switch (ptr_inst.kind) {
@@ -1664,14 +1548,14 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
             }
             default: {
                 ptr_value = create_int_register_value(8, RegisterIndex_RCX);
-                this->move_inst_rvalue(inst.store.ptr_ref, ptr_value);
+                this->move_inst_rvalue(inst.store.ptr_ref, &ptr_value);
                 ptr_value = create_int_register_memory_value(
                     value_size, ptr_value.reg.index, 0, RegisterIndex_None, 0);
                 break;
             }
             }
 
-            this->encode_mnem(Mnem_MOV, stored_value, ptr_value);
+            this->encode_mnem(Mnem_MOV, &stored_value, &ptr_value);
             break;
         }
         default: {
@@ -1692,8 +1576,8 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
                     create_int_register_value(8, RegisterIndex_RDX);
                 this->encode_mnem(
                     Mnem_LEA,
-                    this->meta_insts[inst.store.value_ref.id],
-                    source_ptr_value);
+                    &this->meta_insts[inst.store.value_ref.id],
+                    &source_ptr_value);
                 source_ptr_mem_value = create_int_register_memory_value(
                     0, RegisterIndex_RDX, 0, RegisterIndex_None, 0);
             }
@@ -1703,8 +1587,8 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
                     create_int_register_value(8, RegisterIndex_RCX);
                 this->encode_mnem(
                     Mnem_LEA,
-                    this->meta_insts[inst.store.ptr_ref.id],
-                    dest_ptr_value);
+                    &this->meta_insts[inst.store.ptr_ref.id],
+                    &dest_ptr_value);
                 dest_ptr_mem_value = create_int_register_memory_value(
                     0, RegisterIndex_RCX, 0, RegisterIndex_None, 0);
             }
@@ -1738,7 +1622,7 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
             }
             default: {
                 ptr_value = create_int_register_value(8, RegisterIndex_RAX);
-                this->move_inst_rvalue(inst.store.ptr_ref, ptr_value);
+                this->move_inst_rvalue(inst.store.ptr_ref, &ptr_value);
                 ptr_value = create_int_register_memory_value(
                     value_size, ptr_value.reg.index, 0, RegisterIndex_None, 0);
                 break;
@@ -1746,7 +1630,7 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
             }
 
             this->encode_mnem(
-                Mnem_MOV, ptr_value, this->meta_insts[inst_ref.id]);
+                Mnem_MOV, &ptr_value, &this->meta_insts[inst_ref.id]);
             break;
         }
         default: {
@@ -1758,8 +1642,8 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
                     create_int_register_value(8, RegisterIndex_RDX);
                 this->encode_mnem(
                     Mnem_LEA,
-                    this->meta_insts[inst.load.ptr_ref.id],
-                    source_ptr_value);
+                    &this->meta_insts[inst.load.ptr_ref.id],
+                    &source_ptr_value);
                 source_ptr_mem_value = create_int_register_memory_value(
                     0, RegisterIndex_RDX, 0, RegisterIndex_None, 0);
             }
@@ -1769,7 +1653,7 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
                 MetaValue dest_ptr_value =
                     create_int_register_value(8, RegisterIndex_RCX);
                 this->encode_mnem(
-                    Mnem_LEA, this->meta_insts[inst_ref.id], dest_ptr_value);
+                    Mnem_LEA, &this->meta_insts[inst_ref.id], &dest_ptr_value);
                 dest_ptr_mem_value = create_int_register_memory_value(
                     0, RegisterIndex_RCX, 0, RegisterIndex_None, 0);
             }
@@ -1895,7 +1779,7 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
                 }
                 }
 
-                this->move_inst_rvalue(param_inst_ref, dest_param_value);
+                this->move_inst_rvalue(param_inst_ref, &dest_param_value);
             }
 
             if (called_func->variadic) {
@@ -1904,7 +1788,7 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
                     create_imm_int_value(1, used_float_regs);
                 MetaValue float_count_reg =
                     create_int_register_value(1, RegisterIndex_RAX);
-                this->encode_mnem(Mnem_MOV, float_count_imm, float_count_reg);
+                this->encode_mnem(Mnem_MOV, &float_count_imm, &float_count_reg);
             }
 
             break;
@@ -1925,7 +1809,7 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
                     called_func->return_type->int_.bits >> 3,
                     RegisterIndex_RAX);
                 this->encode_mnem(
-                    Mnem_MOV, returned_value, this->meta_insts[inst_ref.id]);
+                    Mnem_MOV, &returned_value, &this->meta_insts[inst_ref.id]);
                 break;
             }
 
@@ -1933,7 +1817,7 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
                 MetaValue returned_value =
                     create_int_register_value(8, RegisterIndex_RAX);
                 this->encode_mnem(
-                    Mnem_MOV, returned_value, this->meta_insts[inst_ref.id]);
+                    Mnem_MOV, &returned_value, &this->meta_insts[inst_ref.id]);
                 break;
             }
 
@@ -1942,7 +1826,7 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
                     called_func->return_type->float_.bits >> 3,
                     RegisterIndex_XMM0);
                 this->encode_mnem(
-                    Mnem_MOV, returned_value, this->meta_insts[inst_ref.id]);
+                    Mnem_MOV, &returned_value, &this->meta_insts[inst_ref.id]);
                 break;
             }
 
@@ -1986,8 +1870,8 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
 
         this->encode_mnem(
             Mnem_MOV,
-            this->meta_insts[inst.return_value.inst_ref.id],
-            result_location);
+            &this->meta_insts[inst.return_value.inst_ref.id],
+            &result_location);
 
         this->encode_function_ending(func_ref);
         break;
@@ -2009,7 +1893,9 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
         MetaValue al_value = create_int_register_value(1, RegisterIndex_RAX);
 
         this->encode_mnem(
-            Mnem_MOV, this->meta_insts[inst.branch.cond_inst_ref.id], al_value);
+            Mnem_MOV,
+            &this->meta_insts[inst.branch.cond_inst_ref.id],
+            &al_value);
 
         this->encode(
             FE_TEST8rr,
@@ -2053,8 +1939,9 @@ X86_64AsmBuilder::generate_global(uint32_t flags, SIRSlice<uint8_t> data)
         }
     }
 
-    size_t offset = this->obj_builder->get_section_size(section_type);
-    this->obj_builder->add_to_section(section_type, data);
+    size_t offset =
+        this->obj_builder->get_section_size(this->obj_builder, section_type);
+    this->obj_builder->add_to_section(this->obj_builder, section_type, data);
 
     return create_global_value(data.len, section_type, offset);
 }
@@ -2108,14 +1995,16 @@ void X86_64AsmBuilder::generate_function(SIRInstRef func_ref)
 
     if (func->blocks.len == 0) {
         // Function without body
-        meta_func->symbol_ref = obj_builder->add_symbol(
+        meta_func->symbol_ref = this->obj_builder->add_symbol(
+            this->obj_builder,
             func->name,
             SIRSectionType_None,
             SIRSymbolType_None,
             SIRLinkage_External);
     } else {
         // Function with body
-        meta_func->symbol_ref = obj_builder->add_symbol(
+        meta_func->symbol_ref = this->obj_builder->add_symbol(
+            this->obj_builder,
             func->name,
             SIRSectionType_Text,
             SIRSymbolType_Function,
@@ -2239,8 +2128,8 @@ void X86_64AsmBuilder::generate_function(SIRInstRef func_ref)
         }
     }
 
-    size_t function_start_offset =
-        this->obj_builder->get_section_size(SIRSectionType_Text);
+    size_t function_start_offset = this->obj_builder->get_section_size(
+        this->obj_builder, SIRSectionType_Text);
 
     // Begin stack frame
     meta_func->stack_size = SIR_ROUND_UP(0x10, meta_func->stack_size);
@@ -2277,7 +2166,7 @@ void X86_64AsmBuilder::generate_function(SIRInstRef func_ref)
                     stack_param_offset += 8;
                 }
 
-                this->encode_mnem(Mnem_MOV, param_value, param_meta_inst);
+                this->encode_mnem(Mnem_MOV, &param_value, &param_meta_inst);
                 break;
             }
             case SIRTypeKind_Int: {
@@ -2296,7 +2185,7 @@ void X86_64AsmBuilder::generate_function(SIRInstRef func_ref)
                     stack_param_offset += 8;
                 }
 
-                this->encode_mnem(Mnem_MOV, param_value, param_meta_inst);
+                this->encode_mnem(Mnem_MOV, &param_value, &param_meta_inst);
                 break;
             }
             case SIRTypeKind_Float: {
@@ -2317,7 +2206,7 @@ void X86_64AsmBuilder::generate_function(SIRInstRef func_ref)
                     stack_param_offset += 8;
                 }
 
-                this->encode_mnem(Mnem_MOV, param_value, param_meta_inst);
+                this->encode_mnem(Mnem_MOV, &param_value, &param_meta_inst);
                 break;
             }
             default: {
@@ -2380,33 +2269,161 @@ void X86_64AsmBuilder::generate_function(SIRInstRef func_ref)
             meta_block->block.offset - jump_patch.instruction_offset);
     }
 
-    size_t function_end_offset =
-        this->obj_builder->get_section_size(SIRSectionType_Text);
+    size_t function_end_offset = this->obj_builder->get_section_size(
+        this->obj_builder, SIRSectionType_Text);
 
     size_t function_size = function_end_offset - function_start_offset;
 
-    obj_builder->set_symbol_region(
-        meta_func->symbol_ref, function_start_offset, function_size);
+    this->obj_builder->set_symbol_region(
+        this->obj_builder,
+        meta_func->symbol_ref,
+        function_start_offset,
+        function_size);
 }
 
-void X86_64AsmBuilder::generate()
+static void generate(SIRAsmBuilder *asm_builder)
 {
     ZoneScoped;
+    X86_64AsmBuilder *builder = (X86_64AsmBuilder *)asm_builder;
 
     // Generate globals
-    for (SIRInstRef global_ref : this->module->globals) {
-        SIRInst global = SIRModuleGetInst(this->module, global_ref);
-        this->meta_insts[global_ref.id] =
-            this->generate_global(global.global.flags, global.global.data);
+    for (SIRInstRef global_ref : builder->module->globals) {
+        SIRInst global = SIRModuleGetInst(builder->module, global_ref);
+        builder->meta_insts[global_ref.id] =
+            builder->generate_global(global.global.flags, global.global.data);
     }
 
     // Generate functions
-    for (SIRInstRef func_ref : this->module->functions) {
-        this->generate_function(func_ref);
+    for (SIRInstRef func_ref : builder->module->functions) {
+        builder->generate_function(func_ref);
     }
 }
 
-void X86_64AsmBuilder::destroy()
+static void destroy(SIRAsmBuilder *asm_builder)
 {
-    this->meta_insts.destroy();
+    X86_64AsmBuilder *builder = (X86_64AsmBuilder *)asm_builder;
+    builder->meta_insts.destroy();
+}
+
+SIRAsmBuilder *
+SIRCreateX86_64Builder(SIRModule *module, SIRObjectBuilder *obj_builder)
+{
+    ZoneScoped;
+
+    X86_64AsmBuilder *asm_builder =
+        module->arena->alloc_init<X86_64AsmBuilder>();
+
+    asm_builder->vt.generate = generate;
+    asm_builder->vt.destroy = destroy;
+
+    asm_builder->module = module;
+    asm_builder->obj_builder = obj_builder;
+
+    asm_builder->meta_insts =
+        SIRArray<MetaValue>::create(SIRMallocAllocator::get_instance());
+    asm_builder->meta_insts.resize(module->insts.len);
+
+    for (size_t i = 0; i < asm_builder->meta_insts.len; ++i) {
+        asm_builder->meta_insts[i] = {};
+    }
+
+    SIZE_CLASSES[1] = SizeClass_1;
+    SIZE_CLASSES[2] = SizeClass_2;
+    SIZE_CLASSES[4] = SizeClass_4;
+    SIZE_CLASSES[8] = SizeClass_8;
+
+    SIZE_CLASS_SIZES[SizeClass_1] = 1;
+    SIZE_CLASS_SIZES[SizeClass_2] = 2;
+    SIZE_CLASS_SIZES[SizeClass_4] = 4;
+    SIZE_CLASS_SIZES[SizeClass_8] = 8;
+
+    OPERAND_KINDS[MetaValueKind_IRegisterMemory] = OperandKind_Memory;
+    OPERAND_KINDS[MetaValueKind_IRegister] = OperandKind_Reg;
+    OPERAND_KINDS[MetaValueKind_FRegister] = OperandKind_FReg;
+    OPERAND_KINDS[MetaValueKind_Global] = OperandKind_Memory;
+    OPERAND_KINDS[MetaValueKind_ImmInt] = OperandKind_Imm;
+
+    ENCODING_ENTRIES[Mnem_MOV][OperandKind_Reg][SizeClass_8][OperandKind_Reg]
+                    [SizeClass_8] = FE_MOV64rr;
+    ENCODING_ENTRIES[Mnem_MOV][OperandKind_Reg][SizeClass_4][OperandKind_Reg]
+                    [SizeClass_4] = FE_MOV32rr;
+    ENCODING_ENTRIES[Mnem_MOV][OperandKind_Reg][SizeClass_2][OperandKind_Reg]
+                    [SizeClass_2] = FE_MOV16rr;
+    ENCODING_ENTRIES[Mnem_MOV][OperandKind_Reg][SizeClass_1][OperandKind_Reg]
+                    [SizeClass_1] = FE_MOV8rr;
+
+    ENCODING_ENTRIES[Mnem_MOV][OperandKind_Reg][SizeClass_8][OperandKind_Memory]
+                    [SizeClass_8] = FE_MOV64rm;
+    ENCODING_ENTRIES[Mnem_MOV][OperandKind_Reg][SizeClass_4][OperandKind_Memory]
+                    [SizeClass_4] = FE_MOV32rm;
+    ENCODING_ENTRIES[Mnem_MOV][OperandKind_Reg][SizeClass_2][OperandKind_Memory]
+                    [SizeClass_2] = FE_MOV16rm;
+    ENCODING_ENTRIES[Mnem_MOV][OperandKind_Reg][SizeClass_1][OperandKind_Memory]
+                    [SizeClass_1] = FE_MOV8rm;
+
+    ENCODING_ENTRIES[Mnem_MOV][OperandKind_Reg][SizeClass_8][OperandKind_Imm]
+                    [SizeClass_8] = FE_MOV64ri;
+    ENCODING_ENTRIES[Mnem_MOV][OperandKind_Reg][SizeClass_4][OperandKind_Imm]
+                    [SizeClass_4] = FE_MOV32ri;
+    ENCODING_ENTRIES[Mnem_MOV][OperandKind_Reg][SizeClass_2][OperandKind_Imm]
+                    [SizeClass_2] = FE_MOV16ri;
+    ENCODING_ENTRIES[Mnem_MOV][OperandKind_Reg][SizeClass_1][OperandKind_Imm]
+                    [SizeClass_1] = FE_MOV8ri;
+
+    /* ENCODING_ENTRIES[Mnem_MOV][OperandKind_Memory][SizeClass_8] */
+    /*                 [OperandKind_Imm][SizeClass_8] = FE_MOV64mi; */
+    ENCODING_ENTRIES[Mnem_MOV][OperandKind_Memory][SizeClass_4][OperandKind_Imm]
+                    [SizeClass_4] = FE_MOV32mi;
+    ENCODING_ENTRIES[Mnem_MOV][OperandKind_Memory][SizeClass_2][OperandKind_Imm]
+                    [SizeClass_2] = FE_MOV16mi;
+    ENCODING_ENTRIES[Mnem_MOV][OperandKind_Memory][SizeClass_1][OperandKind_Imm]
+                    [SizeClass_1] = FE_MOV8mi;
+
+    ENCODING_ENTRIES[Mnem_MOV][OperandKind_Memory][SizeClass_8][OperandKind_Reg]
+                    [SizeClass_8] = FE_MOV64mr;
+    ENCODING_ENTRIES[Mnem_MOV][OperandKind_Memory][SizeClass_4][OperandKind_Reg]
+                    [SizeClass_4] = FE_MOV32mr;
+    ENCODING_ENTRIES[Mnem_MOV][OperandKind_Memory][SizeClass_2][OperandKind_Reg]
+                    [SizeClass_2] = FE_MOV16mr;
+    ENCODING_ENTRIES[Mnem_MOV][OperandKind_Memory][SizeClass_1][OperandKind_Reg]
+                    [SizeClass_1] = FE_MOV8mr;
+
+    ENCODING_ENTRIES[Mnem_MOV][OperandKind_FReg][SizeClass_4][OperandKind_FReg]
+                    [SizeClass_4] = FE_SSE_MOVSSrr;
+    ENCODING_ENTRIES[Mnem_MOV][OperandKind_FReg][SizeClass_8][OperandKind_FReg]
+                    [SizeClass_8] = FE_SSE_MOVSDrr;
+
+    ENCODING_ENTRIES[Mnem_MOV][OperandKind_FReg][SizeClass_4]
+                    [OperandKind_Memory][SizeClass_4] = FE_SSE_MOVSSrm;
+    ENCODING_ENTRIES[Mnem_MOV][OperandKind_FReg][SizeClass_8]
+                    [OperandKind_Memory][SizeClass_8] = FE_SSE_MOVSDrm;
+
+    ENCODING_ENTRIES[Mnem_MOV][OperandKind_Memory][SizeClass_4]
+                    [OperandKind_FReg][SizeClass_4] = FE_SSE_MOVSSmr;
+    ENCODING_ENTRIES[Mnem_MOV][OperandKind_Memory][SizeClass_8]
+                    [OperandKind_FReg][SizeClass_8] = FE_SSE_MOVSDmr;
+
+    ENCODING_ENTRIES[Mnem_LEA][OperandKind_Reg][SizeClass_8][OperandKind_Memory]
+                    [SizeClass_1] = FE_LEA64rm;
+    ENCODING_ENTRIES[Mnem_LEA][OperandKind_Reg][SizeClass_8][OperandKind_Memory]
+                    [SizeClass_2] = FE_LEA64rm;
+    ENCODING_ENTRIES[Mnem_LEA][OperandKind_Reg][SizeClass_8][OperandKind_Memory]
+                    [SizeClass_4] = FE_LEA64rm;
+    ENCODING_ENTRIES[Mnem_LEA][OperandKind_Reg][SizeClass_8][OperandKind_Memory]
+                    [SizeClass_8] = FE_LEA64rm;
+    ENCODING_ENTRIES[Mnem_LEA][OperandKind_Reg][SizeClass_8][OperandKind_Memory]
+                    [SizeClass_None] = FE_LEA64rm;
+
+    ENCODING_ENTRIES[Mnem_LEA][OperandKind_Memory][SizeClass_8]
+                    [OperandKind_Memory][SizeClass_1] = FE_LEA64rm;
+    ENCODING_ENTRIES[Mnem_LEA][OperandKind_Memory][SizeClass_8]
+                    [OperandKind_Memory][SizeClass_2] = FE_LEA64rm;
+    ENCODING_ENTRIES[Mnem_LEA][OperandKind_Memory][SizeClass_8]
+                    [OperandKind_Memory][SizeClass_4] = FE_LEA64rm;
+    ENCODING_ENTRIES[Mnem_LEA][OperandKind_Memory][SizeClass_8]
+                    [OperandKind_Memory][SizeClass_8] = FE_LEA64rm;
+    ENCODING_ENTRIES[Mnem_LEA][OperandKind_Memory][SizeClass_8]
+                    [OperandKind_Memory][SizeClass_None] = FE_LEA64rm;
+
+    return &asm_builder->vt;
 }

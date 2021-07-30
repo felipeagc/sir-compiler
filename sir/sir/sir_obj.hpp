@@ -22,38 +22,50 @@ struct SIRSymbolRef {
 };
 
 struct SIRObjectBuilder {
-    virtual void add_to_section(SIRSectionType type, SIRSlice<uint8_t> data) = 0;
-    virtual void set_section_data(SIRSectionType type, size_t offset, SIRSlice<uint8_t> data) = 0;
-    virtual size_t get_section_size(SIRSectionType type) = 0;
+    void (*add_to_section)(
+        SIRObjectBuilder *builder, SIRSectionType type, SIRSlice<uint8_t> data);
+    void (*set_section_data)(
+        SIRObjectBuilder *builder,
+        SIRSectionType type,
+        size_t offset,
+        SIRSlice<uint8_t> data);
+    size_t (*get_section_size)(SIRObjectBuilder *builder, SIRSectionType type);
 
-    virtual void add_data_relocation(
+    void (*add_data_relocation)(
+        SIRObjectBuilder *builder,
         SIRSectionType source_section,
         int64_t source_data_offset,
         uint64_t destination_offset,
-        size_t dest_addr_size) = 0;
+        size_t dest_addr_size);
 
-    virtual void add_procedure_relocation(
+    void (*add_procedure_relocation)(
+        SIRObjectBuilder *builder,
         SIRSymbolRef function_symbol,
         uint64_t destination_offset,
-        size_t dest_addr_size) = 0;
+        size_t dest_addr_size);
 
-    virtual SIRSymbolRef add_symbol(
+    SIRSymbolRef (*add_symbol)(
+        SIRObjectBuilder *builder,
         SIRString name,
         SIRSectionType section_type,
         SIRSymbolType type,
-        SIRLinkage linkage) = 0;
-    virtual void
-    set_symbol_region(SIRSymbolRef symbol_ref, size_t offset, size_t size) = 0;
+        SIRLinkage linkage);
+    void (*set_symbol_region)(
+        SIRObjectBuilder *builder,
+        SIRSymbolRef symbol_ref,
+        size_t offset,
+        size_t size);
 
-    virtual bool output_to_file(SIRString path) = 0;
-    virtual void destroy() = 0;
+    bool (*output_to_file)(SIRObjectBuilder *builder, SIRString path);
+    void (*destroy)(SIRObjectBuilder *builder);
 };
 
 struct SIRAsmBuilder {
-    virtual void generate() = 0;
-    virtual void destroy() = 0;
+    void (*generate)(SIRAsmBuilder *asm_builder);
+    void (*destroy)(SIRAsmBuilder *asm_builder);
 };
 
 SIRObjectBuilder *SIRCreateELF64Bbuilder(SIRModule *module);
 
-SIRAsmBuilder *SIRCreateX86_64Builder(SIRModule *module, SIRObjectBuilder *obj_builder);
+SIRAsmBuilder *
+SIRCreateX86_64Builder(SIRModule *module, SIRObjectBuilder *obj_builder);

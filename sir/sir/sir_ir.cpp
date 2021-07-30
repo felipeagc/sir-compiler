@@ -83,7 +83,7 @@ print_instruction(SIRModule *module, SIRInstRef inst_ref, SIRStringBuilder *sb)
     case SIRInstKind_Block: SIR_ASSERT(0); break;
 
     case SIRInstKind_ImmediateInt: {
-        SIRString type_string = inst.type->to_string(module);
+        SIRString type_string = SIRTypeToString(module, inst.type);
         sb->sprintf(
             "%%r%u = imm_int %.*s %lu",
             inst_ref.id,
@@ -94,7 +94,7 @@ print_instruction(SIRModule *module, SIRInstRef inst_ref, SIRStringBuilder *sb)
     }
 
     case SIRInstKind_ImmediateFloat: {
-        SIRString type_string = inst.type->to_string(module);
+        SIRString type_string = SIRTypeToString(module, inst.type);
         sb->sprintf(
             "%%r%u = imm_float %.*s %lf",
             inst_ref.id,
@@ -105,7 +105,7 @@ print_instruction(SIRModule *module, SIRInstRef inst_ref, SIRStringBuilder *sb)
     }
 
     case SIRInstKind_ImmediateBool: {
-        SIRString type_string = inst.type->to_string(module);
+        SIRString type_string = SIRTypeToString(module, inst.type);
         sb->sprintf(
             "%%r%u = imm_bool %.*s %s",
             inst_ref.id,
@@ -116,7 +116,7 @@ print_instruction(SIRModule *module, SIRInstRef inst_ref, SIRStringBuilder *sb)
     }
 
     case SIRInstKind_PtrCast: {
-        SIRString type_string = inst.type->to_string(module);
+        SIRString type_string = SIRTypeToString(module, inst.type);
         sb->sprintf(
             "%%r%u = ptr_cast %.*s %%r%u",
             inst_ref.id,
@@ -127,7 +127,7 @@ print_instruction(SIRModule *module, SIRInstRef inst_ref, SIRStringBuilder *sb)
     }
 
     case SIRInstKind_ZExt: {
-        SIRString type_string = inst.type->to_string(module);
+        SIRString type_string = SIRTypeToString(module, inst.type);
         sb->sprintf(
             "%%r%u = zext %.*s %%r%u",
             inst_ref.id,
@@ -138,7 +138,7 @@ print_instruction(SIRModule *module, SIRInstRef inst_ref, SIRStringBuilder *sb)
     }
 
     case SIRInstKind_SExt: {
-        SIRString type_string = inst.type->to_string(module);
+        SIRString type_string = SIRTypeToString(module, inst.type);
         sb->sprintf(
             "%%r%u = sext %.*s %%r%u",
             inst_ref.id,
@@ -149,7 +149,7 @@ print_instruction(SIRModule *module, SIRInstRef inst_ref, SIRStringBuilder *sb)
     }
 
     case SIRInstKind_Trunc: {
-        SIRString type_string = inst.type->to_string(module);
+        SIRString type_string = SIRTypeToString(module, inst.type);
         sb->sprintf(
             "%%r%u = trunc %.*s %%r%u",
             inst_ref.id,
@@ -160,7 +160,7 @@ print_instruction(SIRModule *module, SIRInstRef inst_ref, SIRStringBuilder *sb)
     }
 
     case SIRInstKind_Load: {
-        SIRString type_string = inst.type->to_string(module);
+        SIRString type_string = SIRTypeToString(module, inst.type);
         sb->sprintf(
             "%%r%u = load %.*s %%r%u",
             inst_ref.id,
@@ -171,7 +171,7 @@ print_instruction(SIRModule *module, SIRInstRef inst_ref, SIRStringBuilder *sb)
     }
 
     case SIRInstKind_Binop: {
-        SIRString type_string = inst.type->to_string(module);
+        SIRString type_string = SIRTypeToString(module, inst.type);
         sb->sprintf(
             "%%r%u = %s %.*s %%r%u %%r%u",
             inst_ref.id,
@@ -184,7 +184,7 @@ print_instruction(SIRModule *module, SIRInstRef inst_ref, SIRStringBuilder *sb)
     }
 
     case SIRInstKind_ArrayElemPtr: {
-        SIRString type_string = inst.type->to_string(module);
+        SIRString type_string = SIRTypeToString(module, inst.type);
         sb->sprintf(
             "%%r%u = array_elem_ptr %.*s %%r%u %%r%u",
             inst_ref.id,
@@ -196,7 +196,7 @@ print_instruction(SIRModule *module, SIRInstRef inst_ref, SIRStringBuilder *sb)
     }
 
     case SIRInstKind_StructElemPtr: {
-        SIRString type_string = inst.type->to_string(module);
+        SIRString type_string = SIRTypeToString(module, inst.type);
         sb->sprintf(
             "%%r%u = struct_elem_ptr %.*s %%r%u %u",
             inst_ref.id,
@@ -208,7 +208,7 @@ print_instruction(SIRModule *module, SIRInstRef inst_ref, SIRStringBuilder *sb)
     }
 
     case SIRInstKind_ExtractArrayElem: {
-        SIRString type_string = inst.type->to_string(module);
+        SIRString type_string = SIRTypeToString(module, inst.type);
         sb->sprintf(
             "%%r%u = extract_array_elem %.*s %%r%u %%r%u",
             inst_ref.id,
@@ -220,7 +220,7 @@ print_instruction(SIRModule *module, SIRInstRef inst_ref, SIRStringBuilder *sb)
     }
 
     case SIRInstKind_ExtractStructElem: {
-        SIRString type_string = inst.type->to_string(module);
+        SIRString type_string = SIRTypeToString(module, inst.type);
         sb->sprintf(
             "%%r%u = extract_struct_elem %.*s %%r%u %u",
             inst_ref.id,
@@ -246,7 +246,7 @@ print_instruction(SIRModule *module, SIRInstRef inst_ref, SIRStringBuilder *sb)
     }
 
     case SIRInstKind_Global: {
-        SIRString type_string = inst.type->to_string(module);
+        SIRString type_string = SIRTypeToString(module, inst.type);
         sb->sprintf(
             "%%r%u = global (%.*s)",
             inst_ref.id,
@@ -255,7 +255,7 @@ print_instruction(SIRModule *module, SIRInstRef inst_ref, SIRStringBuilder *sb)
         break;
     }
     case SIRInstKind_StackSlot: {
-        SIRString type_string = inst.type->to_string(module);
+        SIRString type_string = SIRTypeToString(module, inst.type);
         sb->sprintf(
             "%%r%u = stack_slot (%.*s)",
             inst_ref.id,
@@ -264,8 +264,8 @@ print_instruction(SIRModule *module, SIRInstRef inst_ref, SIRStringBuilder *sb)
         break;
     }
     case SIRInstKind_Store: {
-        SIRString type_string = SIRModuleGetInst(module, inst.store.value_ref)
-                                    .type->to_string(module);
+        SIRString type_string = SIRTypeToString(
+            module, SIRModuleGetInst(module, inst.store.value_ref).type);
         sb->sprintf(
             "store %.*s %%r%u %%r%u",
             (int)type_string.len,
@@ -279,9 +279,8 @@ print_instruction(SIRModule *module, SIRInstRef inst_ref, SIRStringBuilder *sb)
         break;
     }
     case SIRInstKind_ReturnValue: {
-        SIRString type_string =
-            SIRModuleGetInst(module, inst.return_value.inst_ref)
-                .type->to_string(module);
+        SIRString type_string = SIRTypeToString(
+            module, SIRModuleGetInst(module, inst.return_value.inst_ref).type);
         sb->sprintf(
             "return_value %.*s %%r%u",
             (int)type_string.len,
@@ -349,16 +348,16 @@ print_function(SIRModule *module, SIRInstRef func_ref, SIRStringBuilder *sb)
         if (i != 0) sb->append(", ");
 
         sb->sprintf("%%r%u: ", param_inst_ref.id);
-        sb->append(param_type->to_string(module));
+        sb->append(SIRTypeToString(module, param_type));
     }
     sb->append(") -> ");
-    sb->append(func->return_type->to_string(module));
+    sb->append(SIRTypeToString(module, func->return_type));
     sb->append(" {\n");
 
     for (SIRInstRef stack_slot_ref : func->stack_slots) {
         SIRInst *stack_slot = &module->insts[stack_slot_ref.id];
         SIR_ASSERT(stack_slot->type);
-        SIRString type_string = stack_slot->type->to_string(module);
+        SIRString type_string = SIRTypeToString(module, stack_slot->type);
         sb->sprintf(
             "  %%r%u: stack_slot %.*s\n",
             stack_slot_ref.id,
@@ -553,7 +552,7 @@ SIRType *SIRModuleGetCachedType(SIRModule *module, SIRType *type)
 {
     ZoneScoped;
 
-    SIRString type_string = type->to_string(module);
+    SIRString type_string = SIRTypeToString(module, type);
     SIRType *existing_type = nullptr;
     if (module->type_map.get(type_string, &existing_type)) {
         return existing_type;
@@ -631,7 +630,7 @@ SIRInstRef SIRModuleAddGlobal(
 {
     ZoneScoped;
 
-    SIR_ASSERT(type->size_of(module) == data.len);
+    SIR_ASSERT(SIRTypeSizeOf(module, type) == data.len);
 
     SIRInst global = {};
     global.kind = SIRInstKind_Global;

@@ -615,7 +615,7 @@ X86_64AsmBuilder::get_func_call_stack_parameters_size(SIRInstRef func_call_ref)
         for (uint32_t i = 0; i < called_func->param_types.len; ++i) {
             SIRType *param_type = called_func->param_types[i];
 
-            uint32_t param_align = param_type->align_of(this->module);
+            uint32_t param_align = SIRTypeAlignOf(this->module, param_type);
             stack_parameters_size =
                 SIR_ROUND_UP(param_align, stack_parameters_size);
 
@@ -648,7 +648,7 @@ X86_64AsmBuilder::get_func_call_stack_parameters_size(SIRInstRef func_call_ref)
             }
             default: {
                 // TODO: proper ABI handling of other parameter types
-                size_t param_size = param_type->size_of(this->module);
+                size_t param_size = SIRTypeSizeOf(this->module, param_type);
                 stack_parameters_size += param_size;
                 break;
             }
@@ -681,7 +681,7 @@ void X86_64AsmBuilder::move_inst_rvalue(
         break;
     }
     default: {
-        size_t value_size = inst.type->size_of(this->module);
+        size_t value_size = SIRTypeSizeOf(this->module, inst.type);
         switch (value_size) {
         case 1:
         case 2:
@@ -797,9 +797,9 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
         SIRType *dest_type = inst.type;
 
         MetaValue source_ax_value = create_int_register_value(
-            source_type->size_of(this->module), RegisterIndex_RAX);
+            SIRTypeSizeOf(this->module, source_type), RegisterIndex_RAX);
         MetaValue ext_ax_value = create_int_register_value(
-            dest_type->size_of(this->module), RegisterIndex_RAX);
+            SIRTypeSizeOf(this->module, dest_type), RegisterIndex_RAX);
 
         this->move_inst_rvalue(inst.trunc.inst_ref, source_ax_value);
 
@@ -845,9 +845,9 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
         SIRType *dest_type = inst.type;
 
         MetaValue source_ax_value = create_int_register_value(
-            source_type->size_of(this->module), RegisterIndex_RAX);
+            SIRTypeSizeOf(this->module, source_type), RegisterIndex_RAX);
         MetaValue ext_ax_value = create_int_register_value(
-            dest_type->size_of(this->module), RegisterIndex_RAX);
+            SIRTypeSizeOf(this->module, dest_type), RegisterIndex_RAX);
 
         this->move_inst_rvalue(inst.trunc.inst_ref, source_ax_value);
 
@@ -890,10 +890,10 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
         SIRType *dest_type = inst.type;
 
         MetaValue source_ax_value = create_int_register_value(
-            source_type->size_of(this->module), RegisterIndex_RAX);
+            SIRTypeSizeOf(this->module, source_type), RegisterIndex_RAX);
 
         MetaValue trunc_ax_value = create_int_register_value(
-            dest_type->size_of(this->module), RegisterIndex_RAX);
+            SIRTypeSizeOf(this->module, dest_type), RegisterIndex_RAX);
         this->move_inst_rvalue(inst.trunc.inst_ref, source_ax_value);
         this->encode_mnem(Mnem_MOV, trunc_ax_value, dest_value);
 
@@ -903,10 +903,10 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
     case SIRInstKind_Binop: {
         MetaValue dest_value = this->meta_insts[inst_ref.id];
 
-        size_t size = inst.type->size_of(this->module);
-        size_t operand_size =
-            SIRModuleGetInst(this->module, inst.binop.left_ref)
-                .type->size_of(this->module);
+        size_t size = SIRTypeSizeOf(this->module, inst.type);
+        size_t operand_size = SIRTypeSizeOf(
+            this->module,
+            SIRModuleGetInst(this->module, inst.binop.left_ref).type);
 
         switch (inst.binop.op) {
         case SIRBinaryOperation_Unknown:
@@ -1431,12 +1431,14 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
         case SIRBinaryOperation_AShr:
         case SIRBinaryOperation_LShr: {
             MetaValue ax_value = create_int_register_value(
-                SIRModuleGetInst(this->module, inst.binop.left_ref)
-                    .type->size_of(this->module),
+                SIRTypeSizeOf(
+                    this->module,
+                    SIRModuleGetInst(this->module, inst.binop.left_ref).type),
                 RegisterIndex_RAX);
             MetaValue cx_value = create_int_register_value(
-                SIRModuleGetInst(this->module, inst.binop.right_ref)
-                    .type->size_of(this->module),
+                SIRTypeSizeOf(
+                    this->module,
+                    SIRModuleGetInst(this->module, inst.binop.right_ref).type),
                 RegisterIndex_RCX);
 
             this->move_inst_rvalue(inst.binop.left_ref, ax_value);
@@ -1490,9 +1492,9 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
         MetaValue ptr_value = create_int_register_value(8, RegisterIndex_RAX);
         this->move_inst_rvalue(inst.array_elem_ptr.accessed_ref, ptr_value);
 
-        size_t index_size =
-            SIRModuleGetInst(this->module, inst.array_elem_ptr.index_ref)
-                .type->size_of(this->module);
+        size_t index_size = SIRTypeSizeOf(
+            this->module,
+            SIRModuleGetInst(this->module, inst.array_elem_ptr.index_ref).type);
 
         MetaValue index_value =
             create_int_register_value(index_size, RegisterIndex_RCX);
@@ -1501,7 +1503,7 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
             this->meta_insts[inst.array_elem_ptr.index_ref.id],
             index_value);
 
-        int32_t scale = inst.type->pointer.sub->size_of(this->module);
+        int32_t scale = SIRTypeSizeOf(this->module, inst.type->pointer.sub);
 
         MetaValue value_addr = create_int_register_memory_value(
             8, RegisterIndex_RAX, scale, RegisterIndex_RCX, 0);
@@ -1520,12 +1522,12 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
         uint32_t field_offset = 0;
         for (uint32_t i = 0; i <= field_index; ++i) {
             SIRType *field_type = struct_type->struct_.fields[i];
-            uint32_t field_align = field_type->align_of(module);
+            uint32_t field_align = SIRTypeAlignOf(module, field_type);
             field_offset =
                 SIR_ROUND_UP(field_align, field_offset); // Add padding
 
             if (i != field_index) {
-                field_offset += field_type->size_of(module);
+                field_offset += SIRTypeSizeOf(module, field_type);
             }
         }
 
@@ -1549,7 +1551,7 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
     }
 
     case SIRInstKind_ExtractArrayElem: {
-        size_t value_size = inst.type->size_of(this->module);
+        size_t value_size = SIRTypeSizeOf(this->module, inst.type);
 
         MetaValue accessed_value =
             this->meta_insts[inst.extract_array_elem.accessed_ref.id];
@@ -1557,9 +1559,10 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
         MetaValue ptr_value = create_int_register_value(8, RegisterIndex_RAX);
         this->encode_mnem(Mnem_LEA, accessed_value, ptr_value);
 
-        size_t index_size =
+        size_t index_size = SIRTypeSizeOf(
+            this->module,
             SIRModuleGetInst(this->module, inst.extract_array_elem.index_ref)
-                .type->size_of(this->module);
+                .type);
 
         MetaValue index_value =
             create_int_register_value(index_size, RegisterIndex_RCX);
@@ -1590,7 +1593,7 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
     }
 
     case SIRInstKind_ExtractStructElem: {
-        size_t value_size = inst.type->size_of(this->module);
+        size_t value_size = SIRTypeSizeOf(this->module, inst.type);
 
         uint32_t field_index = inst.extract_struct_elem.field_index;
         SIRType *struct_type =
@@ -1601,12 +1604,12 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
         uint32_t field_offset = 0;
         for (uint32_t i = 0; i <= field_index; ++i) {
             SIRType *field_type = struct_type->struct_.fields[i];
-            uint32_t field_align = field_type->align_of(module);
+            uint32_t field_align = SIRTypeAlignOf(this->module, field_type);
             field_offset =
                 SIR_ROUND_UP(field_align, field_offset); // Add padding
 
             if (i != field_index) {
-                field_offset += field_type->size_of(module);
+                field_offset += SIRTypeSizeOf(this->module, field_type);
             }
         }
 
@@ -1637,8 +1640,9 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
     }
 
     case SIRInstKind_Store: {
-        size_t value_size = SIRModuleGetInst(this->module, inst.store.value_ref)
-                                .type->size_of(this->module);
+        size_t value_size = SIRTypeSizeOf(
+            this->module,
+            SIRModuleGetInst(this->module, inst.store.value_ref).type);
 
         SIRInst ptr_inst = SIRModuleGetInst(this->module, inst.store.ptr_ref);
 
@@ -1716,7 +1720,7 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
     }
 
     case SIRInstKind_Load: {
-        size_t value_size = inst.type->size_of(this->module);
+        size_t value_size = SIRTypeSizeOf(this->module, inst.type);
         switch (value_size) {
         case 1:
         case 2:
@@ -1812,7 +1816,7 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
                 MetaValue dest_param_value = {};
 
                 SIRType *param_type = param_inst.type;
-                uint32_t param_align = param_type->align_of(this->module);
+                uint32_t param_align = SIRTypeAlignOf(this->module, param_type);
 
                 switch (param_type->kind) {
                 case SIRTypeKind_Pointer: {
@@ -1874,7 +1878,7 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
                     break;
                 }
                 default: {
-                    size_t param_size = param_type->size_of(this->module);
+                    size_t param_size = SIRTypeSizeOf(this->module, param_type);
 
                     param_stack_offset =
                         SIR_ROUND_UP(param_align, param_stack_offset);
@@ -1957,7 +1961,8 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
     }
 
     case SIRInstKind_ReturnValue: {
-        SIRInst returned_inst = SIRModuleGetInst(this->module, inst.return_value.inst_ref);
+        SIRInst returned_inst =
+            SIRModuleGetInst(this->module, inst.return_value.inst_ref);
 
         // TODO: ABI compliance
         MetaValue result_location = {};
@@ -2130,9 +2135,9 @@ void X86_64AsmBuilder::generate_function(SIRInstRef func_ref)
         SIRInst stack_slot = SIRModuleGetInst(this->module, stack_slot_ref);
         SIR_ASSERT(stack_slot.type->kind == SIRTypeKind_Pointer);
         uint32_t slot_size =
-            stack_slot.type->pointer.sub->size_of(this->module);
+            SIRTypeSizeOf(this->module, stack_slot.type->pointer.sub);
         uint32_t slot_align =
-            stack_slot.type->pointer.sub->align_of(this->module);
+            SIRTypeAlignOf(this->module, stack_slot.type->pointer.sub);
         meta_func->stack_size = SIR_ROUND_UP(slot_align, meta_func->stack_size);
         meta_func->stack_size += slot_size;
 
@@ -2144,8 +2149,8 @@ void X86_64AsmBuilder::generate_function(SIRInstRef func_ref)
     for (SIRInstRef param_inst_ref : func->param_insts) {
         SIRInst param_inst = SIRModuleGetInst(this->module, param_inst_ref);
 
-        uint32_t inst_size = param_inst.type->size_of(this->module);
-        uint32_t inst_align = param_inst.type->align_of(this->module);
+        uint32_t inst_size = SIRTypeSizeOf(this->module, param_inst.type);
+        uint32_t inst_align = SIRTypeAlignOf(this->module, param_inst.type);
 
         meta_func->stack_size = SIR_ROUND_UP(inst_align, meta_func->stack_size);
         meta_func->stack_size += inst_size;
@@ -2195,8 +2200,8 @@ void X86_64AsmBuilder::generate_function(SIRInstRef func_ref)
             case SIRInstKind_ExtractStructElem:
             case SIRInstKind_Load:
             case SIRInstKind_FuncCall: {
-                uint32_t inst_size = inst.type->size_of(this->module);
-                uint32_t inst_align = inst.type->align_of(this->module);
+                uint32_t inst_size = SIRTypeSizeOf(this->module, inst.type);
+                uint32_t inst_align = SIRTypeAlignOf(this->module, inst.type);
 
                 meta_func->stack_size =
                     SIR_ROUND_UP(inst_align, meta_func->stack_size);
@@ -2318,7 +2323,7 @@ void X86_64AsmBuilder::generate_function(SIRInstRef func_ref)
             default: {
                 // TODO: proper ABI handling of other parameter types
 
-                size_t param_size = param_type->size_of(this->module);
+                size_t param_size = SIRTypeSizeOf(this->module, param_type);
                 MetaValue param_value = create_int_register_memory_value(
                     param_size,
                     RegisterIndex_RBP,

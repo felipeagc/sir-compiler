@@ -953,7 +953,7 @@ codegen_decl(Compiler *compiler, CodegenContext *ctx, DeclRef decl_ref)
         SIRType *ir_type = ctx->type_values[decl.decl_type_ref.id];
 
         SIRSlice<uint8_t> global_data =
-            compiler->arena->alloc<uint8_t>(ir_type->size_of(ctx->module));
+            compiler->arena->alloc<uint8_t>(SIRTypeSizeOf(ctx->module, ir_type));
 
         value = {
             true,

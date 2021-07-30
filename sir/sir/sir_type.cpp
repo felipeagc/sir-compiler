@@ -1,40 +1,40 @@
 #include "sir_type.hpp"
 #include "sir_ir.hpp"
 
-SIRString SIRType::to_string(SIRModule *module)
+SIRString SIRTypeToString(SIRModule *module, SIRType *type)
 {
-    if (this->str.len > 0) {
-        return this->str;
+    if (type->str.len > 0) {
+        return type->str;
     }
 
-    switch (this->kind) {
+    switch (type->kind) {
     case SIRTypeKind_Void: {
-        this->str = "@void";
+        type->str = "@void";
         break;
     }
     case SIRTypeKind_Bool: {
-        this->str = "@bool";
+        type->str = "@bool";
         break;
     }
     case SIRTypeKind_Pointer: {
-        SIRString sub_string = this->pointer.sub->to_string(module);
-        this->str = module->arena->sprintf(
+        SIRString sub_string = SIRTypeToString(module, type->pointer.sub);
+        type->str = module->arena->sprintf(
             "@ptr(%.*s)", (int)sub_string.len, sub_string.ptr);
         break;
     }
     case SIRTypeKind_Int: {
-        this->str = module->arena->sprintf("@int(%u)", this->int_.bits);
+        type->str = module->arena->sprintf("@int(%u)", type->int_.bits);
         break;
     }
     case SIRTypeKind_Float: {
-        this->str = module->arena->sprintf("@float(%u)", this->float_.bits);
+        type->str = module->arena->sprintf("@float(%u)", type->float_.bits);
         break;
     }
     case SIRTypeKind_Array: {
-        SIRString sub_string = this->array.sub->to_string(module);
-        this->str = module->arena->sprintf(
+        SIRString sub_string = SIRTypeToString(module, type->array.sub);
+        type->str = module->arena->sprintf(
             "@array(%lu, %.*s)",
-            this->array.count,
+            type->array.count,
             (int)sub_string.len,
             sub_string.ptr);
         break;
@@ -43,104 +43,104 @@ SIRString SIRType::to_string(SIRModule *module)
         SIRStringBuilder sb =
             SIRStringBuilder::create(SIRMallocAllocator::get_instance());
 
-        if (this->struct_.packed) {
+        if (type->struct_.packed) {
             sb.append("@packed_struct(");
         } else {
             sb.append("@struct(");
         }
 
         bool first = true;
-        for (auto &field_type : this->struct_.fields) {
+        for (auto &field_type : type->struct_.fields) {
             if (!first) {
                 sb.append(", ");
             }
-            SIRString field_str = field_type->to_string(module);
+            SIRString field_str = SIRTypeToString(module, field_type);
             sb.append(field_str);
             first = false;
         }
 
         sb.append(")");
 
-        this->str = sb.build_null_terminated(module->arena);
+        type->str = sb.build_null_terminated(module->arena);
 
         sb.destroy();
         break;
     }
     }
 
-    return this->str;
+    return type->str;
 }
 
-uint32_t SIRType::size_of(SIRModule *module)
+uint32_t SIRTypeSizeOf(SIRModule *module, SIRType *type)
 {
-    if (this->size > 0) return this->size;
+    if (type->size > 0) return type->size;
 
-    switch (this->kind) {
-    case SIRTypeKind_Void: this->size = 1; break;
-    case SIRTypeKind_Bool: this->size = 1; break;
-    case SIRTypeKind_Int: this->size = this->int_.bits / 8; break;
-    case SIRTypeKind_Float: this->size = this->float_.bits / 8; break;
+    switch (type->kind) {
+    case SIRTypeKind_Void: type->size = 1; break;
+    case SIRTypeKind_Bool: type->size = 1; break;
+    case SIRTypeKind_Int: type->size = type->int_.bits / 8; break;
+    case SIRTypeKind_Float: type->size = type->float_.bits / 8; break;
     case SIRTypeKind_Pointer: {
         switch (module->target_arch) {
-        case SIRTargetArch_X86_64: this->size = 8; break;
+        case SIRTargetArch_X86_64: type->size = 8; break;
         }
         break;
     }
     case SIRTypeKind_Array: {
-        uint32_t elem_size = this->array.sub->size_of(module);
-        uint32_t elem_alignment = this->array.sub->align_of(module);
+        uint32_t elem_size = SIRTypeSizeOf(module, type->array.sub);
+        uint32_t elem_alignment = SIRTypeAlignOf(module, type->array.sub);
         uint32_t stride = SIR_ROUND_UP(elem_alignment, elem_size);
-        this->size = stride * this->array.count;
+        type->size = stride * type->array.count;
         break;
     }
     case SIRTypeKind_Struct: {
-        this->size = 0;
+        type->size = 0;
 
-        for (auto &field_type : this->struct_.fields) {
-            uint32_t field_align = field_type->align_of(module);
-            this->size = SIR_ROUND_UP(field_align, this->size); // Add padding
+        for (auto &field_type : type->struct_.fields) {
+            uint32_t field_align = SIRTypeAlignOf(module, field_type);
+            type->size = SIR_ROUND_UP(field_align, type->size); // Add padding
 
-            uint32_t field_size = field_type->size_of(module);
-            this->size += field_size;
+            uint32_t field_size = SIRTypeSizeOf(module, field_type);
+            type->size += field_size;
         }
 
         break;
     }
     }
 
-    uint32_t self_alignment = this->align_of(module);
-    this->size =
-        SIR_ROUND_UP(self_alignment, this->size); // Round size up for alignment
+    uint32_t self_alignment = SIRTypeAlignOf(module, type);
+    type->size =
+        SIR_ROUND_UP(self_alignment, type->size); // Round size up for alignment
 
-    return this->size;
+    return type->size;
 }
 
-uint32_t SIRType::align_of(SIRModule *module)
+uint32_t SIRTypeAlignOf(SIRModule *module, SIRType *type)
 {
-    if (this->alignment > 0) return this->alignment;
+    if (type->alignment > 0) return type->alignment;
 
-    switch (this->kind) {
-    case SIRTypeKind_Void: this->alignment = 1; break;
-    case SIRTypeKind_Bool: this->alignment = 1; break;
-    case SIRTypeKind_Int: this->alignment = this->int_.bits / 8; break;
-    case SIRTypeKind_Float: this->alignment = this->float_.bits / 8; break;
+    switch (type->kind) {
+    case SIRTypeKind_Void: type->alignment = 1; break;
+    case SIRTypeKind_Bool: type->alignment = 1; break;
+    case SIRTypeKind_Int: type->alignment = type->int_.bits / 8; break;
+    case SIRTypeKind_Float: type->alignment = type->float_.bits / 8; break;
     case SIRTypeKind_Pointer: {
         switch (module->target_arch) {
-        case SIRTargetArch_X86_64: this->alignment = 8; break;
+        case SIRTargetArch_X86_64: type->alignment = 8; break;
         }
         break;
     }
     case SIRTypeKind_Array: {
-        this->alignment = this->array.sub->align_of(module);
+        type->alignment = SIRTypeAlignOf(module, type->array.sub);
         break;
     }
     case SIRTypeKind_Struct: {
-        this->alignment = 0;
+        type->alignment = 0;
 
-        for (auto &field_type : this->struct_.fields) {
-            uint32_t field_align = field_type->align_of(module);
-            if (field_align > this->alignment) {
-                this->alignment = field_align;
+        for (auto &field_type : type->struct_.fields) {
+            uint32_t field_align = SIRTypeAlignOf(module, field_type);
+            if (field_align > type->alignment) {
+                type->alignment = field_align;
             }
         }
 
@@ -148,5 +148,5 @@ uint32_t SIRType::align_of(SIRModule *module)
     }
     }
 
-    return this->alignment;
+    return type->alignment;
 }

@@ -39,8 +39,8 @@ struct SIRType {
     uint32_t size = 0;
     uint32_t alignment = 0;
     SIRString str = {};
-
-    SIRString to_string(SIRModule *module);
-    uint32_t align_of(SIRModule *module);
-    uint32_t size_of(SIRModule *module);
 };
+
+SIRString SIRTypeToString(SIRModule *module, SIRType *type);
+uint32_t SIRTypeSizeOf(SIRModule *module, SIRType *type);
+uint32_t SIRTypeAlignOf(SIRModule *module, SIRType *type);

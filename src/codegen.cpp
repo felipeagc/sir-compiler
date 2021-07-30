@@ -14,7 +14,7 @@ struct CodegenValue {
 struct CodegenContext {
     FileRef file_ref;
     SIRModule *module;
-    SIRBuilder builder;
+    SIRBuilder *builder;
     SIRArray<SIRType *> type_values;
     SIRArray<CodegenValue> expr_values;
     SIRArray<CodegenValue> decl_values;
@@ -28,7 +28,7 @@ codegen_decl(Compiler *compiler, CodegenContext *ctx, DeclRef decl_ref);
 static SIRInstRef load_lvalue(CodegenContext *ctx, const CodegenValue &value)
 {
     if (value.is_lvalue) {
-        return ctx->builder.insert_load(value.inst_ref);
+        return SIRBuilderInsertLoad(ctx->builder, value.inst_ref);
     }
     return value.inst_ref;
 }
@@ -37,10 +37,11 @@ static SIRInstRef value_into_bool(CodegenContext *ctx, SIRInstRef inst_ref)
 {
     SIRType *type = inst_ref.get(ctx->module).type;
     if (type->kind == SIRTypeKind_Int) {
-        return ctx->builder.insert_binop(
+        return SIRBuilderInsertBinop(
+            ctx->builder,
             SIRBinaryOperation_INE,
             inst_ref,
-            ctx->builder.insert_imm_int(type, 0));
+            SIRBuilderInsertImmInt(ctx->builder, type, 0));
     }
     return inst_ref;
 }
@@ -150,7 +151,9 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
     case ExprKind_StructType: break;
 
     case ExprKind_BoolLiteral: {
-        value = {false, ctx->builder.insert_imm_bool(expr.bool_literal.bool_)};
+        value = {
+            false,
+            SIRBuilderInsertImmBool(ctx->builder, expr.bool_literal.bool_)};
         break;
     }
 
@@ -161,17 +164,21 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
         case TypeKind_Int: {
             value = {
                 false,
-                ctx->builder.insert_imm_int(
+                SIRBuilderInsertImmInt(
+                    ctx->builder,
                     ctx->type_values[expr.expr_type_ref.id],
-                    expr.int_literal.i64)};
+                    expr.int_literal.i64),
+            };
             break;
         }
         case TypeKind_Float: {
             value = {
                 false,
-                ctx->builder.insert_imm_float(
+                SIRBuilderInsertImmFloat(
+                    ctx->builder,
                     ctx->type_values[expr.expr_type_ref.id],
-                    (double)expr.int_literal.i64)};
+                    (double)expr.int_literal.i64),
+            };
             break;
         }
         default: SIR_ASSERT(0);
@@ -185,7 +192,8 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
 
         value = {
             false,
-            ctx->builder.insert_imm_float(
+            SIRBuilderInsertImmFloat(
+                ctx->builder,
                 ctx->type_values[expr.expr_type_ref.id],
                 (double)expr.float_literal.f64)};
 
@@ -261,9 +269,8 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
         case TypeKind_Function: {
             // Actual function call
 
-            SIRSlice<SIRInstRef> params =
-                compiler->arena->alloc<SIRInstRef>(
-                    expr.func_call.param_refs.len);
+            SIRSlice<SIRInstRef> params = compiler->arena->alloc<SIRInstRef>(
+                expr.func_call.param_refs.len);
 
             for (size_t i = 0; i < expr.func_call.param_refs.len; ++i) {
                 CodegenValue param_value =
@@ -280,8 +287,8 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
             case SIRInstKind_Function: {
                 value = {
                     false,
-                    ctx->builder.insert_func_call(
-                        load_lvalue(ctx, func_value), params)};
+                    SIRBuilderInsertFuncCall(
+                        ctx->builder, load_lvalue(ctx, func_value), params)};
                 break;
             }
 
@@ -313,20 +320,23 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
                 if (dest_type.int_.bits < source_type.int_.bits) {
                     value = {
                         false,
-                        ctx->builder.insert_trunc(
+                        SIRBuilderInsertTrunc(
+                            ctx->builder,
                             get_ir_type(compiler, ctx->module, dest_type),
                             source_value)};
                 } else if (dest_type.int_.bits > source_type.int_.bits) {
                     if (source_type.int_.is_signed) {
                         value = {
                             false,
-                            ctx->builder.insert_sext(
+                            SIRBuilderInsertSext(
+                                ctx->builder,
                                 get_ir_type(compiler, ctx->module, dest_type),
                                 source_value)};
                     } else {
                         value = {
                             false,
-                            ctx->builder.insert_zext(
+                            SIRBuilderInsertZext(
+                                ctx->builder,
                                 get_ir_type(compiler, ctx->module, dest_type),
                                 source_value)};
                     }
@@ -354,8 +364,10 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
 
             value = {
                 false,
-                ctx->builder.insert_imm_int(
-                    ctx->type_values[expr.expr_type_ref.id], size)};
+                SIRBuilderInsertImmInt(
+                    ctx->builder,
+                    ctx->type_values[expr.expr_type_ref.id],
+                    size)};
 
             break;
         }
@@ -365,8 +377,10 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
 
             value = {
                 false,
-                ctx->builder.insert_imm_int(
-                    ctx->type_values[expr.expr_type_ref.id], size)};
+                SIRBuilderInsertImmInt(
+                    ctx->builder,
+                    ctx->type_values[expr.expr_type_ref.id],
+                    size)};
 
             break;
         }
@@ -378,7 +392,8 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
 
             value = {
                 false,
-                ctx->builder.insert_ptr_cast(
+                SIRBuilderInsertPtrCast(
+                    ctx->builder,
                     ctx->type_values[param0.as_type_ref.id],
                     load_lvalue(ctx, ptr_value))};
 
@@ -398,13 +413,17 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
         if (indexed_ref.is_lvalue) {
             value = {
                 true,
-                ctx->builder.insert_array_elem_ptr(
-                    indexed_ref.inst_ref, load_lvalue(ctx, index_ref))};
+                SIRBuilderInsertArrayElemPtr(
+                    ctx->builder,
+                    indexed_ref.inst_ref,
+                    load_lvalue(ctx, index_ref))};
         } else {
             value = {
                 false,
-                ctx->builder.insert_extract_array_elem(
-                    indexed_ref.inst_ref, load_lvalue(ctx, index_ref))};
+                SIRBuilderInsertExtractArrayElem(
+                    ctx->builder,
+                    indexed_ref.inst_ref,
+                    load_lvalue(ctx, index_ref))};
         }
 
         break;
@@ -431,13 +450,13 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
             if (accessed_ref.is_lvalue) {
                 value = {
                     true,
-                    ctx->builder.insert_struct_elem_ptr(
-                        accessed_ref.inst_ref, field_index)};
+                    SIRBuilderInsertStructElemPtr(
+                        ctx->builder, accessed_ref.inst_ref, field_index)};
             } else {
                 value = {
                     false,
-                    ctx->builder.insert_extract_struct_elem(
-                        accessed_ref.inst_ref, field_index)};
+                    SIRBuilderInsertExtractStructElem(
+                        ctx->builder, accessed_ref.inst_ref, field_index)};
             }
 
             TypeRef field_type = accessed_type.struct_.field_types[field_index];
@@ -466,8 +485,7 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
                 SIRInstRef func_ref = *ctx->function_stack.last();
 
                 Expr left_expr = expr.unary.left_ref.get(compiler);
-                SIRType *ir_type =
-                    ctx->type_values[left_expr.expr_type_ref.id];
+                SIRType *ir_type = ctx->type_values[left_expr.expr_type_ref.id];
 
                 value = {false, ctx->module->add_stack_slot(func_ref, ir_type)};
             } else {
@@ -481,7 +499,9 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
                 codegen_expr(compiler, ctx, expr.unary.left_ref);
             SIR_ASSERT(operand_value.is_lvalue);
 
-            value = {true, ctx->builder.insert_load(operand_value.inst_ref)};
+            value = {
+                true,
+                SIRBuilderInsertLoad(ctx->builder, operand_value.inst_ref)};
 
             break;
         }
@@ -664,7 +684,9 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
         }
         }
 
-        value = {false, ctx->builder.insert_binop(op, left_inst, right_inst)};
+        value = {
+            false,
+            SIRBuilderInsertBinop(ctx->builder, op, left_inst, right_inst)};
 
         break;
     }
@@ -701,8 +723,8 @@ codegen_stmt(Compiler *compiler, CodegenContext *ctx, StmtRef stmt_ref)
 
         SIR_ASSERT(receiver_value.is_lvalue);
 
-        ctx->builder.insert_store(
-            receiver_value.inst_ref, load_lvalue(ctx, value));
+        SIRBuilderInsertStore(
+            ctx->builder, receiver_value.inst_ref, load_lvalue(ctx, value));
         break;
     }
 
@@ -718,9 +740,9 @@ codegen_stmt(Compiler *compiler, CodegenContext *ctx, StmtRef stmt_ref)
             SIRInstRef returned_value = load_lvalue(
                 ctx,
                 codegen_expr(compiler, ctx, stmt.return_.returned_expr_ref));
-            ctx->builder.insert_return_value(returned_value);
+            SIRBuilderInsertReturnValue(ctx->builder, returned_value);
         } else {
-            ctx->builder.insert_return_void();
+            SIRBuilderInsertReturnVoid(ctx->builder);
         }
         break;
     }
@@ -730,60 +752,60 @@ codegen_stmt(Compiler *compiler, CodegenContext *ctx, StmtRef stmt_ref)
             ctx, codegen_expr(compiler, ctx, stmt.if_.cond_expr_ref));
         cond_value = value_into_bool(ctx, cond_value);
 
-        auto current_func = ctx->builder.current_func_ref;
+        auto current_func = ctx->builder->current_func_ref;
 
         if (stmt.if_.false_stmt_ref.id == 0) {
             auto true_block = ctx->module->insert_block_at_end(current_func);
             auto merge_block = ctx->module->insert_block_at_end(current_func);
 
-            ctx->builder.insert_branch(cond_value, true_block, merge_block);
+            SIRBuilderInsertBranch(ctx->builder, cond_value, true_block, merge_block);
 
-            ctx->builder.position_at_end(true_block);
+            SIRBuilderPositionAtEnd(ctx->builder, true_block);
             codegen_stmt(compiler, ctx, stmt.if_.true_stmt_ref);
-            ctx->builder.insert_jump(merge_block);
+            SIRBuilderInsertJump(ctx->builder, merge_block);
 
-            ctx->builder.position_at_end(merge_block);
+            SIRBuilderPositionAtEnd(ctx->builder, merge_block);
         } else {
             auto true_block = ctx->module->insert_block_at_end(current_func);
             auto false_block = ctx->module->insert_block_at_end(current_func);
             auto merge_block = ctx->module->insert_block_at_end(current_func);
 
-            ctx->builder.insert_branch(cond_value, true_block, false_block);
+            SIRBuilderInsertBranch(ctx->builder, cond_value, true_block, false_block);
 
-            ctx->builder.position_at_end(true_block);
+            SIRBuilderPositionAtEnd(ctx->builder, true_block);
             codegen_stmt(compiler, ctx, stmt.if_.true_stmt_ref);
-            ctx->builder.insert_jump(merge_block);
+            SIRBuilderInsertJump(ctx->builder, merge_block);
 
-            ctx->builder.position_at_end(false_block);
+            SIRBuilderPositionAtEnd(ctx->builder, false_block);
             codegen_stmt(compiler, ctx, stmt.if_.false_stmt_ref);
-            ctx->builder.insert_jump(merge_block);
+            SIRBuilderInsertJump(ctx->builder, merge_block);
 
-            ctx->builder.position_at_end(merge_block);
+            SIRBuilderPositionAtEnd(ctx->builder, merge_block);
         }
 
         break;
     }
 
     case StmtKind_While: {
-        auto current_func = ctx->builder.current_func_ref;
+        auto current_func = ctx->builder->current_func_ref;
 
         auto cond_block = ctx->module->insert_block_at_end(current_func);
         auto true_block = ctx->module->insert_block_at_end(current_func);
         auto merge_block = ctx->module->insert_block_at_end(current_func);
 
-        ctx->builder.insert_jump(cond_block);
-        ctx->builder.position_at_end(cond_block);
+        SIRBuilderInsertJump(ctx->builder, cond_block);
+        SIRBuilderPositionAtEnd(ctx->builder, cond_block);
 
         SIRInstRef cond_value = load_lvalue(
             ctx, codegen_expr(compiler, ctx, stmt.while_.cond_expr_ref));
 
-        ctx->builder.insert_branch(cond_value, true_block, merge_block);
+        SIRBuilderInsertBranch(ctx->builder, cond_value, true_block, merge_block);
 
-        ctx->builder.position_at_end(true_block);
+        SIRBuilderPositionAtEnd(ctx->builder, true_block);
         codegen_stmt(compiler, ctx, stmt.while_.true_stmt_ref);
-        ctx->builder.insert_jump(cond_block);
+        SIRBuilderInsertJump(ctx->builder, cond_block);
 
-        ctx->builder.position_at_end(merge_block);
+        SIRBuilderPositionAtEnd(ctx->builder, merge_block);
 
         break;
     }
@@ -821,8 +843,7 @@ codegen_decl(Compiler *compiler, CodegenContext *ctx, DeclRef decl_ref)
             param_types[i] = ctx->type_values[func_type.func.param_types[i].id];
         }
 
-        SIRType *return_type =
-            ctx->type_values[func_type.func.return_type.id];
+        SIRType *return_type = ctx->type_values[func_type.func.return_type.id];
 
         SIRLinkage linkage = SIRLinkage_Internal;
         if ((decl.func.flags & FunctionFlags_Exported) ||
@@ -853,21 +874,21 @@ codegen_decl(Compiler *compiler, CodegenContext *ctx, DeclRef decl_ref)
         }
 
         if (!(decl.func.flags & FunctionFlags_Extern)) {
-            ctx->builder.set_function(value.inst_ref);
+            SIRBuilderSetFunction(ctx->builder, value.inst_ref);
 
             auto block = module->insert_block_at_end(value.inst_ref);
-            ctx->builder.position_at_end(block);
+            SIRBuilderPositionAtEnd(ctx->builder, block);
 
             for (StmtRef stmt_ref : decl.func.body_stmts) {
                 codegen_stmt(compiler, ctx, stmt_ref);
             }
 
-            SIRInst last_block = ctx->builder.current_block_ref.get(module);
+            SIRInst last_block = ctx->builder->current_block_ref.get(module);
             if (return_type->kind == SIRTypeKind_Void) {
                 if (last_block.block.inst_refs.len == 0 ||
                     last_block.block.inst_refs.last()->get(module).kind !=
                         SIRInstKind_ReturnVoid) {
-                    ctx->builder.insert_return_void();
+                    SIRBuilderInsertReturnVoid(ctx->builder);
                 }
             } else {
                 if (last_block.block.inst_refs.len == 0 ||
@@ -906,8 +927,8 @@ codegen_decl(Compiler *compiler, CodegenContext *ctx, DeclRef decl_ref)
             CodegenValue assigned_value =
                 codegen_expr(compiler, ctx, decl.local_var_decl.value_expr);
 
-            ctx->builder.insert_store(
-                value.inst_ref, load_lvalue(ctx, assigned_value));
+            SIRBuilderInsertStore(
+                ctx->builder, value.inst_ref, load_lvalue(ctx, assigned_value));
         }
 
         break;
@@ -944,9 +965,9 @@ void codegen_file(Compiler *compiler, FileRef file_ref)
     File file = compiler->files[file_ref.id];
 
     ctx.file_ref = file_ref;
-    ctx.module = SIRModule::create(
-        SIRTargetArch_X86_64, SIREndianness_LittleEndian);
-    ctx.builder = SIRBuilder::create(ctx.module);
+    ctx.module =
+        SIRModule::create(SIRTargetArch_X86_64, SIREndianness_LittleEndian);
+    ctx.builder = SIRBuilderCreate(ctx.module);
 
     ctx.type_values =
         SIRArray<SIRType *>::create(SIRMallocAllocator::get_instance());

@@ -383,13 +383,16 @@ SIRModule::create(SIRTargetArch target_arch, SIREndianness endianness)
 
     auto arena = SIRArenaAllocator::create(parent_allocator);
     auto insts = SIRArray<SIRInst>::create(SIRMallocAllocator::get_instance());
-    auto globals = SIRArray<SIRInstRef>::create(SIRMallocAllocator::get_instance());
-    auto functions = SIRArray<SIRInstRef>::create(SIRMallocAllocator::get_instance());
+    auto globals =
+        SIRArray<SIRInstRef>::create(SIRMallocAllocator::get_instance());
+    auto functions =
+        SIRArray<SIRInstRef>::create(SIRMallocAllocator::get_instance());
     auto function_map =
         SIRStringMap<SIRInstRef>::create(SIRMallocAllocator::get_instance());
     auto global_string_map =
         SIRStringMap<SIRInstRef>::create(SIRMallocAllocator::get_instance());
-    auto type_map = SIRStringMap<SIRType *>::create(SIRMallocAllocator::get_instance());
+    auto type_map =
+        SIRStringMap<SIRType *>::create(SIRMallocAllocator::get_instance());
 
     insts.push_back({}); // 0th inst
 
@@ -765,23 +768,25 @@ SIRInstRef SIRModule::insert_block_at_end(SIRInstRef func_ref)
 /*     return ref; */
 /* } */
 
-SIRBuilder SIRBuilder::create(SIRModule *module)
+SIRBuilder *SIRBuilderCreate(SIRModule *module)
 {
-    return {
+    SIRBuilder *builder = module->arena->alloc<SIRBuilder>();
+    *builder = SIRBuilder{
         .module = module,
         .current_func_ref = {UINT32_MAX},
         .current_block_ref = {UINT32_MAX},
     };
+    return builder;
 }
 
-void SIRBuilder::set_function(SIRInstRef func_ref)
+void SIRBuilderSetFunction(SIRBuilder *builder, SIRInstRef func_ref)
 {
-    this->current_func_ref = func_ref;
+    builder->current_func_ref = func_ref;
 }
 
-void SIRBuilder::position_at_end(SIRInstRef block_ref)
+void SIRBuilderPositionAtEnd(SIRBuilder *builder, SIRInstRef block_ref)
 {
-    this->current_block_ref = block_ref;
+    builder->current_block_ref = block_ref;
 }
 
 static SIRInstRef builder_insert_inst(SIRBuilder *builder, const SIRInst &inst)
@@ -796,7 +801,7 @@ static SIRInstRef builder_insert_inst(SIRBuilder *builder, const SIRInst &inst)
     return ref;
 }
 
-SIRInstRef SIRBuilder::insert_imm_int(SIRType *type, uint64_t value)
+SIRInstRef SIRBuilderInsertImmInt(SIRBuilder *builder, SIRType *type, uint64_t value)
 {
     ZoneScoped;
 
@@ -805,10 +810,10 @@ SIRInstRef SIRBuilder::insert_imm_int(SIRType *type, uint64_t value)
     inst.type = type;
     inst.imm_int.u64 = value;
 
-    return builder_insert_inst(this, inst);
+    return builder_insert_inst(builder, inst);
 }
 
-SIRInstRef SIRBuilder::insert_imm_float(SIRType *type, double value)
+SIRInstRef SIRBuilderInsertImmFloat(SIRBuilder *builder, SIRType *type, double value)
 {
     ZoneScoped;
 
@@ -817,65 +822,65 @@ SIRInstRef SIRBuilder::insert_imm_float(SIRType *type, double value)
     inst.type = type;
     inst.imm_float.f64 = value;
 
-    return builder_insert_inst(this, inst);
+    return builder_insert_inst(builder, inst);
 }
 
-SIRInstRef SIRBuilder::insert_imm_bool(bool value)
+SIRInstRef SIRBuilderInsertImmBool(SIRBuilder *builder, bool value)
 {
     ZoneScoped;
 
     SIRInst inst = {};
     inst.kind = SIRInstKind_ImmediateBool;
-    inst.type = this->module->bool_type;
+    inst.type = builder->module->bool_type;
     inst.imm_bool.value = value;
 
-    return builder_insert_inst(this, inst);
+    return builder_insert_inst(builder, inst);
 }
 
-SIRInstRef
-SIRBuilder::insert_array_elem_ptr(SIRInstRef accessed_ref, SIRInstRef index_ref)
+SIRInstRef SIRBuilderInsertArrayElemPtr(
+    SIRBuilder *builder, SIRInstRef accessed_ref, SIRInstRef index_ref)
 {
     ZoneScoped;
 
-    SIRInst accessed_inst = accessed_ref.get(this->module);
+    SIRInst accessed_inst = accessed_ref.get(builder->module);
     SIR_ASSERT(accessed_inst.type->kind == SIRTypeKind_Pointer);
     SIR_ASSERT(accessed_inst.type->pointer.sub->kind == SIRTypeKind_Array);
 
     SIRInst inst = {};
     inst.kind = SIRInstKind_ArrayElemPtr;
-    inst.type = this->module->create_pointer_type(
+    inst.type = builder->module->create_pointer_type(
         accessed_inst.type->pointer.sub->array.sub);
     inst.array_elem_ptr.accessed_ref = accessed_ref;
     inst.array_elem_ptr.index_ref = index_ref;
 
-    return builder_insert_inst(this, inst);
+    return builder_insert_inst(builder, inst);
 }
 
-SIRInstRef
-SIRBuilder::insert_struct_elem_ptr(SIRInstRef accessed_ref, uint32_t field_index)
+SIRInstRef SIRBuilderInsertStructElemPtr(
+    SIRBuilder *builder, SIRInstRef accessed_ref, uint32_t field_index)
 {
     ZoneScoped;
 
-    SIRInst accessed_inst = accessed_ref.get(this->module);
+    SIRInst accessed_inst = accessed_ref.get(builder->module);
     SIR_ASSERT(accessed_inst.type->kind == SIRTypeKind_Pointer);
     SIR_ASSERT(accessed_inst.type->pointer.sub->kind == SIRTypeKind_Struct);
 
     SIRInst inst = {};
     inst.kind = SIRInstKind_StructElemPtr;
-    inst.type = this->module->create_pointer_type(
+    inst.type = builder->module->create_pointer_type(
         accessed_inst.type->pointer.sub->struct_.fields[field_index]);
     inst.struct_elem_ptr.accessed_ref = accessed_ref;
     inst.struct_elem_ptr.field_index = field_index;
 
-    return builder_insert_inst(this, inst);
+    return builder_insert_inst(builder, inst);
 }
 
-SIRInstRef SIRBuilder::insert_extract_array_elem(
-    SIRInstRef accessed_ref, SIRInstRef index_ref)
+SIRInstRef SIRBuilderInsertExtractArrayElem(
+    SIRBuilder *builder, SIRInstRef accessed_ref, SIRInstRef index_ref)
 {
     ZoneScoped;
 
-    SIRInst accessed_inst = accessed_ref.get(this->module);
+    SIRInst accessed_inst = accessed_ref.get(builder->module);
     SIR_ASSERT(accessed_inst.type->kind == SIRTypeKind_Array);
 
     SIRInst inst = {};
@@ -884,15 +889,15 @@ SIRInstRef SIRBuilder::insert_extract_array_elem(
     inst.extract_array_elem.accessed_ref = accessed_ref;
     inst.extract_array_elem.index_ref = index_ref;
 
-    return builder_insert_inst(this, inst);
+    return builder_insert_inst(builder, inst);
 }
 
-SIRInstRef SIRBuilder::insert_extract_struct_elem(
-    SIRInstRef accessed_ref, uint32_t field_index)
+SIRInstRef SIRBuilderInsertExtractStructElem(
+    SIRBuilder *builder, SIRInstRef accessed_ref, uint32_t field_index)
 {
     ZoneScoped;
 
-    SIRInst accessed_inst = accessed_ref.get(this->module);
+    SIRInst accessed_inst = accessed_ref.get(builder->module);
     SIR_ASSERT(accessed_inst.type->kind == SIRTypeKind_Struct);
 
     SIRInst inst = {};
@@ -901,39 +906,42 @@ SIRInstRef SIRBuilder::insert_extract_struct_elem(
     inst.extract_struct_elem.accessed_ref = accessed_ref;
     inst.extract_struct_elem.field_index = field_index;
 
-    return builder_insert_inst(this, inst);
+    return builder_insert_inst(builder, inst);
 }
 
-void SIRBuilder::insert_store(SIRInstRef ptr_ref, SIRInstRef value_ref)
+void SIRBuilderInsertStore(
+    SIRBuilder *builder, SIRInstRef ptr_ref, SIRInstRef value_ref)
 {
     ZoneScoped;
 
-    SIR_ASSERT(ptr_ref.get(this->module).type->kind == SIRTypeKind_Pointer);
+    SIR_ASSERT(ptr_ref.get(builder->module).type->kind == SIRTypeKind_Pointer);
     SIR_ASSERT(
-        ptr_ref.get(this->module).type->pointer.sub ==
-        value_ref.get(this->module).type);
+        ptr_ref.get(builder->module).type->pointer.sub ==
+        value_ref.get(builder->module).type);
 
     SIRInst inst = {};
     inst.kind = SIRInstKind_Store;
     inst.store.ptr_ref = ptr_ref;
     inst.store.value_ref = value_ref;
 
-    builder_insert_inst(this, inst);
+    builder_insert_inst(builder, inst);
 }
 
-SIRInstRef SIRBuilder::insert_load(SIRInstRef ptr_ref)
+SIRInstRef SIRBuilderInsertLoad(
+    SIRBuilder *builder, SIRInstRef ptr_ref)
 {
     ZoneScoped;
 
     SIRInst inst = {};
     inst.kind = SIRInstKind_Load;
-    inst.type = ptr_ref.get(this->module).type->pointer.sub;
+    inst.type = ptr_ref.get(builder->module).type->pointer.sub;
     inst.load.ptr_ref = ptr_ref;
 
-    return builder_insert_inst(this, inst);
+    return builder_insert_inst(builder, inst);
 }
 
-SIRInstRef SIRBuilder::insert_ptr_cast(SIRType *dest_type, SIRInstRef inst_ref)
+SIRInstRef SIRBuilderInsertPtrCast(
+    SIRBuilder *builder, SIRType *dest_type, SIRInstRef inst_ref)
 {
     ZoneScoped;
 
@@ -944,10 +952,11 @@ SIRInstRef SIRBuilder::insert_ptr_cast(SIRType *dest_type, SIRInstRef inst_ref)
     inst.type = dest_type;
     inst.ptr_cast = {inst_ref};
 
-    return builder_insert_inst(this, inst);
+    return builder_insert_inst(builder, inst);
 }
 
-SIRInstRef SIRBuilder::insert_zext(SIRType *dest_type, SIRInstRef inst_ref)
+SIRInstRef SIRBuilderInsertZext(
+    SIRBuilder *builder, SIRType *dest_type, SIRInstRef inst_ref)
 {
     ZoneScoped;
 
@@ -958,10 +967,11 @@ SIRInstRef SIRBuilder::insert_zext(SIRType *dest_type, SIRInstRef inst_ref)
     inst.type = dest_type;
     inst.zext = {inst_ref};
 
-    return builder_insert_inst(this, inst);
+    return builder_insert_inst(builder, inst);
 }
 
-SIRInstRef SIRBuilder::insert_sext(SIRType *dest_type, SIRInstRef inst_ref)
+SIRInstRef SIRBuilderInsertSext(
+    SIRBuilder *builder, SIRType *dest_type, SIRInstRef inst_ref)
 {
     ZoneScoped;
 
@@ -972,10 +982,11 @@ SIRInstRef SIRBuilder::insert_sext(SIRType *dest_type, SIRInstRef inst_ref)
     inst.type = dest_type;
     inst.sext = {inst_ref};
 
-    return builder_insert_inst(this, inst);
+    return builder_insert_inst(builder, inst);
 }
 
-SIRInstRef SIRBuilder::insert_trunc(SIRType *dest_type, SIRInstRef inst_ref)
+SIRInstRef SIRBuilderInsertTrunc(
+    SIRBuilder *builder, SIRType *dest_type, SIRInstRef inst_ref)
 {
     ZoneScoped;
 
@@ -986,11 +997,14 @@ SIRInstRef SIRBuilder::insert_trunc(SIRType *dest_type, SIRInstRef inst_ref)
     inst.type = dest_type;
     inst.trunc = {inst_ref};
 
-    return builder_insert_inst(this, inst);
+    return builder_insert_inst(builder, inst);
 }
 
-SIRInstRef SIRBuilder::insert_binop(
-    SIRBinaryOperation op, SIRInstRef left_ref, SIRInstRef right_ref)
+SIRInstRef SIRBuilderInsertBinop(
+    SIRBuilder *builder,
+    SIRBinaryOperation op,
+    SIRInstRef left_ref,
+    SIRInstRef right_ref)
 {
     ZoneScoped;
 
@@ -1013,7 +1027,7 @@ SIRInstRef SIRBuilder::insert_binop(
     case SIRBinaryOperation_FMul:
     case SIRBinaryOperation_FDiv:
     case SIRBinaryOperation_FRem: {
-        inst.type = left_ref.get(this->module).type;
+        inst.type = left_ref.get(builder->module).type;
         break;
     }
 
@@ -1034,21 +1048,21 @@ SIRInstRef SIRBuilder::insert_binop(
     case SIRBinaryOperation_FGE:
     case SIRBinaryOperation_FLT:
     case SIRBinaryOperation_FLE: {
-        inst.type = this->module->bool_type;
+        inst.type = builder->module->bool_type;
         break;
     }
 
     case SIRBinaryOperation_Shl:
     case SIRBinaryOperation_AShr:
     case SIRBinaryOperation_LShr: {
-        inst.type = left_ref.get(this->module).type;
+        inst.type = left_ref.get(builder->module).type;
         break;
     }
 
     case SIRBinaryOperation_And:
     case SIRBinaryOperation_Or:
     case SIRBinaryOperation_Xor: {
-        inst.type = left_ref.get(this->module).type;
+        inst.type = left_ref.get(builder->module).type;
         break;
     }
     }
@@ -1059,27 +1073,29 @@ SIRInstRef SIRBuilder::insert_binop(
     inst.binop.left_ref = left_ref;
     inst.binop.right_ref = right_ref;
 
-    return builder_insert_inst(this, inst);
+    return builder_insert_inst(builder, inst);
 }
 
-SIRInstRef SIRBuilder::insert_func_call(
-    SIRInstRef func_ref, const SIRSlice<SIRInstRef> &parameters)
+SIRInstRef SIRBuilderInsertFuncCall(
+    SIRBuilder *builder,
+    SIRInstRef func_ref,
+    const SIRSlice<SIRInstRef> &parameters)
 {
     ZoneScoped;
 
-    SIRInst func_inst = func_ref.get(this->module);
+    SIRInst func_inst = func_ref.get(builder->module);
     SIR_ASSERT(func_inst.kind == SIRInstKind_Function);
     SIRFunction *called_function = func_inst.func;
 
     SIRInst inst = {};
     inst.kind = SIRInstKind_FuncCall;
     inst.type = called_function->return_type;
-    inst.func_call = {func_ref, this->module->arena->clone(parameters)};
+    inst.func_call = {func_ref, builder->module->arena->clone(parameters)};
 
-    return builder_insert_inst(this, inst);
+    return builder_insert_inst(builder, inst);
 }
 
-void SIRBuilder::insert_jump(SIRInstRef block_ref)
+void SIRBuilderInsertJump(SIRBuilder *builder, SIRInstRef block_ref)
 {
     ZoneScoped;
 
@@ -1087,17 +1103,20 @@ void SIRBuilder::insert_jump(SIRInstRef block_ref)
     inst.kind = SIRInstKind_Jump;
     inst.jump = {block_ref};
 
-    builder_insert_inst(this, inst);
+    builder_insert_inst(builder, inst);
 }
 
-void SIRBuilder::insert_branch(
-    SIRInstRef cond_ref, SIRInstRef true_block_ref, SIRInstRef false_block_ref)
+void SIRBuilderInsertBranch(
+    SIRBuilder *builder,
+    SIRInstRef cond_ref,
+    SIRInstRef true_block_ref,
+    SIRInstRef false_block_ref)
 {
     ZoneScoped;
 
-    SIR_ASSERT(cond_ref.get(this->module).type->kind == SIRTypeKind_Bool);
-    SIR_ASSERT(true_block_ref.get(this->module).kind == SIRInstKind_Block);
-    SIR_ASSERT(false_block_ref.get(this->module).kind == SIRInstKind_Block);
+    SIR_ASSERT(cond_ref.get(builder->module).type->kind == SIRTypeKind_Bool);
+    SIR_ASSERT(true_block_ref.get(builder->module).kind == SIRInstKind_Block);
+    SIR_ASSERT(false_block_ref.get(builder->module).kind == SIRInstKind_Block);
 
     SIRInst inst = {};
     inst.kind = SIRInstKind_Branch;
@@ -1105,10 +1124,10 @@ void SIRBuilder::insert_branch(
     inst.branch.true_block_ref = true_block_ref;
     inst.branch.false_block_ref = false_block_ref;
 
-    builder_insert_inst(this, inst);
+    builder_insert_inst(builder, inst);
 }
 
-void SIRBuilder::insert_return_value(SIRInstRef inst_ref)
+void SIRBuilderInsertReturnValue(SIRBuilder *builder, SIRInstRef inst_ref)
 {
     ZoneScoped;
 
@@ -1116,15 +1135,15 @@ void SIRBuilder::insert_return_value(SIRInstRef inst_ref)
     inst.kind = SIRInstKind_ReturnValue;
     inst.return_value.inst_ref = inst_ref;
 
-    builder_insert_inst(this, inst);
+    builder_insert_inst(builder, inst);
 }
 
-void SIRBuilder::insert_return_void()
+void SIRBuilderInsertReturnVoid(SIRBuilder *builder)
 {
     ZoneScoped;
 
     SIRInst inst = {};
     inst.kind = SIRInstKind_ReturnVoid;
 
-    builder_insert_inst(this, inst);
+    builder_insert_inst(builder, inst);
 }

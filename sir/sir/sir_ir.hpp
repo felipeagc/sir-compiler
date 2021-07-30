@@ -237,7 +237,8 @@ struct SIRModule {
     SIRType *f64_type;
 
   public:
-    static SIRModule *create(SIRTargetArch target_arch, SIREndianness endianness);
+    static SIRModule *
+    create(SIRTargetArch target_arch, SIREndianness endianness);
     void destroy();
 
     SIRType *create_pointer_type(SIRType *sub);
@@ -254,7 +255,8 @@ struct SIRModule {
         SIRSlice<SIRType *> param_types,
         SIRType *return_type);
 
-    SIRInstRef add_global(SIRType *type, uint32_t flags, SIRSlice<uint8_t> data);
+    SIRInstRef
+    add_global(SIRType *type, uint32_t flags, SIRSlice<uint8_t> data);
     SIRInstRef add_global_string(const SIRString &str);
 
     SIRInstRef add_stack_slot(SIRInstRef func_ref, SIRType *type);
@@ -271,43 +273,61 @@ struct SIRBuilder {
     SIRModule *module;
     SIRInstRef current_func_ref;
     SIRInstRef current_block_ref;
-
-    static SIRBuilder create(SIRModule *module);
-
-    void set_function(SIRInstRef func_ref);
-    void position_at_end(SIRInstRef block_ref);
-
-    SIRInstRef insert_imm_int(SIRType *type, uint64_t value);
-    SIRInstRef insert_imm_float(SIRType *type, double value);
-    SIRInstRef insert_imm_bool(bool value);
-
-    SIRInstRef insert_array_elem_ptr(SIRInstRef accessed_ref, SIRInstRef index_ref);
-    SIRInstRef insert_struct_elem_ptr(SIRInstRef accessed_ref, uint32_t field_index);
-
-    SIRInstRef insert_extract_array_elem(SIRInstRef accessed_ref, SIRInstRef index_ref);
-    SIRInstRef insert_extract_struct_elem(SIRInstRef accessed_ref, uint32_t field_index);
-
-    void insert_store(SIRInstRef ptr_ref, SIRInstRef value_ref);
-    SIRInstRef insert_load(SIRInstRef ptr_ref);
-
-    SIRInstRef insert_get_addr(SIRInstRef inst_ref);
-
-    SIRInstRef insert_stack_ptr(SIRInstRef stack_slot_ref);
-    SIRInstRef insert_global_ptr(SIRInstRef global_ref);
-    SIRInstRef insert_ptr_cast(SIRType *dest_type, SIRInstRef inst_ref);
-    SIRInstRef insert_zext(SIRType *dest_type, SIRInstRef inst_ref);
-    SIRInstRef insert_sext(SIRType *dest_type, SIRInstRef inst_ref);
-    SIRInstRef insert_trunc(SIRType *dest_type, SIRInstRef inst_ref);
-
-    SIRInstRef insert_binop(SIRBinaryOperation op, SIRInstRef left_ref, SIRInstRef right_ref);
-
-    SIRInstRef
-    insert_func_call(SIRInstRef func_ref, const SIRSlice<SIRInstRef> &parameters);
-    void insert_jump(SIRInstRef block_ref);
-    void insert_branch(SIRInstRef cond_ref, SIRInstRef true_block_ref, SIRInstRef false_block_ref);
-    void insert_return_value(SIRInstRef inst_ref);
-    void insert_return_void();
 };
+
+SIRBuilder *SIRBuilderCreate(SIRModule *module);
+void SIRBuilderSetFunction(SIRBuilder *builder, SIRInstRef func_ref);
+void SIRBuilderPositionAtEnd(SIRBuilder *builder, SIRInstRef block_ref);
+
+SIRInstRef
+SIRBuilderInsertImmInt(SIRBuilder *builder, SIRType *type, uint64_t value);
+SIRInstRef
+SIRBuilderInsertImmFloat(SIRBuilder *builder, SIRType *type, double value);
+SIRInstRef SIRBuilderInsertImmBool(SIRBuilder *builder, bool value);
+
+SIRInstRef SIRBuilderInsertArrayElemPtr(
+    SIRBuilder *builder, SIRInstRef accessed_ref, SIRInstRef index_ref);
+SIRInstRef SIRBuilderInsertStructElemPtr(
+    SIRBuilder *builder, SIRInstRef accessed_ref, uint32_t field_index);
+
+SIRInstRef SIRBuilderInsertExtractArrayElem(
+    SIRBuilder *builder, SIRInstRef accessed_ref, SIRInstRef index_ref);
+SIRInstRef SIRBuilderInsertExtractStructElem(
+    SIRBuilder *builder, SIRInstRef accessed_ref, uint32_t field_index);
+
+void SIRBuilderInsertStore(
+    SIRBuilder *builder, SIRInstRef ptr_ref, SIRInstRef value_ref);
+SIRInstRef SIRBuilderInsertLoad(SIRBuilder *builder, SIRInstRef ptr_ref);
+
+SIRInstRef SIRBuilderInsertPtrCast(
+    SIRBuilder *builder, SIRType *dest_type, SIRInstRef inst_ref);
+SIRInstRef SIRBuilderInsertZext(
+    SIRBuilder *builder, SIRType *dest_type, SIRInstRef inst_ref);
+SIRInstRef SIRBuilderInsertSext(
+    SIRBuilder *builder, SIRType *dest_type, SIRInstRef inst_ref);
+SIRInstRef SIRBuilderInsertTrunc(
+    SIRBuilder *builder, SIRType *dest_type, SIRInstRef inst_ref);
+
+SIRInstRef SIRBuilderInsertBinop(
+    SIRBuilder *builder,
+    SIRBinaryOperation op,
+    SIRInstRef left_ref,
+    SIRInstRef right_ref);
+
+SIRInstRef SIRBuilderInsertFuncCall(
+    SIRBuilder *builder,
+    SIRInstRef func_ref,
+    const SIRSlice<SIRInstRef> &parameters);
+void SIRBuilderInsertJump(SIRBuilder *builder, SIRInstRef block_ref);
+
+void SIRBuilderInsertBranch(
+    SIRBuilder *builder,
+    SIRInstRef cond_ref,
+    SIRInstRef true_block_ref,
+    SIRInstRef false_block_ref);
+
+void SIRBuilderInsertReturnValue(SIRBuilder *builder, SIRInstRef inst_ref);
+void SIRBuilderInsertReturnVoid(SIRBuilder *builder);
 
 inline SIRInst SIRInstRef::get(SIRModule *module) const
 {

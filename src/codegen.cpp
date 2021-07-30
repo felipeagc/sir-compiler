@@ -35,7 +35,7 @@ static SIRInstRef load_lvalue(CodegenContext *ctx, const CodegenValue &value)
 
 static SIRInstRef value_into_bool(CodegenContext *ctx, SIRInstRef inst_ref)
 {
-    SIRType *type = inst_ref.get(ctx->module).type;
+    SIRType *type = SIRModuleGetInst(ctx->module, inst_ref).type;
     if (type->kind == SIRTypeKind_Int) {
         return SIRBuilderInsertBinop(
             ctx->builder,
@@ -83,10 +83,11 @@ get_ir_type(Compiler *compiler, SIRModule *module, const Type &type)
     case TypeKind_Pointer: {
         SIRType *subtype =
             get_ir_type(compiler, module, type.pointer.sub_type.get(compiler));
-        return module->create_pointer_type(subtype);
+        return SIRModuleCreatePointerType(module, subtype);
     }
     case TypeKind_Slice: {
-        return module->create_struct_type(
+        return SIRModuleCreateStructType(
+            module,
             {
                 get_ir_type(
                     compiler,
@@ -100,7 +101,7 @@ get_ir_type(Compiler *compiler, SIRModule *module, const Type &type)
     case TypeKind_Array: {
         SIRType *subtype =
             get_ir_type(compiler, module, type.array.sub_type.get(compiler));
-        return module->create_array_type(subtype, type.array.size);
+        return SIRModuleCreateArrayType(module, subtype, type.array.size);
     }
     case TypeKind_Tuple: {
         SIRSlice<SIRType *> field_types =
@@ -111,7 +112,7 @@ get_ir_type(Compiler *compiler, SIRModule *module, const Type &type)
                 compiler, module, type.tuple.field_types[i].get(compiler));
         }
 
-        return module->create_struct_type(field_types, false);
+        return SIRModuleCreateStructType(module, field_types, false);
     }
     case TypeKind_Struct: {
         SIRSlice<SIRType *> field_types =
@@ -122,7 +123,7 @@ get_ir_type(Compiler *compiler, SIRModule *module, const Type &type)
                 compiler, module, type.struct_.field_types[i].get(compiler));
         }
 
-        return module->create_struct_type(field_types, false);
+        return SIRModuleCreateStructType(module, field_types, false);
     }
     }
 
@@ -213,7 +214,8 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
             SIR_ASSERT(type.pointer.sub_type.id == compiler->u8_type.id);
 
             value = {
-                false, ctx->module->add_global_string(expr.str_literal.str)};
+                false,
+                SIRModuleAddGlobalString(ctx->module, expr.str_literal.str)};
 
             break;
         }
@@ -282,7 +284,8 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
             CodegenValue func_value =
                 codegen_expr(compiler, ctx, expr.func_call.func_expr_ref);
 
-            SIRInst func_inst = func_value.inst_ref.get(ctx->module);
+            SIRInst func_inst =
+                SIRModuleGetInst(ctx->module, func_value.inst_ref);
             switch (func_inst.kind) {
             case SIRInstKind_Function: {
                 value = {
@@ -487,7 +490,9 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
                 Expr left_expr = expr.unary.left_ref.get(compiler);
                 SIRType *ir_type = ctx->type_values[left_expr.expr_type_ref.id];
 
-                value = {false, ctx->module->add_stack_slot(func_ref, ir_type)};
+                value = {
+                    false,
+                    SIRModuleAddStackSlot(ctx->module, func_ref, ir_type)};
             } else {
                 value = {false, operand_value.inst_ref};
             }
@@ -755,10 +760,13 @@ codegen_stmt(Compiler *compiler, CodegenContext *ctx, StmtRef stmt_ref)
         auto current_func = ctx->builder->current_func_ref;
 
         if (stmt.if_.false_stmt_ref.id == 0) {
-            auto true_block = ctx->module->insert_block_at_end(current_func);
-            auto merge_block = ctx->module->insert_block_at_end(current_func);
+            auto true_block =
+                SIRModuleInsertBlockAtEnd(ctx->module, current_func);
+            auto merge_block =
+                SIRModuleInsertBlockAtEnd(ctx->module, current_func);
 
-            SIRBuilderInsertBranch(ctx->builder, cond_value, true_block, merge_block);
+            SIRBuilderInsertBranch(
+                ctx->builder, cond_value, true_block, merge_block);
 
             SIRBuilderPositionAtEnd(ctx->builder, true_block);
             codegen_stmt(compiler, ctx, stmt.if_.true_stmt_ref);
@@ -766,11 +774,15 @@ codegen_stmt(Compiler *compiler, CodegenContext *ctx, StmtRef stmt_ref)
 
             SIRBuilderPositionAtEnd(ctx->builder, merge_block);
         } else {
-            auto true_block = ctx->module->insert_block_at_end(current_func);
-            auto false_block = ctx->module->insert_block_at_end(current_func);
-            auto merge_block = ctx->module->insert_block_at_end(current_func);
+            auto true_block =
+                SIRModuleInsertBlockAtEnd(ctx->module, current_func);
+            auto false_block =
+                SIRModuleInsertBlockAtEnd(ctx->module, current_func);
+            auto merge_block =
+                SIRModuleInsertBlockAtEnd(ctx->module, current_func);
 
-            SIRBuilderInsertBranch(ctx->builder, cond_value, true_block, false_block);
+            SIRBuilderInsertBranch(
+                ctx->builder, cond_value, true_block, false_block);
 
             SIRBuilderPositionAtEnd(ctx->builder, true_block);
             codegen_stmt(compiler, ctx, stmt.if_.true_stmt_ref);
@@ -789,9 +801,9 @@ codegen_stmt(Compiler *compiler, CodegenContext *ctx, StmtRef stmt_ref)
     case StmtKind_While: {
         auto current_func = ctx->builder->current_func_ref;
 
-        auto cond_block = ctx->module->insert_block_at_end(current_func);
-        auto true_block = ctx->module->insert_block_at_end(current_func);
-        auto merge_block = ctx->module->insert_block_at_end(current_func);
+        auto cond_block = SIRModuleInsertBlockAtEnd(ctx->module, current_func);
+        auto true_block = SIRModuleInsertBlockAtEnd(ctx->module, current_func);
+        auto merge_block = SIRModuleInsertBlockAtEnd(ctx->module, current_func);
 
         SIRBuilderInsertJump(ctx->builder, cond_block);
         SIRBuilderPositionAtEnd(ctx->builder, cond_block);
@@ -799,7 +811,8 @@ codegen_stmt(Compiler *compiler, CodegenContext *ctx, StmtRef stmt_ref)
         SIRInstRef cond_value = load_lvalue(
             ctx, codegen_expr(compiler, ctx, stmt.while_.cond_expr_ref));
 
-        SIRBuilderInsertBranch(ctx->builder, cond_value, true_block, merge_block);
+        SIRBuilderInsertBranch(
+            ctx->builder, cond_value, true_block, merge_block);
 
         SIRBuilderPositionAtEnd(ctx->builder, true_block);
         codegen_stmt(compiler, ctx, stmt.while_.true_stmt_ref);
@@ -853,7 +866,8 @@ codegen_decl(Compiler *compiler, CodegenContext *ctx, DeclRef decl_ref)
 
         value = {
             false,
-            module->add_function(
+            SIRModuleAddFunction(
+                module,
                 decl.name,
                 SIRCallingConvention_SystemV,
                 linkage,
@@ -869,31 +883,32 @@ codegen_decl(Compiler *compiler, CodegenContext *ctx, DeclRef decl_ref)
             DeclRef param_decl_ref = decl.func.param_decl_refs[i];
 
             SIRInstRef param_value = {};
-            param_value = module->get_func_param(value.inst_ref, i);
+            param_value = SIRModuleGetFuncParam(module, value.inst_ref, i);
             ctx->decl_values[param_decl_ref.id] = {false, param_value};
         }
 
         if (!(decl.func.flags & FunctionFlags_Extern)) {
             SIRBuilderSetFunction(ctx->builder, value.inst_ref);
 
-            auto block = module->insert_block_at_end(value.inst_ref);
+            auto block = SIRModuleInsertBlockAtEnd(module, value.inst_ref);
             SIRBuilderPositionAtEnd(ctx->builder, block);
 
             for (StmtRef stmt_ref : decl.func.body_stmts) {
                 codegen_stmt(compiler, ctx, stmt_ref);
             }
 
-            SIRInst last_block = ctx->builder->current_block_ref.get(module);
+            SIRInst last_block =
+                SIRModuleGetInst(module, ctx->builder->current_block_ref);
             if (return_type->kind == SIRTypeKind_Void) {
                 if (last_block.block.inst_refs.len == 0 ||
-                    last_block.block.inst_refs.last()->get(module).kind !=
-                        SIRInstKind_ReturnVoid) {
+                    SIRModuleGetInst(module, *last_block.block.inst_refs.last())
+                            .kind != SIRInstKind_ReturnVoid) {
                     SIRBuilderInsertReturnVoid(ctx->builder);
                 }
             } else {
                 if (last_block.block.inst_refs.len == 0 ||
-                    last_block.block.inst_refs.last()->get(module).kind !=
-                        SIRInstKind_ReturnValue) {
+                    SIRModuleGetInst(module, *last_block.block.inst_refs.last())
+                            .kind != SIRInstKind_ReturnValue) {
                     compiler->add_error(
                         decl.loc,
                         "no return statement for '%.*s'",
@@ -919,7 +934,7 @@ codegen_decl(Compiler *compiler, CodegenContext *ctx, DeclRef decl_ref)
         SIRType *ir_type = ctx->type_values[decl.decl_type_ref.id];
         SIR_ASSERT(ir_type);
 
-        value = {true, module->add_stack_slot(func_ref, ir_type)};
+        value = {true, SIRModuleAddStackSlot(module, func_ref, ir_type)};
 
         ctx->decl_values[decl_ref.id] = value;
 
@@ -942,8 +957,8 @@ codegen_decl(Compiler *compiler, CodegenContext *ctx, DeclRef decl_ref)
 
         value = {
             true,
-            module->add_global(
-                ir_type, SIRGlobalFlags_Initialized, global_data)};
+            SIRModuleAddGlobal(
+                module, ir_type, SIRGlobalFlags_Initialized, global_data)};
 
         ctx->decl_values[decl_ref.id] = value;
 
@@ -966,7 +981,7 @@ void codegen_file(Compiler *compiler, FileRef file_ref)
 
     ctx.file_ref = file_ref;
     ctx.module =
-        SIRModule::create(SIRTargetArch_X86_64, SIREndianness_LittleEndian);
+        SIRModuleCreate(SIRTargetArch_X86_64, SIREndianness_LittleEndian);
     ctx.builder = SIRBuilderCreate(ctx.module);
 
     ctx.type_values =
@@ -1004,7 +1019,7 @@ void codegen_file(Compiler *compiler, FileRef file_ref)
 #if !NDEBUG
     {
         auto allocator = SIRMallocAllocator::get_instance();
-        SIRString str = ctx.module->print_alloc(allocator);
+        SIRString str = SIRModulePrintAlloc(ctx.module, allocator);
         printf("%.*s", (int)str.len, str.ptr);
         allocator->free(str);
     }
@@ -1025,5 +1040,5 @@ void codegen_file(Compiler *compiler, FileRef file_ref)
     ctx.decl_values.destroy();
     ctx.expr_values.destroy();
 
-    ctx.module->destroy();
+    SIRModuleDestroy(ctx.module);
 }

@@ -30,9 +30,6 @@ enum SIREndianness {
 
 struct SIRInstRef {
     uint32_t id;
-
-    SIR_INLINE
-    SIRInst get(SIRModule *module) const;
 };
 
 struct SIRFunction {
@@ -235,39 +232,42 @@ struct SIRModule {
     SIRType *i64_type;
     SIRType *f32_type;
     SIRType *f64_type;
-
-  public:
-    static SIRModule *
-    create(SIRTargetArch target_arch, SIREndianness endianness);
-    void destroy();
-
-    SIRType *create_pointer_type(SIRType *sub);
-    SIRType *create_array_type(SIRType *sub, uint64_t count);
-    SIRType *create_struct_type(SIRSlice<SIRType *> fields, bool packed);
-
-    SIRType *get_cached_type(SIRType *type);
-
-    SIRInstRef add_function(
-        SIRString name,
-        SIRCallingConvention calling_convention,
-        SIRLinkage linkage,
-        bool variadic,
-        SIRSlice<SIRType *> param_types,
-        SIRType *return_type);
-
-    SIRInstRef
-    add_global(SIRType *type, uint32_t flags, SIRSlice<uint8_t> data);
-    SIRInstRef add_global_string(const SIRString &str);
-
-    SIRInstRef add_stack_slot(SIRInstRef func_ref, SIRType *type);
-    SIRInstRef get_func_param(SIRInstRef func_ref, uint32_t param_index);
-
-    SIRInstRef insert_block_at_end(SIRInstRef func_ref);
-    /* InstRef insert_block_after(InstRef func_ref, InstRef block_ref); */
-    /* InstRef insert_block_before(InstRef func_ref, InstRef block_ref); */
-
-    SIRString print_alloc(SIRAllocator *allocator);
 };
+
+SIRModule *SIRModuleCreate(SIRTargetArch target_arch, SIREndianness endianness);
+void SIRModuleDestroy(SIRModule *module);
+
+SIR_INLINE
+SIRInst SIRModuleGetInst(SIRModule *module, SIRInstRef inst_ref)
+{
+    return module->insts[inst_ref.id];
+}
+
+SIRType *SIRModuleCreatePointerType(SIRModule *module, SIRType *sub);
+SIRType *
+SIRModuleCreateArrayType(SIRModule *module, SIRType *sub, uint64_t count);
+SIRType *SIRModuleCreateStructType(
+    SIRModule *module, SIRSlice<SIRType *> fields, bool packed);
+
+SIRType *SIRModuleGetCachedType(SIRModule *module, SIRType *type);
+
+SIRInstRef SIRModuleAddFunction(
+    SIRModule *module,
+    SIRString name,
+    SIRCallingConvention calling_convention,
+    SIRLinkage linkage,
+    bool variadic,
+    SIRSlice<SIRType *> param_types,
+    SIRType *return_type);
+SIRInstRef SIRModuleAddGlobal(
+    SIRModule *module, SIRType *type, uint32_t flags, SIRSlice<uint8_t> data);
+SIRInstRef SIRModuleAddGlobalString(SIRModule *module, const SIRString &str);
+SIRInstRef
+SIRModuleAddStackSlot(SIRModule *module, SIRInstRef func_ref, SIRType *type);
+SIRInstRef SIRModuleGetFuncParam(
+    SIRModule *module, SIRInstRef func_ref, uint32_t param_index);
+SIRInstRef SIRModuleInsertBlockAtEnd(SIRModule *module, SIRInstRef func_ref);
+SIRString SIRModulePrintAlloc(SIRModule *module, SIRAllocator *allocator);
 
 struct SIRBuilder {
     SIRModule *module;
@@ -328,8 +328,3 @@ void SIRBuilderInsertBranch(
 
 void SIRBuilderInsertReturnValue(SIRBuilder *builder, SIRInstRef inst_ref);
 void SIRBuilderInsertReturnVoid(SIRBuilder *builder);
-
-inline SIRInst SIRInstRef::get(SIRModule *module) const
-{
-    return module->insts[this->id];
-}

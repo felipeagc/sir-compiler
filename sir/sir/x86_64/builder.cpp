@@ -251,7 +251,8 @@ SIR_INLINE void MetaValue::add_relocation(
     }
 }
 
-SIRAsmBuilder *SIRCreateX86_64Builder(SIRModule *module, SIRObjectBuilder *obj_builder)
+SIRAsmBuilder *
+SIRCreateX86_64Builder(SIRModule *module, SIRObjectBuilder *obj_builder)
 {
     ZoneScoped;
 
@@ -458,8 +459,8 @@ MetaValue create_imm_int_value(uint8_t bytes, uint64_t int_value)
 }
 
 SIR_INLINE
-MetaValue
-create_global_value(size_t byte_size, SIRSectionType section_type, size_t offset)
+MetaValue create_global_value(
+    size_t byte_size, SIRSectionType section_type, size_t offset)
 {
     ZoneScoped;
 
@@ -504,7 +505,8 @@ X86_64AsmBuilder::encode(uint64_t mnem, FeOp op0, FeOp op1, FeOp op2, FeOp op3)
     SIR_ASSERT(!failed);
 
     size_t inst_len = (size_t)(ptr - temp);
-    this->obj_builder->add_to_section(SIRSectionType_Text, {&temp[0], inst_len});
+    this->obj_builder->add_to_section(
+        SIRSectionType_Text, {&temp[0], inst_len});
     return inst_len;
 }
 
@@ -602,8 +604,9 @@ X86_64AsmBuilder::get_func_call_stack_parameters_size(SIRInstRef func_call_ref)
 {
     size_t stack_parameters_size = 0;
 
-    SIRInst func_call = func_call_ref.get(this->module);
-    SIRFunction *called_func = func_call.func_call.func_ref.get(this->module).func;
+    SIRInst func_call = SIRModuleGetInst(this->module, func_call_ref);
+    SIRFunction *called_func =
+        SIRModuleGetInst(this->module, func_call.func_call.func_ref).func;
     switch (called_func->calling_convention) {
     case SIRCallingConvention_SystemV: {
         uint32_t used_int_regs = 0;
@@ -663,7 +666,7 @@ X86_64AsmBuilder::get_func_call_stack_parameters_size(SIRInstRef func_call_ref)
 void X86_64AsmBuilder::move_inst_rvalue(
     SIRInstRef inst_ref, const MetaValue &dest_value)
 {
-    SIRInst inst = inst_ref.get(this->module);
+    SIRInst inst = SIRModuleGetInst(this->module, inst_ref);
     switch (inst.kind) {
     case SIRInstKind_StackSlot: {
         this->encode_mnem(Mnem_LEA, this->meta_insts[inst_ref.id], dest_value);
@@ -731,7 +734,7 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
 
     MetaFunction *meta_func = this->meta_insts[func_ref.id].func;
 
-    SIRInst inst = inst_ref.get(this->module);
+    SIRInst inst = SIRModuleGetInst(this->module, inst_ref);
 
     switch (inst.kind) {
     case SIRInstKind_Unknown: SIR_ASSERT(0); break;
@@ -789,7 +792,8 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
     case SIRInstKind_ZExt: {
         MetaValue dest_value = this->meta_insts[inst_ref.id];
 
-        SIRType *source_type = inst.trunc.inst_ref.get(this->module).type;
+        SIRType *source_type =
+            SIRModuleGetInst(this->module, inst.trunc.inst_ref).type;
         SIRType *dest_type = inst.type;
 
         MetaValue source_ax_value = create_int_register_value(
@@ -836,7 +840,8 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
     case SIRInstKind_SExt: {
         MetaValue dest_value = this->meta_insts[inst_ref.id];
 
-        SIRType *source_type = inst.trunc.inst_ref.get(this->module).type;
+        SIRType *source_type =
+            SIRModuleGetInst(this->module, inst.trunc.inst_ref).type;
         SIRType *dest_type = inst.type;
 
         MetaValue source_ax_value = create_int_register_value(
@@ -880,7 +885,8 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
     case SIRInstKind_Trunc: {
         MetaValue dest_value = this->meta_insts[inst_ref.id];
 
-        SIRType *source_type = inst.trunc.inst_ref.get(this->module).type;
+        SIRType *source_type =
+            SIRModuleGetInst(this->module, inst.trunc.inst_ref).type;
         SIRType *dest_type = inst.type;
 
         MetaValue source_ax_value = create_int_register_value(
@@ -899,7 +905,8 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
 
         size_t size = inst.type->size_of(this->module);
         size_t operand_size =
-            inst.binop.left_ref.get(this->module).type->size_of(this->module);
+            SIRModuleGetInst(this->module, inst.binop.left_ref)
+                .type->size_of(this->module);
 
         switch (inst.binop.op) {
         case SIRBinaryOperation_Unknown:
@@ -1424,11 +1431,11 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
         case SIRBinaryOperation_AShr:
         case SIRBinaryOperation_LShr: {
             MetaValue ax_value = create_int_register_value(
-                inst.binop.left_ref.get(this->module)
+                SIRModuleGetInst(this->module, inst.binop.left_ref)
                     .type->size_of(this->module),
                 RegisterIndex_RAX);
             MetaValue cx_value = create_int_register_value(
-                inst.binop.right_ref.get(this->module)
+                SIRModuleGetInst(this->module, inst.binop.right_ref)
                     .type->size_of(this->module),
                 RegisterIndex_RCX);
 
@@ -1483,8 +1490,9 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
         MetaValue ptr_value = create_int_register_value(8, RegisterIndex_RAX);
         this->move_inst_rvalue(inst.array_elem_ptr.accessed_ref, ptr_value);
 
-        size_t index_size = inst.array_elem_ptr.index_ref.get(this->module)
-                                .type->size_of(this->module);
+        size_t index_size =
+            SIRModuleGetInst(this->module, inst.array_elem_ptr.index_ref)
+                .type->size_of(this->module);
 
         MetaValue index_value =
             create_int_register_value(index_size, RegisterIndex_RCX);
@@ -1506,7 +1514,7 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
     case SIRInstKind_StructElemPtr: {
         uint32_t field_index = inst.struct_elem_ptr.field_index;
         SIRType *struct_type =
-            inst.struct_elem_ptr.accessed_ref.get(this->module)
+            SIRModuleGetInst(this->module, inst.struct_elem_ptr.accessed_ref)
                 .type->pointer.sub;
 
         uint32_t field_offset = 0;
@@ -1523,8 +1531,8 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
 
         MetaValue ptr_mem_value =
             this->meta_insts[inst.struct_elem_ptr.accessed_ref.id];
-        if (inst.struct_elem_ptr.accessed_ref.get(this->module).kind !=
-            SIRInstKind_StackSlot) {
+        if (SIRModuleGetInst(this->module, inst.struct_elem_ptr.accessed_ref)
+                .kind != SIRInstKind_StackSlot) {
             this->move_inst_rvalue(
                 inst.struct_elem_ptr.accessed_ref,
                 create_int_register_value(8, RegisterIndex_RAX));
@@ -1549,8 +1557,9 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
         MetaValue ptr_value = create_int_register_value(8, RegisterIndex_RAX);
         this->encode_mnem(Mnem_LEA, accessed_value, ptr_value);
 
-        size_t index_size = inst.extract_array_elem.index_ref.get(this->module)
-                                .type->size_of(this->module);
+        size_t index_size =
+            SIRModuleGetInst(this->module, inst.extract_array_elem.index_ref)
+                .type->size_of(this->module);
 
         MetaValue index_value =
             create_int_register_value(index_size, RegisterIndex_RCX);
@@ -1585,7 +1594,9 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
 
         uint32_t field_index = inst.extract_struct_elem.field_index;
         SIRType *struct_type =
-            inst.extract_struct_elem.accessed_ref.get(this->module).type;
+            SIRModuleGetInst(
+                this->module, inst.extract_struct_elem.accessed_ref)
+                .type;
 
         uint32_t field_offset = 0;
         for (uint32_t i = 0; i <= field_index; ++i) {
@@ -1626,10 +1637,10 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
     }
 
     case SIRInstKind_Store: {
-        size_t value_size =
-            inst.store.value_ref.get(this->module).type->size_of(this->module);
+        size_t value_size = SIRModuleGetInst(this->module, inst.store.value_ref)
+                                .type->size_of(this->module);
 
-        SIRInst ptr_inst = inst.store.ptr_ref.get(this->module);
+        SIRInst ptr_inst = SIRModuleGetInst(this->module, inst.store.ptr_ref);
 
         switch (value_size) {
         case 1:
@@ -1711,7 +1722,8 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
         case 2:
         case 4:
         case 8: {
-            SIRInst ptr_inst = inst.load.ptr_ref.get(this->module);
+            SIRInst ptr_inst =
+                SIRModuleGetInst(this->module, inst.load.ptr_ref);
 
             MetaValue ptr_value = {};
             switch (ptr_inst.kind) {
@@ -1769,7 +1781,8 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
     }
 
     case SIRInstKind_FuncCall: {
-        SIRFunction *called_func = inst.func_call.func_ref.get(this->module).func;
+        SIRFunction *called_func =
+            SIRModuleGetInst(this->module, inst.func_call.func_ref).func;
 
         // TODO: save and restore caller-saved registers
 
@@ -1788,7 +1801,8 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
                 SIRInstRef param_inst_ref = inst.func_call.parameters[i];
                 SIR_ASSERT(param_inst_ref.id > 0);
 
-                SIRInst param_inst = param_inst_ref.get(this->module);
+                SIRInst param_inst =
+                    SIRModuleGetInst(this->module, param_inst_ref);
 
                 if (i < called_func->param_types.len) {
                     SIRType *param_type = called_func->param_types[i];
@@ -1943,7 +1957,7 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
     }
 
     case SIRInstKind_ReturnValue: {
-        SIRInst returned_inst = inst.return_value.inst_ref.get(this->module);
+        SIRInst returned_inst = SIRModuleGetInst(this->module, inst.return_value.inst_ref);
 
         // TODO: ABI compliance
         MetaValue result_location = {};
@@ -2018,7 +2032,8 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
     }
 }
 
-MetaValue X86_64AsmBuilder::generate_global(uint32_t flags, SIRSlice<uint8_t> data)
+MetaValue
+X86_64AsmBuilder::generate_global(uint32_t flags, SIRSlice<uint8_t> data)
 {
     ZoneScoped;
 
@@ -2043,7 +2058,7 @@ void X86_64AsmBuilder::generate_function(SIRInstRef func_ref)
 {
     ZoneScoped;
 
-    SIRInst func_inst = func_ref.get(this->module);
+    SIRInst func_inst = SIRModuleGetInst(this->module, func_ref);
     SIR_ASSERT(func_inst.kind == SIRInstKind_Function);
     SIRFunction *func = func_inst.func;
     SIR_ASSERT(func);
@@ -2089,7 +2104,10 @@ void X86_64AsmBuilder::generate_function(SIRInstRef func_ref)
     if (func->blocks.len == 0) {
         // Function without body
         meta_func->symbol_ref = obj_builder->add_symbol(
-            func->name, SIRSectionType_None, SIRSymbolType_None, SIRLinkage_External);
+            func->name,
+            SIRSectionType_None,
+            SIRSymbolType_None,
+            SIRLinkage_External);
     } else {
         // Function with body
         meta_func->symbol_ref = obj_builder->add_symbol(
@@ -2109,7 +2127,7 @@ void X86_64AsmBuilder::generate_function(SIRInstRef func_ref)
     }
 
     for (SIRInstRef stack_slot_ref : func->stack_slots) {
-        SIRInst stack_slot = stack_slot_ref.get(this->module);
+        SIRInst stack_slot = SIRModuleGetInst(this->module, stack_slot_ref);
         SIR_ASSERT(stack_slot.type->kind == SIRTypeKind_Pointer);
         uint32_t slot_size =
             stack_slot.type->pointer.sub->size_of(this->module);
@@ -2124,7 +2142,7 @@ void X86_64AsmBuilder::generate_function(SIRInstRef func_ref)
 
     // Create stack space for function parameters
     for (SIRInstRef param_inst_ref : func->param_insts) {
-        SIRInst param_inst = param_inst_ref.get(this->module);
+        SIRInst param_inst = SIRModuleGetInst(this->module, param_inst_ref);
 
         uint32_t inst_size = param_inst.type->size_of(this->module);
         uint32_t inst_align = param_inst.type->align_of(this->module);
@@ -2140,9 +2158,9 @@ void X86_64AsmBuilder::generate_function(SIRInstRef func_ref)
 
     // Spill all elegible insts to stack
     for (SIRInstRef block_ref : func->blocks) {
-        SIRInst block = block_ref.get(this->module);
+        SIRInst block = SIRModuleGetInst(this->module, block_ref);
         for (SIRInstRef inst_ref : block.block.inst_refs) {
-            SIRInst inst = inst_ref.get(this->module);
+            SIRInst inst = SIRModuleGetInst(this->module, inst_ref);
 
             switch (inst.kind) {
             // Invalid for this stage of generation:
@@ -2335,7 +2353,7 @@ void X86_64AsmBuilder::generate_function(SIRInstRef func_ref)
 
     // Generate blocks
     for (SIRInstRef block_ref : func->blocks) {
-        SIRInst block = block_ref.get(this->module);
+        SIRInst block = SIRModuleGetInst(this->module, block_ref);
         MetaValue *meta_block = &this->meta_insts[block_ref.id];
         *meta_block = {};
 
@@ -2372,7 +2390,7 @@ void X86_64AsmBuilder::generate()
 
     // Generate globals
     for (SIRInstRef global_ref : this->module->globals) {
-        SIRInst global = global_ref.get(this->module);
+        SIRInst global = SIRModuleGetInst(this->module, global_ref);
         this->meta_insts[global_ref.id] =
             this->generate_global(global.global.flags, global.global.data);
     }

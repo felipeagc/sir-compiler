@@ -382,7 +382,8 @@ X86_64AsmBuilder::encode(uint64_t mnem, FeOp op0, FeOp op1, FeOp op2, FeOp op3)
 {
     ZoneScoped;
 
-    uint8_t temp[15];
+    uint8_t temp[16] = {}; // Instructions can only be at most 15 bytes, but we
+                           // reserve 16 bytes for easier zero initialization
     uint8_t *ptr = &temp[0];
     int failed = fe_enc64(&ptr, mnem, op0, op1, op2, op3);
     SIR_ASSERT(!failed);
@@ -399,7 +400,8 @@ size_t X86_64AsmBuilder::encode_at(
 {
     ZoneScoped;
 
-    uint8_t temp[15];
+    uint8_t temp[16] = {}; // Instructions can only be at most 15 bytes, but we
+                           // reserve 16 bytes for easier zero initialization
     uint8_t *ptr = &temp[0];
     int failed = fe_enc64(&ptr, mnem, op0, op1, op2, op3);
     SIR_ASSERT(!failed);

@@ -61,28 +61,28 @@ struct Elf64Header {
 static_assert(sizeof(Elf64Header) == 0x40, "Elf64Header size invalid");
 
 struct Elf64SectionHeader {
-    uint32_t sh_name = 0;
-    uint32_t sh_type = 0;
-    uint64_t sh_flags = 0;
-    uint64_t sh_addr = 0;
-    uint64_t sh_offset = 0;
-    uint64_t sh_size = 0;
-    uint32_t sh_link = 0;
-    uint32_t sh_info = 0;
-    uint64_t sh_addralign = 0;
-    uint64_t sh_entsize = 0;
+    uint32_t sh_name;
+    uint32_t sh_type;
+    uint64_t sh_flags;
+    uint64_t sh_addr;
+    uint64_t sh_offset;
+    uint64_t sh_size;
+    uint32_t sh_link;
+    uint32_t sh_info;
+    uint64_t sh_addralign;
+    uint64_t sh_entsize;
 };
 
 static_assert(
     sizeof(Elf64SectionHeader) == 0x40, "Elf64SectionHeader size invalid");
 
 struct Elf64Symbol {
-    uint32_t st_name = 0;
-    uint8_t st_info = 0;
-    uint8_t st_other = 0;
-    uint16_t st_shndx = 0;
-    uint64_t st_value = 0;
-    uint64_t st_size = 0;
+    uint32_t st_name;
+    uint8_t st_info;
+    uint8_t st_other;
+    uint16_t st_shndx;
+    uint64_t st_value;
+    uint64_t st_size;
 };
 
 static_assert(sizeof(Elf64Symbol) == 24, "incorrect size of Elf64Symbol");
@@ -182,6 +182,7 @@ static void elf_init_section(
 
     SIR_ASSERT(section_index < builder->sections.len);
     Section *section = &builder->sections[section_index];
+    memset(&section->header, 0, sizeof(section->header));
     *section = {
         header_template,
         SIRArray<uint8_t>::create(SIRMallocAllocator::get_instance()),
@@ -192,7 +193,6 @@ static void elf_init_section(
     }
 
     if (section->header.sh_type != Elf64SectionType_Null) {
-        /* section->data.reserve(1 << 20); */
         section->header.sh_name =
             elf_add_string(builder, builder->shstrtab_index, name);
     }
@@ -228,7 +228,9 @@ static void elf_output_symbol(Elf64Builder *builder, size_t symbol_index)
 
     Section *symtab = &builder->sections[builder->symtab_index];
 
-    Elf64Symbol elf_symbol{};
+    Elf64Symbol elf_symbol;
+    memset(&elf_symbol, 0, sizeof(elf_symbol));
+
     if (symtab->data.len > 0) {
         if (symbol->name.len > 0) {
             elf_symbol.st_name =
@@ -430,7 +432,8 @@ static void add_data_relocation(
         break;
     }
 
-    Elf64Rela rela{};
+    Elf64Rela rela;
+    memset(&rela, 0, sizeof(rela));
 
     switch (builder->module->target_arch) {
     case SIRTargetArch_X86_64: {
@@ -461,7 +464,8 @@ static void add_procedure_relocation(
     ZoneScoped;
     Elf64Builder *builder = (Elf64Builder *)obj_builder;
 
-    Elf64Rela rela{};
+    Elf64Rela rela;
+    memset(&rela, 0, sizeof(rela));
 
     switch (builder->module->target_arch) {
     case SIRTargetArch_X86_64: {
@@ -605,15 +609,37 @@ SIRObjectBuilder *SIRCreateELF64Bbuilder(SIRModule *module)
     builder->header.e_shstrndx = builder->shstrtab_index;
 
     elf_init_section(
-        builder, builder->null_index, "", {.sh_type = Elf64SectionType_Null});
+        builder,
+        builder->null_index,
+        "",
+        {
+            .sh_name = 0,
+            .sh_type = Elf64SectionType_Null,
+            .sh_flags = 0,
+            .sh_addr = 0,
+            .sh_offset = 0,
+            .sh_size = 0,
+            .sh_link = 0,
+            .sh_info = 0,
+            .sh_addralign = 0,
+            .sh_entsize = 0,
+        });
 
     elf_init_section(
         builder,
         builder->shstrtab_index,
         ".shstrtab",
         {
+            .sh_name = 0,
             .sh_type = Elf64SectionType_StrTab,
+            .sh_flags = 0,
+            .sh_addr = 0,
+            .sh_offset = 0,
+            .sh_size = 0,
+            .sh_link = 0,
+            .sh_info = 0,
             .sh_addralign = 1,
+            .sh_entsize = 0,
         });
 
     elf_init_section(
@@ -621,8 +647,16 @@ SIRObjectBuilder *SIRCreateELF64Bbuilder(SIRModule *module)
         builder->strtab_index,
         ".strtab",
         {
+            .sh_name = 0,
             .sh_type = Elf64SectionType_StrTab,
+            .sh_flags = 0,
+            .sh_addr = 0,
+            .sh_offset = 0,
+            .sh_size = 0,
+            .sh_link = 0,
+            .sh_info = 0,
             .sh_addralign = 1,
+            .sh_entsize = 0,
         });
 
     elf_init_section(
@@ -630,7 +664,12 @@ SIRObjectBuilder *SIRCreateELF64Bbuilder(SIRModule *module)
         builder->symtab_index,
         ".symtab",
         {
+            .sh_name = 0,
             .sh_type = Elf64SectionType_SymTab,
+            .sh_flags = 0,
+            .sh_addr = 0,
+            .sh_offset = 0,
+            .sh_size = 0,
             .sh_link = builder->strtab_index, // associated string table
             .sh_info = 0, // the index of the first non-local symbol
             .sh_addralign = 8,
@@ -644,10 +683,17 @@ SIRObjectBuilder *SIRCreateELF64Bbuilder(SIRModule *module)
             builder->text_index,
             ".text",
             {
+                .sh_name = 0,
                 .sh_type = Elf64SectionType_ProgBits,
                 .sh_flags =
                     Elf64SectionFlags_Alloc | Elf64SectionFlags_ExecInstr,
+                .sh_addr = 0,
+                .sh_offset = 0,
+                .sh_size = 0,
+                .sh_link = 0,
+                .sh_info = 0,
                 .sh_addralign = 1,
+                .sh_entsize = 0,
             });
 
         elf_init_section(
@@ -655,8 +701,12 @@ SIRObjectBuilder *SIRCreateELF64Bbuilder(SIRModule *module)
             builder->rela_text_index,
             ".rela.text",
             {
+                .sh_name = 0,
                 .sh_type = Elf64SectionType_Rela,
                 .sh_flags = Elf64SectionFlags_InfoLink,
+                .sh_addr = 0,
+                .sh_offset = 0,
+                .sh_size = 0,
                 .sh_link = builder->symtab_index, // associated symbol table
                 .sh_info = builder->text_index,   // the section to which the
                                                   // relocations are applied
@@ -672,9 +722,16 @@ SIRObjectBuilder *SIRCreateELF64Bbuilder(SIRModule *module)
         builder->data_index,
         ".data",
         {
+            .sh_name = 0,
             .sh_type = Elf64SectionType_ProgBits,
             .sh_flags = Elf64SectionFlags_Alloc | Elf64SectionFlags_Write,
+            .sh_addr = 0,
+            .sh_offset = 0,
+            .sh_size = 0,
+            .sh_link = 0,
+            .sh_info = 0,
             .sh_addralign = 1,
+            .sh_entsize = 0,
         });
 
     elf_init_section(
@@ -682,9 +739,16 @@ SIRObjectBuilder *SIRCreateELF64Bbuilder(SIRModule *module)
         builder->bss_index,
         ".bss",
         {
+            .sh_name = 0,
             .sh_type = Elf64SectionType_NoBits,
             .sh_flags = Elf64SectionFlags_Alloc | Elf64SectionFlags_Write,
+            .sh_addr = 0,
+            .sh_offset = 0,
+            .sh_size = 0,
+            .sh_link = 0,
+            .sh_info = 0,
             .sh_addralign = 1,
+            .sh_entsize = 0,
         });
 
     elf_init_section(
@@ -692,9 +756,16 @@ SIRObjectBuilder *SIRCreateELF64Bbuilder(SIRModule *module)
         builder->rodata_index,
         ".rodata",
         {
+            .sh_name = 0,
             .sh_type = Elf64SectionType_ProgBits,
             .sh_flags = Elf64SectionFlags_Alloc,
+            .sh_addr = 0,
+            .sh_offset = 0,
+            .sh_size = 0,
+            .sh_link = 0,
+            .sh_info = 0,
             .sh_addralign = 1,
+            .sh_entsize = 0,
         });
 
     builder->symbols.push_back(Symbol{}); // Null symbol

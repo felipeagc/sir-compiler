@@ -12,6 +12,7 @@ endif ()
 if (NOT MSVC)
 	add_compile_options(-Wall -Wextra -Wno-unused-function)
 	# set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fsanitize=address,undefined")
+	# set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fsanitize=memory -fsanitize-memory-track-origins")
 endif()
 
 # add_definitions(-DTRACY_ENABLE)

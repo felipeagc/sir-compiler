@@ -444,9 +444,11 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
             CodegenValue accessed_ref =
                 codegen_expr(compiler, ctx, expr.access.left_ref);
 
-            uint32_t field_index = 0;
-            if (!accessed_type.struct_.field_map.get(
-                    accessed_field, &field_index)) {
+            uintptr_t field_index = 0;
+            if (!SIRStringMapGet(
+                    &accessed_type.struct_.field_map,
+                    accessed_field,
+                    &field_index)) {
                 SIR_ASSERT(0);
             }
 
@@ -952,8 +954,8 @@ codegen_decl(Compiler *compiler, CodegenContext *ctx, DeclRef decl_ref)
     case DeclKind_GlobalVarDecl: {
         SIRType *ir_type = ctx->type_values[decl.decl_type_ref.id];
 
-        SIRSlice<uint8_t> global_data =
-            compiler->arena->alloc<uint8_t>(SIRTypeSizeOf(ctx->module, ir_type));
+        SIRSlice<uint8_t> global_data = compiler->arena->alloc<uint8_t>(
+            SIRTypeSizeOf(ctx->module, ir_type));
 
         value = {
             true,

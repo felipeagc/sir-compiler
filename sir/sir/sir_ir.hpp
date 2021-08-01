@@ -218,9 +218,9 @@ struct SIRModule {
     SIRArray<SIRInst> insts;
     SIRArray<SIRInstRef> globals;
     SIRArray<SIRInstRef> functions;
-    SIRStringMap<SIRInstRef> function_map;
-    SIRStringMap<SIRInstRef> global_string_map;
-    SIRStringMap<SIRType *> type_map;
+    SIRStringMap function_map;
+    SIRStringMap global_string_map;
+    SIRStringMap type_map;
     SIRTargetArch target_arch;
     SIREndianness endianness;
 

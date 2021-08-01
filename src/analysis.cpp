@@ -170,14 +170,13 @@ static void analyze_expr(
             }
         }
 
-        SIRStringMap<uint32_t> field_map =
-            SIRStringMap<uint32_t>::create(compiler->arena, 32);
+        SIRStringMap field_map = SIRStringMapCreate(compiler->arena, 32);
 
         bool has_conflict = false;
 
         for (size_t i = 0; i < expr.struct_type.field_names.len; ++i) {
             auto field_name = expr.struct_type.field_names[i];
-            if (field_map.get(field_name)) {
+            if (SIRStringMapGet(&field_map, field_name, NULL)) {
                 has_conflict = true;
                 compiler->add_error(
                     expr.loc,
@@ -186,7 +185,7 @@ static void analyze_expr(
                     field_name.ptr);
                 continue;
             }
-            field_map.set(field_name, (uint32_t)i);
+            SIRStringMapSet(&field_map, field_name, (uint32_t)i);
         }
 
         if (has_conflict || has_invalid_type) break;
@@ -535,9 +534,11 @@ static void analyze_expr(
 
         switch (accessed_type.kind) {
         case TypeKind_Struct: {
-            uint32_t field_index = 0;
-            if (!accessed_type.struct_.field_map.get(
-                    accessed_field, &field_index)) {
+            uintptr_t field_index = 0;
+            if (!SIRStringMapGet(
+                    &accessed_type.struct_.field_map,
+                    accessed_field,
+                    &field_index)) {
                 compiler->add_error(
                     expr.loc,
                     "no struct field named '%.*s' for struct type '%.*s'",

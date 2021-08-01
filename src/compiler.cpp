@@ -52,7 +52,7 @@ Scope *Scope::create(Compiler *compiler, FileRef file_ref, Scope *parent)
 
     scope->file_ref = file_ref;
     scope->parent = parent;
-    scope->decl_refs = SIRStringMap<DeclRef>::create(compiler->arena);
+    scope->decl_refs = SIRStringMapCreate(compiler->arena, 0);
 
     return scope;
 }
@@ -60,7 +60,7 @@ Scope *Scope::create(Compiler *compiler, FileRef file_ref, Scope *parent)
 void Scope::add(Compiler *compiler, DeclRef decl_ref)
 {
     SIRString name = compiler->decls[decl_ref.id].name;
-    if (name != "_") {
+    if (!SIRStringEqual(name, "_")) {
         DeclRef found_decl = this->lookup(name);
         if (found_decl.id != 0) {
             const Location &loc = compiler->decls[decl_ref.id].loc;
@@ -70,18 +70,18 @@ void Scope::add(Compiler *compiler, DeclRef decl_ref)
                 (int)name.len,
                 name.ptr);
         } else {
-            this->decl_refs.set(name, decl_ref);
+            SIRStringMapSet(&this->decl_refs, name, decl_ref.id);
         }
     }
 }
 
 DeclRef Scope::lookup(const SIRString &name)
 {
-    if (name == "_") return {0};
+    if (SIRStringEqual(name, "_")) return {0};
 
-    DeclRef out_ref = {};
-    if (this->decl_refs.get(name, &out_ref)) {
-        return out_ref;
+    uintptr_t out_ref_id = 0;
+    if (SIRStringMapGet(&this->decl_refs, name, &out_ref_id)) {
+        return (DeclRef){(uint32_t)out_ref_id};
     }
 
     if (this->parent) {
@@ -98,11 +98,10 @@ Compiler Compiler::create()
     SIRArenaAllocator *arena =
         SIRArenaAllocator::create(SIRMallocAllocator::get_instance());
 
-    SIRStringMap<TokenKind> keyword_map =
-        SIRStringMap<TokenKind>::create(SIRMallocAllocator::get_instance());
-    SIRStringMap<BuiltinFunction> builtin_function_map =
-        SIRStringMap<BuiltinFunction>::create(
-            SIRMallocAllocator::get_instance());
+    SIRStringMap keyword_map =
+        SIRStringMapCreate(SIRMallocAllocator::get_instance(), 0);
+    SIRStringMap builtin_function_map =
+        SIRStringMapCreate(SIRMallocAllocator::get_instance(), 0);
     SIRArray<Error> errors = SIRArray<Error>::create(arena);
 
     SIRStringBuilder sb =
@@ -112,8 +111,8 @@ Compiler Compiler::create()
         SIRArray<File>::create(SIRMallocAllocator::get_instance());
     files.push_back({}); // 0th file
 
-    SIRStringMap<TypeRef> type_map =
-        SIRStringMap<TypeRef>::create(SIRMallocAllocator::get_instance());
+    SIRStringMap type_map =
+        SIRStringMapCreate(SIRMallocAllocator::get_instance(), 0);
     SIRArray<Type> types =
         SIRArray<Type>::create(SIRMallocAllocator::get_instance());
 
@@ -129,42 +128,43 @@ Compiler Compiler::create()
         SIRArray<Expr>::create(SIRMallocAllocator::get_instance());
     exprs.push_back({}); // 0th expr
 
-    keyword_map.set("extern", TokenKind_Extern);
-    keyword_map.set("vararg", TokenKind_VarArg);
-    keyword_map.set("export", TokenKind_Export);
-    keyword_map.set("inline", TokenKind_Inline);
-    keyword_map.set("def", TokenKind_Def);
-    keyword_map.set("type", TokenKind_Type);
-    keyword_map.set("struct", TokenKind_Struct);
-    keyword_map.set("global", TokenKind_Global);
-    keyword_map.set("macro", TokenKind_Macro);
-    keyword_map.set("null", TokenKind_Null);
-    keyword_map.set("true", TokenKind_True);
-    keyword_map.set("false", TokenKind_False);
-    keyword_map.set("if", TokenKind_If);
-    keyword_map.set("else", TokenKind_Else);
-    keyword_map.set("while", TokenKind_While);
-    keyword_map.set("break", TokenKind_Break);
-    keyword_map.set("continue", TokenKind_Continue);
-    keyword_map.set("return", TokenKind_Return);
-    keyword_map.set("void", TokenKind_Void);
-    keyword_map.set("bool", TokenKind_Bool);
-    keyword_map.set("u8", TokenKind_U8);
-    keyword_map.set("u16", TokenKind_U16);
-    keyword_map.set("u32", TokenKind_U32);
-    keyword_map.set("u64", TokenKind_U64);
-    keyword_map.set("i8", TokenKind_I8);
-    keyword_map.set("i16", TokenKind_I16);
-    keyword_map.set("i32", TokenKind_I32);
-    keyword_map.set("i64", TokenKind_I64);
-    keyword_map.set("f32", TokenKind_F32);
-    keyword_map.set("f64", TokenKind_F64);
-    keyword_map.set("and", TokenKind_And);
-    keyword_map.set("or", TokenKind_Or);
+    SIRStringMapSet(&keyword_map, "extern", TokenKind_Extern);
+    SIRStringMapSet(&keyword_map, "extern", TokenKind_Extern);
+    SIRStringMapSet(&keyword_map, "vararg", TokenKind_VarArg);
+    SIRStringMapSet(&keyword_map, "export", TokenKind_Export);
+    SIRStringMapSet(&keyword_map, "inline", TokenKind_Inline);
+    SIRStringMapSet(&keyword_map, "def", TokenKind_Def);
+    SIRStringMapSet(&keyword_map, "type", TokenKind_Type);
+    SIRStringMapSet(&keyword_map, "struct", TokenKind_Struct);
+    SIRStringMapSet(&keyword_map, "global", TokenKind_Global);
+    SIRStringMapSet(&keyword_map, "macro", TokenKind_Macro);
+    SIRStringMapSet(&keyword_map, "null", TokenKind_Null);
+    SIRStringMapSet(&keyword_map, "true", TokenKind_True);
+    SIRStringMapSet(&keyword_map, "false", TokenKind_False);
+    SIRStringMapSet(&keyword_map, "if", TokenKind_If);
+    SIRStringMapSet(&keyword_map, "else", TokenKind_Else);
+    SIRStringMapSet(&keyword_map, "while", TokenKind_While);
+    SIRStringMapSet(&keyword_map, "break", TokenKind_Break);
+    SIRStringMapSet(&keyword_map, "continue", TokenKind_Continue);
+    SIRStringMapSet(&keyword_map, "return", TokenKind_Return);
+    SIRStringMapSet(&keyword_map, "void", TokenKind_Void);
+    SIRStringMapSet(&keyword_map, "bool", TokenKind_Bool);
+    SIRStringMapSet(&keyword_map, "u8", TokenKind_U8);
+    SIRStringMapSet(&keyword_map, "u16", TokenKind_U16);
+    SIRStringMapSet(&keyword_map, "u32", TokenKind_U32);
+    SIRStringMapSet(&keyword_map, "u64", TokenKind_U64);
+    SIRStringMapSet(&keyword_map, "i8", TokenKind_I8);
+    SIRStringMapSet(&keyword_map, "i16", TokenKind_I16);
+    SIRStringMapSet(&keyword_map, "i32", TokenKind_I32);
+    SIRStringMapSet(&keyword_map, "i64", TokenKind_I64);
+    SIRStringMapSet(&keyword_map, "f32", TokenKind_F32);
+    SIRStringMapSet(&keyword_map, "f64", TokenKind_F64);
+    SIRStringMapSet(&keyword_map, "and", TokenKind_And);
+    SIRStringMapSet(&keyword_map, "or", TokenKind_Or);
 
-    builtin_function_map.set("sizeof", BuiltinFunction_Sizeof);
-    builtin_function_map.set("alignof", BuiltinFunction_Alignof);
-    builtin_function_map.set("ptrcast", BuiltinFunction_PtrCast);
+    SIRStringMapSet(&builtin_function_map, "sizeof", BuiltinFunction_Sizeof);
+    SIRStringMapSet(&builtin_function_map, "alignof", BuiltinFunction_Alignof);
+    SIRStringMapSet(&builtin_function_map, "ptrcast", BuiltinFunction_PtrCast);
 
     Compiler compiler = {
         .arena = arena,
@@ -319,14 +319,14 @@ void Compiler::destroy()
     this->exprs.destroy();
     this->stmts.destroy();
     this->decls.destroy();
-    this->type_map.destroy();
+    SIRStringMapDestroy(&this->type_map);
     this->types.destroy();
     this->files.destroy();
 
     this->sb.destroy();
     this->errors.destroy();
-    this->builtin_function_map.destroy();
-    this->keyword_map.destroy();
+    SIRStringMapDestroy(&this->builtin_function_map);
+    SIRStringMapDestroy(&this->keyword_map);
     this->arena->destroy();
 }
 
@@ -485,14 +485,14 @@ void Compiler::compile(SIRString path)
 TypeRef Compiler::get_cached_type(Type &type)
 {
     SIRString type_string = type.to_string(this);
-    TypeRef existing_type_ref = {0};
-    if (this->type_map.get(type_string, &existing_type_ref)) {
-        return existing_type_ref;
+    uintptr_t existing_type_ref_id = 0;
+    if (SIRStringMapGet(&this->type_map, type_string, &existing_type_ref_id)) {
+        return (TypeRef){(uint32_t)existing_type_ref_id};
     }
 
     TypeRef type_ref = {(uint32_t)this->types.len};
     this->types.push_back(type);
-    this->type_map.set(type_string, type_ref);
+    SIRStringMapSet(&this->type_map, type_string, type_ref.id);
     return type_ref;
 }
 
@@ -511,9 +511,9 @@ TypeRef Compiler::create_struct_type(
     type.kind = TypeKind_Struct;
     type.struct_.field_types = fields;
     type.struct_.field_names = field_names;
-    type.struct_.field_map = SIRStringMap<uint32_t>::create(this->arena, 32);
+    type.struct_.field_map = SIRStringMapCreate(this->arena, 32);
     for (size_t i = 0; i < field_names.len; ++i) {
-        type.struct_.field_map.set(field_names[i], (uint32_t)i);
+        SIRStringMapSet(&type.struct_.field_map, field_names[i], i);
     }
     return this->get_cached_type(type);
 }

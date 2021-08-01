@@ -1,7 +1,7 @@
 #include "sir_base.hpp"
 
-SIRArenaAllocator::Chunk *
-SIRArenaAllocator::Chunk::create(SIRArenaAllocator *arena, Chunk *prev, size_t size)
+SIRArenaAllocator::Chunk *SIRArenaAllocator::Chunk::create(
+    SIRArenaAllocator *arena, Chunk *prev, size_t size)
 {
     SIRArenaAllocator::Chunk *chunk = arena->parent->alloc<Chunk>();
     new (chunk) Chunk();

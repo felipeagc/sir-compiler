@@ -386,12 +386,12 @@ SIRModule *SIRModuleCreate(SIRTargetArch target_arch, SIREndianness endianness)
         SIRArray<SIRInstRef>::create(SIRMallocAllocator::get_instance());
     auto functions =
         SIRArray<SIRInstRef>::create(SIRMallocAllocator::get_instance());
-    auto function_map =
-        SIRStringMap<SIRInstRef>::create(SIRMallocAllocator::get_instance());
-    auto global_string_map =
-        SIRStringMap<SIRInstRef>::create(SIRMallocAllocator::get_instance());
-    auto type_map =
-        SIRStringMap<SIRType *>::create(SIRMallocAllocator::get_instance());
+    SIRStringMap function_map =
+        SIRStringMapCreate(SIRMallocAllocator::get_instance(), 0);
+    SIRStringMap global_string_map =
+        SIRStringMapCreate(SIRMallocAllocator::get_instance(), 0);
+    SIRStringMap type_map =
+        SIRStringMapCreate(SIRMallocAllocator::get_instance(), 0);
 
     insts.push_back({}); // 0th inst
 
@@ -487,9 +487,9 @@ void SIRModuleDestroy(SIRModule *module)
     module->insts.destroy();
     module->globals.destroy();
     module->functions.destroy();
-    module->function_map.destroy();
-    module->global_string_map.destroy();
-    module->type_map.destroy();
+    SIRStringMapDestroy(&module->function_map);
+    SIRStringMapDestroy(&module->global_string_map);
+    SIRStringMapDestroy(&module->type_map);
     module->arena->destroy();
 
     auto parent_allocator = SIRMallocAllocator::get_instance();
@@ -554,11 +554,12 @@ SIRType *SIRModuleGetCachedType(SIRModule *module, SIRType *type)
 
     SIRString type_string = SIRTypeToString(module, type);
     SIRType *existing_type = nullptr;
-    if (module->type_map.get(type_string, &existing_type)) {
+    if (SIRStringMapGet(
+            &module->type_map, type_string, (uintptr_t *)&existing_type)) {
         return existing_type;
     }
 
-    module->type_map.set(type_string, type);
+    SIRStringMapSet(&module->type_map, type_string, (uintptr_t)type);
     return type;
 }
 
@@ -583,7 +584,7 @@ SIRInstRef SIRModuleAddFunction(
 
     SIRString func_name = module->arena->clone(name);
     uint32_t func_index = 0;
-    while (module->function_map.get(func_name)) {
+    while (SIRStringMapGet(&module->function_map, func_name, NULL)) {
         func_index++;
         func_name = module->arena->sprintf(
             "%.*s.%u", (int)name.len, name.ptr, func_index);
@@ -620,7 +621,8 @@ SIRInstRef SIRModuleAddFunction(
     SIRInstRef func_ref = module_add_inst(module, func_inst);
 
     module->functions.push_back(func_ref);
-    module->function_map.set(function->name, func_ref);
+    SIRStringMapSet(
+        &module->function_map, function->name, (uintptr_t)func_ref.id);
 
     return func_ref;
 }
@@ -649,9 +651,10 @@ SIRInstRef SIRModuleAddGlobalString(SIRModule *module, const SIRString &str)
 {
     ZoneScoped;
 
-    SIRInstRef existing_global_ref = {0};
-    if (module->global_string_map.get(str, &existing_global_ref)) {
-        return existing_global_ref;
+    uintptr_t existing_global_ref_id = 0;
+    if (SIRStringMapGet(
+            &module->global_string_map, str, &existing_global_ref_id)) {
+        return (SIRInstRef){(uint32_t)existing_global_ref_id};
     }
 
     SIRInst global = {};
@@ -665,7 +668,7 @@ SIRInstRef SIRModuleAddGlobalString(SIRModule *module, const SIRString &str)
 
     module->globals.push_back(global_ref);
 
-    module->global_string_map.set(str, global_ref);
+    SIRStringMapSet(&module->global_string_map, str, global_ref.id);
 
     return global_ref;
 }

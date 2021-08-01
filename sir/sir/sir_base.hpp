@@ -29,7 +29,7 @@
 
 #define SIR_CARRAY_LENGTH(arr) (sizeof(arr) / sizeof(arr[0]))
 
-#define SIR_STR(x) #x
+#define SIR_MACRO_STR(x) #x
 
 #define SIR_ASSERT(x)                                                          \
     do {                                                                       \
@@ -37,7 +37,7 @@
             fprintf(                                                           \
                 stderr,                                                        \
                 "ACE assertion failure: '%s' at %s:%d\n",                      \
-                SIR_STR(x),                                                    \
+                SIR_MACRO_STR(x),                                              \
                 __FILE__,                                                      \
                 __LINE__);                                                     \
             abort();                                                           \
@@ -120,31 +120,14 @@ struct SIRString {
         SIR_ASSERT(index < this->len);
         return this->ptr[index];
     }
-
-    bool operator==(const SIRString &other) const
-    {
-        ZoneScoped;
-        if (this->len != other.len) return false;
-        return (memcmp(this->ptr, other.ptr, this->len) == 0);
-    }
-
-    bool operator!=(const SIRString &other) const
-    {
-        ZoneScoped;
-        if (this->len != other.len) return true;
-        return (memcmp(this->ptr, other.ptr, this->len) != 0);
-    }
-
-    char *begin() const
-    {
-        return this->ptr;
-    }
-
-    char *end() const
-    {
-        return &this->ptr[this->len];
-    }
 };
+
+SIR_INLINE static bool SIRStringEqual(SIRString str1, SIRString str2)
+{
+    ZoneScoped;
+    if (str1.len != str2.len) return false;
+    return (memcmp(str1.ptr, str2.ptr, str1.len) == 0);
+}
 
 struct SIRAllocator {
     virtual void *alloc_bytes(size_t size) = 0;
@@ -317,7 +300,8 @@ struct SIRArenaAllocator : SIRAllocator {
         size_t size;
         size_t offset;
 
-        static Chunk *create(SIRArenaAllocator *arena, Chunk *prev, size_t size);
+        static Chunk *
+        create(SIRArenaAllocator *arena, Chunk *prev, size_t size);
         void destroy(SIRArenaAllocator *arena);
     };
 
@@ -334,7 +318,8 @@ struct SIRArenaAllocator : SIRAllocator {
     }
 
   public:
-    static SIRArenaAllocator *create(SIRAllocator *parent, size_t size = 1 << 16);
+    static SIRArenaAllocator *
+    create(SIRAllocator *parent, size_t size = 1 << 16);
     void destroy();
 
     virtual void *alloc_bytes(size_t size) override;
@@ -536,135 +521,147 @@ SIR_INLINE static int SIRLog2_64(uint64_t value)
         [((uint64_t)((value - (value >> 1)) * 0x07EDD5E59A4E28C2)) >> 58];
 }
 
-template <typename T> struct SIRStringMap {
+struct SIRStringMap {
     SIRAllocator *allocator;
     size_t size;
     SIRString *keys;
     uint64_t *hashes;
-    T *values;
-
-    SIR_INLINE static uint64_t string_hash(const char *string, size_t len)
-    {
-        uint64_t hash = 14695981039346656037ULL;
-        for (const char *c = string; c != string + len; ++c) {
-            hash = ((hash)*1099511628211) ^ (*c);
-        }
-        return hash;
-    }
-
-    static SIRStringMap create(SIRAllocator *allocator, size_t size = 16)
-    {
-        // Round size to next power of 2
-        size -= 1;
-        size |= size >> 1;
-        size |= size >> 2;
-        size |= size >> 4;
-        size |= size >> 8;
-        size |= size >> 16;
-        size |= size >> 32;
-        size += 1;
-
-        SIRStringMap map = {};
-        map.allocator = allocator;
-        map.size = size;
-        map.keys = allocator->alloc_init<SIRString>(map.size).ptr;
-        map.hashes = allocator->alloc<uint64_t>(map.size).ptr;
-        map.values = allocator->alloc<T>(map.size).ptr;
-
-        return map;
-    }
-
-    void destroy()
-    {
-        this->allocator->free(this->keys);
-        this->allocator->free(this->hashes);
-        this->allocator->free(this->values);
-        this->size = 0;
-        this->keys = nullptr;
-        this->hashes = nullptr;
-        this->values = nullptr;
-    }
-
-    void grow()
-    {
-        ZoneScoped;
-
-        SIRStringMap<T> new_map =
-            SIRStringMap<T>::create(this->allocator, this->size * 2);
-
-        for (size_t i = 0; i < this->size; ++i) {
-            if (this->keys[i].ptr) {
-                T value;
-                bool got_value = this->get(this->keys[i], &value);
-                SIR_ASSERT(got_value);
-
-                new_map.set(this->keys[i], value);
-            }
-        }
-
-        this->destroy();
-        *this = new_map;
-    }
-
-    void set(SIRString key, const T &value)
-    {
-        ZoneScoped;
-
-        if (key.len == 0) return;
-
-        uint64_t hash = string_hash(key.ptr, key.len);
-
-    start:
-        uint64_t i = hash & (this->size - 1); // fast modulo for powers of 2
-
-        size_t iters = 0;
-        size_t max_iters = SIRLog2_64(this->size);
-
-        while (this->keys[i].ptr != nullptr &&
-               (this->hashes[i] != hash || this->keys[i] != key)) {
-            iters++;
-            if (iters > max_iters) break;
-
-            i = (i + 1) & (this->size - 1); // fast modulo for powers of 2
-        }
-
-        if (iters > max_iters) {
-            this->grow();
-            goto start;
-        }
-
-        this->keys[i] = key;
-        this->hashes[i] = hash;
-        this->values[i] = value;
-    }
-
-    bool get(SIRString key, T *out_value = nullptr)
-    {
-        ZoneScoped;
-
-        if (key.len == 0) return false;
-
-        uint64_t hash = string_hash(key.ptr, key.len);
-
-        uint64_t i = hash & (this->size - 1); // fast modulo for powers of 2
-
-        size_t iters = 0;
-        size_t max_iters = SIRLog2_64(this->size);
-
-        while (this->keys[i].ptr == nullptr || this->hashes[i] != hash ||
-               this->keys[i] != key) {
-            iters++;
-            if (iters > max_iters) break;
-
-            i = (i + 1) & (this->size - 1); // fast modulo for powers of 2
-        }
-
-        if (iters > max_iters) {
-            return false;
-        }
-
-        if (out_value) *out_value = this->values[i];
-
-        return true;
-    }
+    uintptr_t *values;
 };
+
+static inline SIRStringMap
+SIRStringMapCreate(SIRAllocator *allocator, size_t size);
+static inline void SIRStringMapDestroy(SIRStringMap *map);
+static inline void
+SIRStringMapSet(SIRStringMap *map, SIRString key, const uintptr_t &value);
+static inline bool
+SIRStringMapGet(SIRStringMap *map, SIRString key, uintptr_t *out_value);
+
+SIR_INLINE static uint64_t SIRStringHash(const char *string, size_t len)
+{
+    uint64_t hash = 14695981039346656037ULL;
+    for (const char *c = string; c != string + len; ++c) {
+        hash = ((hash)*1099511628211) ^ (*c);
+    }
+    return hash;
+}
+
+static inline SIRStringMap
+SIRStringMapCreate(SIRAllocator *allocator, size_t size)
+{
+    if (size == 0) size = 16;
+
+    // Round size to next power of 2
+    size -= 1;
+    size |= size >> 1;
+    size |= size >> 2;
+    size |= size >> 4;
+    size |= size >> 8;
+    size |= size >> 16;
+    size |= size >> 32;
+    size += 1;
+
+    SIRStringMap map = {};
+    map.allocator = allocator;
+    map.size = size;
+    map.keys = allocator->alloc_init<SIRString>(map.size).ptr;
+    map.hashes = allocator->alloc<uint64_t>(map.size).ptr;
+    map.values = allocator->alloc<uintptr_t>(map.size).ptr;
+
+    return map;
+}
+
+static inline void SIRStringMapDestroy(SIRStringMap *map)
+{
+    map->allocator->free(map->keys);
+    map->allocator->free(map->hashes);
+    map->allocator->free(map->values);
+    map->size = 0;
+    map->keys = NULL;
+    map->hashes = NULL;
+    map->values = NULL;
+}
+
+static inline void SIRStringMapGrow(SIRStringMap *map)
+{
+    ZoneScoped;
+
+    SIRStringMap new_map = SIRStringMapCreate(map->allocator, map->size * 2);
+
+    for (size_t i = 0; i < map->size; ++i) {
+        if (map->keys[i].ptr) {
+            uintptr_t value;
+            bool got_value = SIRStringMapGet(map, map->keys[i], &value);
+            SIR_ASSERT(got_value);
+
+            SIRStringMapSet(&new_map, map->keys[i], value);
+        }
+    }
+
+    SIRStringMapDestroy(map);
+    *map = new_map;
+}
+
+static inline void
+SIRStringMapSet(SIRStringMap *map, SIRString key, const uintptr_t &value)
+{
+    ZoneScoped;
+
+    if (key.len == 0) return;
+
+    uint64_t hash = SIRStringHash(key.ptr, key.len);
+
+start:
+    uint64_t i = hash & (map->size - 1); // fast modulo for powers of 2
+
+    size_t iters = 0;
+    size_t max_iters = SIRLog2_64(map->size);
+
+    while (map->keys[i].ptr != nullptr &&
+           (map->hashes[i] != hash || (!SIRStringEqual(map->keys[i], key)))) {
+        iters++;
+        if (iters > max_iters) break;
+
+        i = (i + 1) & (map->size - 1); // fast modulo for powers of 2
+    }
+
+    if (iters > max_iters) {
+        SIRStringMapGrow(map);
+        goto start;
+    }
+
+    map->keys[i] = key;
+    map->hashes[i] = hash;
+    map->values[i] = value;
+}
+
+static inline bool
+SIRStringMapGet(SIRStringMap *map, SIRString key, uintptr_t *out_value)
+{
+    ZoneScoped;
+
+    if (key.len == 0) return false;
+
+    uint64_t hash = SIRStringHash(key.ptr, key.len);
+
+    uint64_t i = hash & (map->size - 1); // fast modulo for powers of 2
+
+    size_t iters = 0;
+    size_t max_iters = SIRLog2_64(map->size);
+
+    while (map->keys[i].ptr == nullptr || map->hashes[i] != hash ||
+           (!SIRStringEqual(map->keys[i], key))) {
+        iters++;
+        if (iters > max_iters) break;
+
+        i = (i + 1) & (map->size - 1); // fast modulo for powers of 2
+    }
+
+    if (iters > max_iters) {
+        return false;
+    }
+
+    if (out_value) *out_value = map->values[i];
+
+    return true;
+}

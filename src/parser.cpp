@@ -414,22 +414,23 @@ struct TokenizerState {
         case TokenKind_Identifier: {
             SIRString ident_str =
                 SIRString{&state.text[token->loc.offset], token->loc.len};
-            if (!compiler->keyword_map.get(ident_str, &token->kind)) {
+            uintptr_t token_kind = TokenKind_Identifier;
+            if (!SIRStringMapGet(
+                    &compiler->keyword_map, ident_str, &token_kind)) {
                 token->str = ident_str;
             }
+            token->kind = (TokenKind)token_kind;
             break;
         }
         case TokenKind_BuiltinIdentifier: {
-            SIRString ident_str =
-                SIRString{&state.text[token->loc.offset + 1], token->loc.len - 1};
-            if (!compiler->keyword_map.get(ident_str, &token->kind)) {
-                token->str = ident_str;
-            }
+            SIRString ident_str = SIRString{
+                &state.text[token->loc.offset + 1], token->loc.len - 1};
+            token->str = ident_str;
             break;
         }
         case TokenKind_StringLiteral: {
-            SIRString ident_str =
-                SIRString{&state.text[token->loc.offset + 1], token->loc.len - 2};
+            SIRString ident_str = SIRString{
+                &state.text[token->loc.offset + 1], token->loc.len - 2};
 
             compiler->sb.reset();
             for (size_t i = 0; i < ident_str.len; ++i) {
@@ -674,15 +675,19 @@ static Expr parse_primary_expr(Compiler *compiler, TokenizerState *state)
 
         state->consume_token(compiler, TokenKind_LParen);
 
-        BuiltinFunction builtin_func = BuiltinFunction_Unknown;
-        if (!compiler->builtin_function_map.get(
-                ident_token.str, &builtin_func)) {
+        uintptr_t builtin_func_id = BuiltinFunction_Unknown;
+        if (!SIRStringMapGet(
+                &compiler->builtin_function_map,
+                ident_token.str,
+                &builtin_func_id)) {
             compiler->add_error(
                 next_token.loc,
                 "invalid builtin function: '@%.*s'",
                 (int)ident_token.str.len,
                 ident_token.str.ptr);
         }
+
+        BuiltinFunction builtin_func = (BuiltinFunction)builtin_func_id;
 
         expr.kind = ExprKind_BuiltinCall;
         expr.loc = ident_token.loc;
@@ -1437,8 +1442,7 @@ static void parse_top_level_decl(
             SIRArray<DeclRef>::create(compiler->arena);
         func_decl.func.return_type_expr_refs =
             SIRArray<ExprRef>::create(compiler->arena);
-        func_decl.func.body_stmts =
-            SIRArray<StmtRef>::create(compiler->arena);
+        func_decl.func.body_stmts = SIRArray<StmtRef>::create(compiler->arena);
 
         state->next_token(compiler, &next_token);
         switch (next_token.kind) {

@@ -44,7 +44,7 @@ struct TypeRef {
 struct Scope {
     FileRef file_ref;
     Scope *parent;
-    SIRStringMap<DeclRef> decl_refs;
+    SIRStringMap decl_refs;
 
     static Scope *
     create(Compiler *compiler, FileRef file_ref, Scope *parent = nullptr);
@@ -221,7 +221,7 @@ struct Type {
         struct {
             SIRSlice<TypeRef> field_types;
             SIRSlice<SIRString> field_names;
-            SIRStringMap<uint32_t> field_map;
+            SIRStringMap field_map;
         } struct_;
         struct {
             SIRSlice<TypeRef> field_types;
@@ -495,13 +495,13 @@ struct Decl {
 
 struct Compiler {
     SIRArenaAllocator *arena;
-    SIRStringMap<TokenKind> keyword_map;
-    SIRStringMap<BuiltinFunction> builtin_function_map;
+    SIRStringMap keyword_map;
+    SIRStringMap builtin_function_map;
     SIRArray<Error> errors;
     SIRStringBuilder sb;
 
     SIRArray<File> files;
-    SIRStringMap<TypeRef> type_map;
+    SIRStringMap type_map;
     SIRArray<Type> types;
     SIRArray<Decl> decls;
     SIRArray<Stmt> stmts;

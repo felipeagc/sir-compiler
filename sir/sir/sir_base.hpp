@@ -225,12 +225,13 @@ struct SIRAllocator {
         va_end(args);
 
         str.ptr = (char *)this->alloc_bytes(str.len + 1);
+        memset(str.ptr, 0, str.len + 1); // Needed because memory sanitizer
+                                         // was complaining about uninitialized
+                                         // memory
 
         va_start(args, fmt);
         stbsp_vsnprintf(str.ptr, str.len + 1, fmt, args);
         va_end(args);
-
-        str.ptr[str.len] = '\0';
 
         return str;
     }
@@ -541,7 +542,7 @@ SIR_INLINE static uint64_t SIRStringHash(const char *string, size_t len)
 {
     uint64_t hash = 14695981039346656037ULL;
     for (const char *c = string; c != string + len; ++c) {
-        hash = ((hash)*1099511628211) ^ (*c);
+        hash = ((hash)*1099511628211ULL) ^ ((uint64_t)*c);
     }
     return hash;
 }
@@ -565,7 +566,7 @@ SIRStringMapCreate(SIRAllocator *allocator, size_t size)
     map.allocator = allocator;
     map.size = size;
     map.keys = allocator->alloc_init<SIRString>(map.size).ptr;
-    map.hashes = allocator->alloc<uint64_t>(map.size).ptr;
+    map.hashes = allocator->alloc_init<uint64_t>(map.size).ptr;
     map.values = allocator->alloc<uintptr_t>(map.size).ptr;
 
     return map;
@@ -617,7 +618,7 @@ start:
     size_t iters = 0;
     size_t max_iters = SIRLog2_64(map->size);
 
-    while (map->keys[i].ptr != nullptr &&
+    while (map->keys[i].ptr != NULL &&
            (map->hashes[i] != hash || (!SIRStringEqual(map->keys[i], key)))) {
         iters++;
         if (iters > max_iters) break;
@@ -649,7 +650,7 @@ SIRStringMapGet(SIRStringMap *map, SIRString key, uintptr_t *out_value)
     size_t iters = 0;
     size_t max_iters = SIRLog2_64(map->size);
 
-    while (map->keys[i].ptr == nullptr || map->hashes[i] != hash ||
+    while (map->keys[i].ptr == NULL || map->hashes[i] != hash ||
            (!SIRStringEqual(map->keys[i], key))) {
         iters++;
         if (iters > max_iters) break;

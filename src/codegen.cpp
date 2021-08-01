@@ -86,17 +86,16 @@ get_ir_type(Compiler *compiler, SIRModule *module, const Type &type)
         return SIRModuleCreatePointerType(module, subtype);
     }
     case TypeKind_Slice: {
-        return SIRModuleCreateStructType(
-            module,
-            {
-                get_ir_type(
-                    compiler,
-                    module,
-                    compiler->create_pointer_type(type.slice.sub_type)
-                        .get(compiler)),
-                get_ir_type(compiler, module, compiler->u64_type.get(compiler)),
-            },
-            false);
+        SIRType *field_types[2] = {
+            get_ir_type(
+                compiler,
+                module,
+                compiler->create_pointer_type(type.slice.sub_type)
+                    .get(compiler)),
+            get_ir_type(compiler, module, compiler->u64_type.get(compiler)),
+        };
+
+        return SIRModuleCreateStructType(module, field_types, false);
     }
     case TypeKind_Array: {
         SIRType *subtype =
@@ -127,7 +126,7 @@ get_ir_type(Compiler *compiler, SIRModule *module, const Type &type)
     }
     }
 
-    return nullptr;
+    return NULL;
 }
 
 static CodegenValue
@@ -311,6 +310,8 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
             Type dest_type = expr.expr_type_ref.get(compiler);
             Type source_type = param_expr.expr_type_ref.get(compiler);
 
+            SIRType *dest_type_ir = ctx->type_values[expr.expr_type_ref.id];
+
             SIRInstRef source_value = load_lvalue(
                 ctx, codegen_expr(compiler, ctx, expr.func_call.param_refs[0]));
 
@@ -324,24 +325,18 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
                     value = {
                         false,
                         SIRBuilderInsertTrunc(
-                            ctx->builder,
-                            get_ir_type(compiler, ctx->module, dest_type),
-                            source_value)};
+                            ctx->builder, dest_type_ir, source_value)};
                 } else if (dest_type.int_.bits > source_type.int_.bits) {
                     if (source_type.int_.is_signed) {
                         value = {
                             false,
                             SIRBuilderInsertSext(
-                                ctx->builder,
-                                get_ir_type(compiler, ctx->module, dest_type),
-                                source_value)};
+                                ctx->builder, dest_type_ir, source_value)};
                     } else {
                         value = {
                             false,
                             SIRBuilderInsertZext(
-                                ctx->builder,
-                                get_ir_type(compiler, ctx->module, dest_type),
-                                source_value)};
+                                ctx->builder, dest_type_ir, source_value)};
                     }
                 } else {
                     value = {false, source_value};

@@ -553,10 +553,9 @@ SIRType *SIRModuleGetCachedType(SIRModule *module, SIRType *type)
     ZoneScoped;
 
     SIRString type_string = SIRTypeToString(module, type);
-    SIRType *existing_type = nullptr;
-    if (SIRStringMapGet(
-            &module->type_map, type_string, (uintptr_t *)&existing_type)) {
-        return existing_type;
+    uintptr_t existing_type_addr = 0;
+    if (SIRStringMapGet(&module->type_map, type_string, &existing_type_addr)) {
+        return (SIRType *)(existing_type_addr);
     }
 
     SIRStringMapSet(&module->type_map, type_string, (uintptr_t)type);

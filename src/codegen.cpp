@@ -95,7 +95,8 @@ get_ir_type(Compiler *compiler, SIRModule *module, const Type &type)
             get_ir_type(compiler, module, compiler->u64_type.get(compiler)),
         };
 
-        return SIRModuleCreateStructType(module, field_types, false);
+        return SIRModuleCreateStructType(
+            module, field_types, SIR_CARRAY_LENGTH(field_types), false);
     }
     case TypeKind_Array: {
         SIRType *subtype =
@@ -113,7 +114,8 @@ get_ir_type(Compiler *compiler, SIRModule *module, const Type &type)
                 compiler, module, type.tuple.field_types[i].get(compiler));
         }
 
-        return SIRModuleCreateStructType(module, field_types, false);
+        return SIRModuleCreateStructType(
+            module, field_types.ptr, field_types.len, false);
     }
     case TypeKind_Struct: {
         SIRSlice<SIRType *> field_types;
@@ -126,7 +128,8 @@ get_ir_type(Compiler *compiler, SIRModule *module, const Type &type)
                 compiler, module, type.struct_.field_types[i].get(compiler));
         }
 
-        return SIRModuleCreateStructType(module, field_types, false);
+        return SIRModuleCreateStructType(
+            module, field_types.ptr, field_types.len, false);
     }
     }
 
@@ -295,7 +298,10 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
                 value = {
                     false,
                     SIRBuilderInsertFuncCall(
-                        ctx->builder, load_lvalue(ctx, func_value), params)};
+                        ctx->builder,
+                        load_lvalue(ctx, func_value),
+                        params.ptr,
+                        params.len)};
                 break;
             }
 
@@ -876,7 +882,8 @@ codegen_decl(Compiler *compiler, CodegenContext *ctx, DeclRef decl_ref)
                 SIRCallingConvention_SystemV,
                 linkage,
                 func_type.func.vararg,
-                param_types,
+                param_types.ptr,
+                param_types.len,
                 return_type)};
 
         ctx->decl_values[decl_ref.id] = value;
@@ -964,7 +971,11 @@ codegen_decl(Compiler *compiler, CodegenContext *ctx, DeclRef decl_ref)
         value = {
             true,
             SIRModuleAddGlobal(
-                module, ir_type, SIRGlobalFlags_Initialized, global_data)};
+                module,
+                ir_type,
+                SIRGlobalFlags_Initialized,
+                global_data.ptr,
+                global_data.len)};
 
         ctx->decl_values[decl_ref.id] = value;
 

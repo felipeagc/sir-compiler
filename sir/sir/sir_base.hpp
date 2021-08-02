@@ -336,6 +336,20 @@ template <typename T> struct SIRArray {
         this->len += slice.len;
     }
 
+    SIR_INLINE void push_many(const T* data, size_t len)
+    {
+        ZoneScoped;
+
+        this->reserve(this->len + len);
+
+        T *first = this->ptr + this->len;
+        for (size_t i = 0; i < len; ++i) {
+            first[i] = data[i];
+        }
+
+        this->len += len;
+    }
+
     SIR_INLINE void pop()
     {
         if (this->len > 0) {

@@ -34,7 +34,8 @@ struct SIRInstRef {
 
 struct SIRFunction {
     SIRString name;
-    SIRSlice<SIRType *> param_types;
+    SIRType ** param_types;
+    size_t param_types_len;
     SIRType *return_type;
     bool variadic;
 
@@ -144,7 +145,8 @@ struct SIRInst {
             bool value;
         } imm_bool;
         struct {
-            SIRSlice<uint8_t> data;
+            const uint8_t *data;
+            size_t data_len;
             uint32_t flags;
         } global;
         struct {
@@ -160,7 +162,8 @@ struct SIRInst {
         } branch;
         struct {
             SIRInstRef func_ref;
-            SIRSlice<SIRInstRef> parameters;
+            SIRInstRef *params;
+            size_t params_len;
         } func_call;
         struct {
             SIRInstRef inst_ref;
@@ -247,7 +250,7 @@ SIRType *SIRModuleCreatePointerType(SIRModule *module, SIRType *sub);
 SIRType *
 SIRModuleCreateArrayType(SIRModule *module, SIRType *sub, uint64_t count);
 SIRType *SIRModuleCreateStructType(
-    SIRModule *module, SIRSlice<SIRType *> fields, bool packed);
+    SIRModule *module, SIRType ** fields, size_t field_count, bool packed);
 
 SIRType *SIRModuleGetCachedType(SIRModule *module, SIRType *type);
 
@@ -257,10 +260,11 @@ SIRInstRef SIRModuleAddFunction(
     SIRCallingConvention calling_convention,
     SIRLinkage linkage,
     bool variadic,
-    SIRSlice<SIRType *> param_types,
+    SIRType ** param_types,
+    size_t param_types_len,
     SIRType *return_type);
 SIRInstRef SIRModuleAddGlobal(
-    SIRModule *module, SIRType *type, uint32_t flags, SIRSlice<uint8_t> data);
+    SIRModule *module, SIRType *type, uint32_t flags, const uint8_t *data, size_t data_len);
 SIRInstRef SIRModuleAddGlobalString(SIRModule *module, const SIRString &str);
 SIRInstRef
 SIRModuleAddStackSlot(SIRModule *module, SIRInstRef func_ref, SIRType *type);
@@ -317,7 +321,8 @@ SIRInstRef SIRBuilderInsertBinop(
 SIRInstRef SIRBuilderInsertFuncCall(
     SIRBuilder *builder,
     SIRInstRef func_ref,
-    const SIRSlice<SIRInstRef> &parameters);
+    const SIRInstRef *parameters,
+    size_t param_count);
 void SIRBuilderInsertJump(SIRBuilder *builder, SIRInstRef block_ref);
 
 void SIRBuilderInsertBranch(

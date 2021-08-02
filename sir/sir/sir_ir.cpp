@@ -236,9 +236,9 @@ print_instruction(SIRModule *module, SIRInstRef inst_ref, SIRStringBuilder *sb)
             "%%r%u = func_call %%r%u (",
             inst_ref.id,
             inst.func_call.func_ref.id);
-        for (size_t i = 0; i < inst.func_call.parameters.len; ++i) {
+        for (size_t i = 0; i < inst.func_call.params_len; ++i) {
             if (i > 0) sb->append(", ");
-            SIRInstRef param_inst_ref = inst.func_call.parameters[i];
+            SIRInstRef param_inst_ref = inst.func_call.params[i];
             sb->sprintf("%%r%u", param_inst_ref.id);
         }
         sb->append(")");
@@ -524,13 +524,13 @@ SIRModuleCreateArrayType(SIRModule *module, SIRType *sub, uint64_t count)
 }
 
 SIRType *SIRModuleCreateStructType(
-    SIRModule *module, SIRSlice<SIRType *> fields, bool packed)
+    SIRModule *module, SIRType **fields, size_t field_count, bool packed)
 {
     SIRType *type = SIRAllocInit(module->arena, SIRType);
     type->kind = SIRTypeKind_Struct;
-    type->struct_.fields.len = fields.len;
+    type->struct_.fields.len = field_count;
     type->struct_.fields.ptr =
-        (SIRType **)SIRAllocSliceClone(module->arena, fields.ptr, fields.len);
+        (SIRType **)SIRAllocSliceClone(module->arena, fields, field_count);
     type->struct_.packed = packed;
     return SIRModuleGetCachedType(module, type);
 }
@@ -563,7 +563,8 @@ SIRInstRef SIRModuleAddFunction(
     SIRCallingConvention calling_convention,
     SIRLinkage linkage,
     bool variadic,
-    SIRSlice<SIRType *> param_types,
+    SIRType **param_types,
+    size_t param_types_len,
     SIRType *return_type)
 {
     ZoneScoped;
@@ -579,10 +580,9 @@ SIRInstRef SIRModuleAddFunction(
     SIRFunction *function = SIRAlloc(module->arena, SIRFunction);
     *function = SIRFunction{
         .name = func_name,
-        .param_types =
-            {(SIRType **)SIRAllocSliceClone(
-                 module->arena, param_types.ptr, param_types.len),
-             param_types.len},
+        .param_types = (SIRType **)SIRAllocSliceClone(
+            module->arena, param_types, param_types_len),
+        .param_types_len = param_types_len,
         .return_type = return_type,
         .variadic = variadic,
 
@@ -596,7 +596,7 @@ SIRInstRef SIRModuleAddFunction(
         .calling_convention = calling_convention,
     };
 
-    for (uint32_t i = 0; i < param_types.len; ++i) {
+    for (uint32_t i = 0; i < param_types_len; ++i) {
         SIRInst param_inst = {
             .func_param = {.index = i},
             .kind = SIRInstKind_FunctionParameter,
@@ -619,18 +619,22 @@ SIRInstRef SIRModuleAddFunction(
 }
 
 SIRInstRef SIRModuleAddGlobal(
-    SIRModule *module, SIRType *type, uint32_t flags, SIRSlice<uint8_t> data)
+    SIRModule *module,
+    SIRType *type,
+    uint32_t flags,
+    const uint8_t *data,
+    size_t data_len)
 {
     ZoneScoped;
 
-    SIR_ASSERT(SIRTypeSizeOf(module, type) == data.len);
+    SIR_ASSERT(SIRTypeSizeOf(module, type) == data_len);
 
     SIRInst global = {};
     global.kind = SIRInstKind_Global;
     global.type = SIRModuleCreatePointerType(module, type);
-    global.global.data = {
-        (uint8_t *)SIRAllocSliceClone(module->arena, data.ptr, data.len),
-        data.len};
+    global.global.data =
+        (uint8_t *)SIRAllocSliceClone(module->arena, data, data_len);
+    global.global.data_len = data_len;
     global.global.flags = flags;
 
     SIRInstRef global_ref = module_add_inst(module, global);
@@ -653,8 +657,8 @@ SIRInstRef SIRModuleAddGlobalString(SIRModule *module, const SIRString &str)
     SIRInst global = {};
     global.kind = SIRInstKind_Global;
     global.type = SIRModuleCreatePointerType(module, module->i8_type);
-    global.global.data = {
-        (uint8_t *)SIRAllocNullTerminate(module->arena, str), str.len + 1};
+    global.global.data = (uint8_t *)SIRAllocNullTerminate(module->arena, str);
+    global.global.data_len = str.len + 1;
     global.global.flags = SIRGlobalFlags_Initialized | SIRGlobalFlags_ReadOnly;
 
     SIRInstRef global_ref = module_add_inst(module, global);
@@ -1032,7 +1036,8 @@ SIRInstRef SIRBuilderInsertBinop(
 SIRInstRef SIRBuilderInsertFuncCall(
     SIRBuilder *builder,
     SIRInstRef func_ref,
-    const SIRSlice<SIRInstRef> &parameters)
+    const SIRInstRef *params,
+    size_t params_len)
 {
     ZoneScoped;
 
@@ -1044,9 +1049,9 @@ SIRInstRef SIRBuilderInsertFuncCall(
     inst.kind = SIRInstKind_FuncCall;
     inst.type = called_function->return_type;
     inst.func_call.func_ref = func_ref;
-    inst.func_call.parameters.len = parameters.len;
-    inst.func_call.parameters.ptr = (SIRInstRef *)SIRAllocSliceClone(
-        builder->module->arena, parameters.ptr, parameters.len);
+    inst.func_call.params_len = params_len;
+    inst.func_call.params = (SIRInstRef *)SIRAllocSliceClone(
+        builder->module->arena, params, params_len);
 
     return builder_insert_inst(builder, inst);
 }

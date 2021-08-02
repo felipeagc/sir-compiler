@@ -342,7 +342,10 @@ static void destroy(SIRObjectBuilder *obj_builder)
 }
 
 static void add_to_section(
-    SIRObjectBuilder *obj_builder, SIRSectionType type, SIRSlice<uint8_t> data)
+    SIRObjectBuilder *obj_builder,
+    SIRSectionType type,
+    const uint8_t *data,
+    size_t len)
 {
     ZoneScoped;
     Elf64Builder *builder = (Elf64Builder *)obj_builder;
@@ -357,14 +360,15 @@ static void add_to_section(
     }
 
     Section *section = &builder->sections[section_index];
-    section->data.push_many(data);
+    section->data.push_many(data, len);
 }
 
 static void set_section_data(
     SIRObjectBuilder *obj_builder,
     SIRSectionType type,
     size_t offset,
-    SIRSlice<uint8_t> data)
+    const uint8_t *data,
+    size_t len)
 {
     ZoneScoped;
     Elf64Builder *builder = (Elf64Builder *)obj_builder;
@@ -380,10 +384,10 @@ static void set_section_data(
 
     Section *section = &builder->sections[section_index];
 
-    SIR_ASSERT(offset + data.len <= section->data.len);
+    SIR_ASSERT(offset + len <= section->data.len);
 
-    for (size_t i = 0; i < data.len; ++i) {
-        section->data.ptr[offset + i] = data.ptr[i];
+    for (size_t i = 0; i < len; ++i) {
+        section->data.ptr[offset + i] = data[i];
     }
 }
 

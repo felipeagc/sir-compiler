@@ -191,9 +191,10 @@ struct MetaFunction {
     SIRArray<FuncJumpPatch> jump_patches;
     bool registers_used[RegisterIndex_COUNT];
     int32_t saved_register_stack_offset[RegisterIndex_COUNT];
-    SIRSlice<RegisterIndex> caller_saved_registers;
-    SIRSlice<RegisterIndex> callee_saved_registers;
-    SIRArray<RegisterIndex> temp_int_register_stack;
+    const RegisterIndex *caller_saved_registers;
+    size_t caller_saved_registers_len;
+    const RegisterIndex *callee_saved_registers;
+    size_t callee_saved_registers_len;
     SIRSymbolRef symbol_ref{};
 };
 
@@ -220,7 +221,8 @@ struct X86_64AsmBuilder {
     size_t encode_direct_call(SIRInstRef func_ref);
     void encode_function_ending(SIRInstRef func_ref);
 
-    MetaValue generate_global(uint32_t flags, SIRSlice<uint8_t> data);
+    MetaValue
+    generate_global(uint32_t flags, const uint8_t *data, size_t data_len);
     void generate_function(SIRInstRef global_ref);
     void generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref);
 
@@ -372,7 +374,7 @@ size_t X86_64AsmBuilder::encode_raw(const uint8_t *bytes, size_t len)
     ZoneScoped;
 
     this->obj_builder->add_to_section(
-        this->obj_builder, SIRSectionType_Text, {(uint8_t *)bytes, len});
+        this->obj_builder, SIRSectionType_Text, (uint8_t *)bytes, len);
     return len;
 }
 
@@ -390,7 +392,7 @@ X86_64AsmBuilder::encode(uint64_t mnem, FeOp op0, FeOp op1, FeOp op2, FeOp op3)
 
     size_t inst_len = (size_t)(ptr - temp);
     this->obj_builder->add_to_section(
-        this->obj_builder, SIRSectionType_Text, {&temp[0], inst_len});
+        this->obj_builder, SIRSectionType_Text, &temp[0], inst_len);
     return inst_len;
 }
 
@@ -408,7 +410,7 @@ size_t X86_64AsmBuilder::encode_at(
 
     size_t inst_len = (size_t)(ptr - temp);
     this->obj_builder->set_section_data(
-        this->obj_builder, SIRSectionType_Text, offset, {&temp[0], inst_len});
+        this->obj_builder, SIRSectionType_Text, offset, &temp[0], inst_len);
     return inst_len;
 }
 
@@ -438,7 +440,8 @@ void X86_64AsmBuilder::encode_function_ending(SIRInstRef func_ref)
     MetaFunction *meta_func = this->meta_insts[func_ref.id].func;
 
     // Restore callee saved registers
-    for (RegisterIndex reg_index : meta_func->callee_saved_registers) {
+    for (size_t i = 0; i < meta_func->callee_saved_registers_len; ++i) {
+        RegisterIndex reg_index = meta_func->callee_saved_registers[i];
         if (meta_func->registers_used[reg_index]) {
             this->encode(
                 FE_MOV64rm,
@@ -498,7 +501,7 @@ X86_64AsmBuilder::get_func_call_stack_parameters_size(SIRInstRef func_call_ref)
         uint32_t used_int_regs = 0;
         uint32_t used_float_regs = 0;
 
-        for (uint32_t i = 0; i < called_func->param_types.len; ++i) {
+        for (uint32_t i = 0; i < called_func->param_types_len; ++i) {
             SIRType *param_type = called_func->param_types[i];
 
             uint32_t param_align = SIRTypeAlignOf(this->module, param_type);
@@ -638,7 +641,8 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
             *((uint64_t *)data) = inst.imm_int.u64;
             this->meta_insts[inst_ref.id] = generate_global(
                 SIRGlobalFlags_Initialized | SIRGlobalFlags_ReadOnly,
-                {&data[0], byte_size});
+                &data[0],
+                byte_size);
         } else {
             this->meta_insts[inst_ref.id] =
                 create_imm_int_value(byte_size, inst.imm_int.u64);
@@ -658,7 +662,8 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
 
         this->meta_insts[inst_ref.id] = generate_global(
             SIRGlobalFlags_Initialized | SIRGlobalFlags_ReadOnly,
-            {&data[0], byte_size});
+            &data[0],
+            byte_size);
 
         break;
     }
@@ -1678,8 +1683,7 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
 
         // TODO: save and restore caller-saved registers
 
-        SIR_ASSERT(
-            called_func->param_types.len <= inst.func_call.parameters.len);
+        SIR_ASSERT(called_func->param_types_len <= inst.func_call.params_len);
 
         switch (called_func->calling_convention) {
         case SIRCallingConvention_SystemV: {
@@ -1689,14 +1693,14 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
             size_t param_stack_offset = 0;
 
             // Write parameters to ABI locations
-            for (size_t i = 0; i < inst.func_call.parameters.len; ++i) {
-                SIRInstRef param_inst_ref = inst.func_call.parameters[i];
+            for (size_t i = 0; i < inst.func_call.params_len; ++i) {
+                SIRInstRef param_inst_ref = inst.func_call.params[i];
                 SIR_ASSERT(param_inst_ref.id > 0);
 
                 SIRInst param_inst =
                     SIRModuleGetInst(this->module, param_inst_ref);
 
-                if (i < called_func->param_types.len) {
+                if (i < called_func->param_types_len) {
                     SIRType *param_type = called_func->param_types[i];
                     SIR_ASSERT(param_type == param_inst.type);
                 }
@@ -1927,8 +1931,8 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
     }
 }
 
-MetaValue
-X86_64AsmBuilder::generate_global(uint32_t flags, SIRSlice<uint8_t> data)
+MetaValue X86_64AsmBuilder::generate_global(
+    uint32_t flags, const uint8_t *data, size_t data_len)
 {
     ZoneScoped;
 
@@ -1945,9 +1949,10 @@ X86_64AsmBuilder::generate_global(uint32_t flags, SIRSlice<uint8_t> data)
 
     size_t offset =
         this->obj_builder->get_section_size(this->obj_builder, section_type);
-    this->obj_builder->add_to_section(this->obj_builder, section_type, data);
+    this->obj_builder->add_to_section(
+        this->obj_builder, section_type, data, data_len);
 
-    return create_global_value(data.len, section_type, offset);
+    return create_global_value(data_len, section_type, offset);
 }
 
 void X86_64AsmBuilder::generate_function(SIRInstRef func_ref)
@@ -1964,8 +1969,6 @@ void X86_64AsmBuilder::generate_function(SIRInstRef func_ref)
 
     meta_func->jump_patches =
         SIRArray<FuncJumpPatch>::create((SIRAllocator *)module->arena);
-    meta_func->temp_int_register_stack =
-        SIRArray<RegisterIndex>::create((SIRAllocator *)module->arena);
 
     switch (func->calling_convention) {
     case SIRCallingConvention_SystemV: {
@@ -1976,7 +1979,6 @@ void X86_64AsmBuilder::generate_function(SIRInstRef func_ref)
             RegisterIndex_R14,
             RegisterIndex_R15,
         };
-        meta_func->callee_saved_registers = {system_v_callee_saved};
 
         static RegisterIndex system_v_caller_saved[] = {
             RegisterIndex_RAX,
@@ -1988,14 +1990,17 @@ void X86_64AsmBuilder::generate_function(SIRInstRef func_ref)
             RegisterIndex_R9,
             RegisterIndex_R11,
         };
-        meta_func->caller_saved_registers = {system_v_caller_saved};
+
+        meta_func->callee_saved_registers_len =
+            SIR_CARRAY_LENGTH(system_v_callee_saved);
+        meta_func->callee_saved_registers = &system_v_callee_saved[0];
+
+        meta_func->caller_saved_registers_len =
+            SIR_CARRAY_LENGTH(system_v_caller_saved);
+        meta_func->caller_saved_registers = &system_v_caller_saved[0];
 
         break;
     }
-    }
-
-    for (RegisterIndex reg_index : meta_func->caller_saved_registers) {
-        meta_func->temp_int_register_stack.push_back(reg_index);
     }
 
     if (func->blocks.len == 0) {
@@ -2150,7 +2155,7 @@ void X86_64AsmBuilder::generate_function(SIRInstRef func_ref)
 
         uint32_t stack_param_offset = 16;
 
-        for (uint32_t i = 0; i < func->param_types.len; ++i) {
+        for (uint32_t i = 0; i < func->param_types_len; ++i) {
             SIRType *param_type = func->param_types[i];
             SIRInstRef param_inst_ref = func->param_insts[i];
             MetaValue param_meta_inst = this->meta_insts[param_inst_ref.id];
@@ -2237,7 +2242,8 @@ void X86_64AsmBuilder::generate_function(SIRInstRef func_ref)
     }
 
     // Save callee saved registers
-    for (RegisterIndex reg_index : meta_func->callee_saved_registers) {
+    for (size_t i = 0; i < meta_func->callee_saved_registers_len; ++i) {
+        RegisterIndex reg_index = meta_func->callee_saved_registers[i];
         if (meta_func->registers_used[reg_index]) {
             this->encode(
                 FE_MOV64mr,
@@ -2294,8 +2300,8 @@ static void generate(SIRAsmBuilder *asm_builder)
     // Generate globals
     for (SIRInstRef global_ref : builder->module->globals) {
         SIRInst global = SIRModuleGetInst(builder->module, global_ref);
-        builder->meta_insts[global_ref.id] =
-            builder->generate_global(global.global.flags, global.global.data);
+        builder->meta_insts[global_ref.id] = builder->generate_global(
+            global.global.flags, global.global.data, global.global.data_len);
     }
 
     // Generate functions

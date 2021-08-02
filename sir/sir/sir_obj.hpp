@@ -23,12 +23,16 @@ struct SIRSymbolRef {
 
 struct SIRObjectBuilder {
     void (*add_to_section)(
-        SIRObjectBuilder *builder, SIRSectionType type, SIRSlice<uint8_t> data);
+        SIRObjectBuilder *builder,
+        SIRSectionType type,
+        const uint8_t *data,
+        size_t len);
     void (*set_section_data)(
         SIRObjectBuilder *builder,
         SIRSectionType type,
         size_t offset,
-        SIRSlice<uint8_t> data);
+        const uint8_t *data,
+        size_t len);
     size_t (*get_section_size)(SIRObjectBuilder *builder, SIRSectionType type);
 
     void (*add_data_relocation)(

@@ -1,55 +1,88 @@
 #include "sir_base.hpp"
 
-SIRArenaAllocator::Chunk *SIRArenaAllocator::Chunk::create(
-    SIRArenaAllocator *arena, Chunk *prev, size_t size)
+struct alignas(16) SIRArenaHeader {
+    size_t size;
+};
+
+typedef struct SIRArenaChunk SIRArenaChunk;
+struct SIRArenaChunk {
+    SIRArenaChunk *prev;
+    char *ptr;
+    size_t size;
+    size_t offset;
+};
+
+struct SIRArenaAllocator {
+    SIRAllocator allocator;
+    SIRAllocator *parent;
+    SIRArenaChunk *last_chunk;
+};
+
+static SIRArenaChunk *
+SIRArenaChunkCreate(SIRArenaAllocator *arena, SIRArenaChunk *prev, size_t size)
 {
-    SIRArenaAllocator::Chunk *chunk = arena->parent->alloc<Chunk>();
-    new (chunk) Chunk();
+    SIRArenaChunk *chunk = SIRAlloc(arena->parent, SIRArenaChunk);
+    *chunk = {};
     chunk->prev = prev;
-    chunk->ptr = (char *)arena->parent->alloc_bytes(size);
+    chunk->ptr = SIRAllocSlice(arena->parent, char, size);
     chunk->size = size;
     chunk->offset = 0;
     return chunk;
 }
 
-void SIRArenaAllocator::Chunk::destroy(SIRArenaAllocator *arena)
+static void SIRArenaChunkDestroy(SIRArenaAllocator *arena, SIRArenaChunk *chunk)
 {
-    arena->parent->free(this->ptr);
-    arena->parent->free(this);
+    SIRFree(arena->parent, chunk->ptr);
+    SIRFree(arena->parent, chunk);
 }
 
-SIRArenaAllocator *SIRArenaAllocator::create(SIRAllocator *parent, size_t size)
+static SIRArenaHeader *SIRArenaGetAllocHeader(void *ptr)
 {
-    SIR_ASSERT(parent);
+    return (SIRArenaHeader *)(((char *)ptr) - sizeof(SIRArenaHeader));
+}
 
-    SIRArenaAllocator *arena = parent->alloc<SIRArenaAllocator>();
-    new (arena) SIRArenaAllocator();
-    arena->parent = parent;
-    arena->last_chunk = Chunk::create(arena, nullptr, size);
+static void *SIRArenaAlloc(SIRAllocator *allocator, size_t size);
+static void *SIRArenaRealloc(SIRAllocator *allocator, void *ptr, size_t size);
+static void SIRArenaFree(SIRAllocator *allocator, void *ptr);
+
+SIRArenaAllocator *
+SIRArenaAllocatorCreate(SIRAllocator *parent_allocator)
+{
+    SIR_ASSERT(parent_allocator);
+
+    SIRArenaAllocator *arena = SIRAlloc(parent_allocator, SIRArenaAllocator);
+    *arena = {};
+    arena->allocator.alloc = SIRArenaAlloc;
+    arena->allocator.realloc = SIRArenaRealloc;
+    arena->allocator.free = SIRArenaFree;
+    arena->parent = parent_allocator;
+    arena->last_chunk = SIRArenaChunkCreate(arena, NULL, 1 << 16 /* default size */);
     return arena;
 }
 
-void SIRArenaAllocator::destroy()
+void SIRArenaAllocatorDestroy(SIRArenaAllocator *arena)
 {
-    Chunk *chunk = this->last_chunk;
+    SIRArenaChunk *chunk = arena->last_chunk;
     while (chunk) {
-        Chunk *deleted_chunk = chunk;
+        SIRArenaChunk *deleted_chunk = chunk;
         chunk = chunk->prev;
-        deleted_chunk->destroy(this);
+        SIRArenaChunkDestroy(arena, deleted_chunk);
     }
-    this->parent->free(this);
+    SIRFree(arena->parent, arena);
 }
 
-void *SIRArenaAllocator::alloc_bytes(size_t size)
+static void *SIRArenaAlloc(SIRAllocator *allocator, size_t size)
 {
     ZoneScoped;
 
-    Chunk *chunk = this->last_chunk;
+    SIRArenaAllocator *arena = (SIRArenaAllocator *)allocator;
+
+    SIRArenaChunk *chunk = arena->last_chunk;
 
     size_t new_offset = chunk->offset;
-    while (new_offset % sizeof(Header) != 0)
+    while (new_offset % sizeof(SIRArenaHeader) != 0)
         new_offset++;
-    new_offset += sizeof(Header); // Header
+    new_offset += sizeof(SIRArenaHeader); // Header
     size_t data_offset = new_offset;
     new_offset += size;
 
@@ -57,12 +90,12 @@ void *SIRArenaAllocator::alloc_bytes(size_t size)
         size_t new_chunk_size = chunk->size * 2;
         while (new_chunk_size <= (size + 16))
             new_chunk_size *= 2;
-        this->last_chunk = Chunk::create(this, chunk, new_chunk_size);
-        return this->alloc_bytes(size);
+        arena->last_chunk = SIRArenaChunkCreate(arena, chunk, new_chunk_size);
+        return SIRArenaAlloc(&arena->allocator, size);
     }
 
     char *ptr = &chunk->ptr[data_offset];
-    Header *header = get_alloc_header(ptr);
+    SIRArenaHeader *header = SIRArenaGetAllocHeader(ptr);
     header->size = size;
 
     chunk->offset = new_offset;
@@ -70,24 +103,25 @@ void *SIRArenaAllocator::alloc_bytes(size_t size)
     return (void *)ptr;
 }
 
-void *SIRArenaAllocator::realloc_bytes(void *ptr, size_t size)
+static void *SIRArenaRealloc(SIRAllocator *allocator, void *ptr, size_t size)
 {
     ZoneScoped;
 
     if (ptr) {
-        Header *header = get_alloc_header(ptr);
+        SIRArenaHeader *header = SIRArenaGetAllocHeader(ptr);
         if (size <= header->size) return ptr;
 
-        void *new_ptr = this->alloc_bytes(size);
+        void *new_ptr = SIRArenaAlloc(allocator, size);
         memcpy(new_ptr, ptr, header->size);
         return new_ptr;
     } else {
-        return this->alloc_bytes(size);
+        return SIRArenaAlloc(allocator, size);
     }
 }
 
-void SIRArenaAllocator::free_bytes(void *ptr)
+static void SIRArenaFree(SIRAllocator *allocator, void *ptr)
 {
     ZoneScoped;
+    (void)allocator;
     (void)ptr;
 }

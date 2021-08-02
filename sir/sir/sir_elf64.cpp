@@ -1,3 +1,4 @@
+#include "sir_base.hpp"
 #include "sir_obj.hpp"
 #include <Tracy.hpp>
 
@@ -185,7 +186,7 @@ static void elf_init_section(
     memset(&section->header, 0, sizeof(section->header));
     *section = {
         header_template,
-        SIRArray<uint8_t>::create(SIRMallocAllocator::get_instance()),
+        SIRArray<uint8_t>::create(&SIR_MALLOC_ALLOCATOR),
     };
 
     if (section->header.sh_type == Elf64SectionType_StrTab) {
@@ -285,7 +286,7 @@ static bool output_to_file(SIRObjectBuilder *obj_builder, SIRString path)
         rela->r_info = SIR_ELF64_R_INFO(new_sym_index, type);
     }
 
-    FILE *f = fopen(builder->module->arena->null_terminate(path), "wb");
+    FILE *f = fopen(SIRAllocNullTerminate(builder->module->arena, path), "wb");
     if (!f) {
         fprintf(
             stderr, "Failed to open file: '%.*s'\n", (int)path.len, path.ptr);
@@ -527,7 +528,7 @@ SIRObjectBuilder *SIRCreateELF64Bbuilder(SIRModule *module)
 {
     ZoneScoped;
 
-    Elf64Builder *builder = module->arena->alloc_init<Elf64Builder>();
+    Elf64Builder *builder = SIRAllocInit(module->arena, Elf64Builder);
 
     builder->vt.add_to_section = add_to_section;
     builder->vt.set_section_data = set_section_data;
@@ -541,10 +542,8 @@ SIRObjectBuilder *SIRCreateELF64Bbuilder(SIRModule *module)
 
     builder->module = module;
     builder->header = Elf64Header{};
-    builder->sections =
-        SIRArray<Section>::create(SIRMallocAllocator::get_instance());
-    builder->symbols =
-        SIRArray<Symbol>::create(SIRMallocAllocator::get_instance());
+    builder->sections = SIRArray<Section>::create(&SIR_MALLOC_ALLOCATOR);
+    builder->symbols = SIRArray<Symbol>::create(&SIR_MALLOC_ALLOCATOR);
 
     // Zero out the header
     memset(&builder->header, 0, sizeof(builder->header));

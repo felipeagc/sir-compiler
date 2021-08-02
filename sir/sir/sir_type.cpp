@@ -18,21 +18,23 @@ SIRString SIRTypeToString(SIRModule *module, SIRType *type)
     }
     case SIRTypeKind_Pointer: {
         SIRString sub_string = SIRTypeToString(module, type->pointer.sub);
-        type->str = module->arena->sprintf(
-            "@ptr(%.*s)", (int)sub_string.len, sub_string.ptr);
+        type->str = SIRAllocSprintf(
+            module->arena, "@ptr(%.*s)", (int)sub_string.len, sub_string.ptr);
         break;
     }
     case SIRTypeKind_Int: {
-        type->str = module->arena->sprintf("@int(%u)", type->int_.bits);
+        type->str = SIRAllocSprintf(module->arena, "@int(%u)", type->int_.bits);
         break;
     }
     case SIRTypeKind_Float: {
-        type->str = module->arena->sprintf("@float(%u)", type->float_.bits);
+        type->str =
+            SIRAllocSprintf(module->arena, "@float(%u)", type->float_.bits);
         break;
     }
     case SIRTypeKind_Array: {
         SIRString sub_string = SIRTypeToString(module, type->array.sub);
-        type->str = module->arena->sprintf(
+        type->str = SIRAllocSprintf(
+            module->arena,
             "@array(%lu, %.*s)",
             type->array.count,
             (int)sub_string.len,
@@ -40,8 +42,7 @@ SIRString SIRTypeToString(SIRModule *module, SIRType *type)
         break;
     }
     case SIRTypeKind_Struct: {
-        SIRStringBuilder sb =
-            SIRStringBuilder::create(SIRMallocAllocator::get_instance());
+        SIRStringBuilder sb = SIRStringBuilder::create(&SIR_MALLOC_ALLOCATOR);
 
         if (type->struct_.packed) {
             sb.append("@packed_struct(");
@@ -61,7 +62,7 @@ SIRString SIRTypeToString(SIRModule *module, SIRType *type)
 
         sb.append(")");
 
-        type->str = sb.build_null_terminated(module->arena);
+        type->str = sb.build_null_terminated((SIRAllocator *)module->arena);
 
         sb.destroy();
         break;

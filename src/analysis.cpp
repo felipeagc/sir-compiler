@@ -170,7 +170,8 @@ static void analyze_expr(
             }
         }
 
-        SIRStringMap field_map = SIRStringMapCreate(compiler->arena, 32);
+        SIRStringMap field_map =
+            SIRStringMapCreate((SIRAllocator *)compiler->arena, 32);
 
         bool has_conflict = false;
 
@@ -190,8 +191,10 @@ static void analyze_expr(
 
         if (has_conflict || has_invalid_type) break;
 
-        SIRSlice<TypeRef> field_types = compiler->arena->alloc<TypeRef>(
-            expr.struct_type.field_type_expr_refs.len);
+        SIRSlice<TypeRef> field_types;
+        field_types.len = expr.struct_type.field_type_expr_refs.len;
+        field_types.ptr =
+            SIRAllocSlice(compiler->arena, TypeRef, field_types.len);
         for (size_t i = 0; i < expr.struct_type.field_type_expr_refs.len; ++i) {
             field_types[i] = expr.struct_type.field_type_expr_refs[i]
                                  .get(compiler)
@@ -1044,8 +1047,9 @@ analyze_decl(Compiler *compiler, AnalyzerState *state, DeclRef decl_ref)
             return_type =
                 decl.func.return_type_expr_refs[0].get(compiler).as_type_ref;
         } else {
-            SIRSlice<TypeRef> fields = compiler->arena->alloc<TypeRef>(
-                decl.func.return_type_expr_refs.len);
+            SIRSlice<TypeRef> fields;
+            fields.len = decl.func.return_type_expr_refs.len;
+            fields.ptr = SIRAllocSlice(compiler->arena, TypeRef, fields.len);
 
             for (size_t i = 0; i < decl.func.return_type_expr_refs.len; ++i) {
                 fields[i] = decl.func.return_type_expr_refs[i]
@@ -1056,8 +1060,10 @@ analyze_decl(Compiler *compiler, AnalyzerState *state, DeclRef decl_ref)
             return_type = compiler->create_tuple_type(fields);
         }
 
-        SIRSlice<TypeRef> param_types =
-            compiler->arena->alloc<TypeRef>(decl.func.param_decl_refs.len);
+        SIRSlice<TypeRef> param_types;
+        param_types.len = decl.func.param_decl_refs.len;
+        param_types.ptr =
+            SIRAllocSlice(compiler->arena, TypeRef, param_types.len);
 
         for (size_t i = 0; i < decl.func.param_decl_refs.len; ++i) {
             DeclRef param_decl_ref = decl.func.param_decl_refs[i];
@@ -1201,8 +1207,8 @@ void analyze_file(Compiler *compiler, FileRef file_ref)
 
     AnalyzerState state = {};
     state.file_ref = file_ref;
-    state.scope_stack = SIRArray<Scope *>::create(compiler->arena);
-    state.func_stack = SIRArray<DeclRef>::create(compiler->arena);
+    state.scope_stack = SIRArray<Scope *>::create((SIRAllocator*)compiler->arena);
+    state.func_stack = SIRArray<DeclRef>::create((SIRAllocator*)compiler->arena);
 
     state.scope_stack.push_back(file.scope);
 

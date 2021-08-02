@@ -57,19 +57,6 @@ template <typename T> struct SIRSlice {
     {
     }
 
-#if __GNUC__ >= 9
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Winit-list-lifetime"
-#endif
-    SIRSlice(const std::initializer_list<T> &list)
-        : ptr(list.begin() == list.end() ? nullptr : (T *)list.begin()),
-          len(list.size())
-    {
-    }
-#if __GNUC__ >= 9
-#pragma GCC diagnostic pop
-#endif
-
     T &operator[](size_t index)
     {
         SIR_ASSERT(index < this->len);
@@ -130,209 +117,158 @@ SIR_INLINE static bool SIRStringEqual(SIRString str1, SIRString str2)
 }
 
 struct SIRAllocator {
-    virtual void *alloc_bytes(size_t size) = 0;
-    virtual void *realloc_bytes(void *ptr, size_t size) = 0;
-    virtual void free_bytes(void *ptr) = 0;
-
-    template <typename T> T *alloc()
-    {
-        return static_cast<T *>(this->alloc_bytes(sizeof(T)));
-    }
-
-    template <typename T> T *alloc_init()
-    {
-        T *ptr = static_cast<T *>(this->alloc_bytes(sizeof(T)));
-        new (ptr) T();
-        return ptr;
-    }
-
-    template <typename T> T *realloc(T *ptr, size_t count)
-    {
-        return static_cast<T *>(this->realloc_bytes(ptr, sizeof(T) * count));
-    }
-
-    template <typename T> SIRSlice<T> alloc(size_t len)
-    {
-        return SIRSlice<T>{
-            static_cast<T *>(this->alloc_bytes(sizeof(T) * len)),
-            len,
-        };
-    }
-
-    template <typename T> SIRSlice<T> alloc_init(size_t len)
-    {
-        SIRSlice<T> slice = {
-            static_cast<T *>(this->alloc_bytes(sizeof(T) * len)),
-            len,
-        };
-        for (size_t i = 0; i < len; ++i) {
-            new (&slice.ptr[i]) T();
-        }
-        return slice;
-    }
-
-    template <typename T> void free(T *ptr)
-    {
-        ZoneScoped;
-        this->free_bytes((void *)ptr);
-    }
-
-    template <typename T> void free(const SIRSlice<T> &slice)
-    {
-        this->free_bytes(slice.ptr);
-    }
-
-    void free(const SIRString &str)
-    {
-        this->free_bytes(str.ptr);
-    }
-
-    template <typename T> SIRSlice<T> clone(const SIRSlice<T> &slice)
-    {
-        if (!slice.ptr) return {};
-
-        SIRSlice<T> new_slice;
-        new_slice.ptr = (T *)this->alloc_bytes(sizeof(T) * slice.len);
-        new_slice.len = slice.len;
-        memcpy((void *)new_slice.ptr, (void *)slice.ptr, sizeof(T) * slice.len);
-        return new_slice;
-    }
-
-    SIRString clone(const SIRString &str)
-    {
-        ZoneScoped;
-
-        if (!str.ptr) return {};
-
-        SIRString new_str;
-        new_str.ptr = (char *)this->alloc_bytes(str.len + 1);
-        new_str.len = str.len;
-        memcpy(new_str.ptr, str.ptr, str.len);
-        new_str.ptr[new_str.len] = '\0';
-        return new_str;
-    }
-
-    SIR_PRINTF_FORMATTING(2, 3)
-    SIRString sprintf(const char *fmt, ...)
-    {
-        ZoneScoped;
-
-        SIRString str;
-
-        va_list args;
-        va_start(args, fmt);
-        str.len = stbsp_vsnprintf(NULL, 0, fmt, args);
-        va_end(args);
-
-        str.ptr = (char *)this->alloc_bytes(str.len + 1);
-        memset(str.ptr, 0, str.len + 1); // Needed because memory sanitizer
-                                         // was complaining about uninitialized
-                                         // memory
-
-        va_start(args, fmt);
-        stbsp_vsnprintf(str.ptr, str.len + 1, fmt, args);
-        va_end(args);
-
-        return str;
-    }
-
-    SIRString vsprintf(const char *fmt, va_list args)
-    {
-        ZoneScoped;
-
-        SIRString str;
-
-        va_list args_copy;
-        va_copy(args_copy, args);
-        str.len = stbsp_vsnprintf(NULL, 0, fmt, args_copy);
-        va_end(args_copy);
-
-        str.ptr = (char *)this->alloc_bytes(str.len + 1);
-
-        stbsp_vsnprintf(str.ptr, str.len + 1, fmt, args);
-
-        str.ptr[str.len] = '\0';
-
-        return str;
-    }
-
-    const char *null_terminate(const SIRString &str)
-    {
-        ZoneScoped;
-
-        char *result = (char *)this->alloc_bytes(str.len + 1);
-        memcpy(result, str.ptr, str.len);
-        result[str.len] = '\0';
-        return result;
-    }
+    void *(*alloc)(SIRAllocator *allocator, size_t size);
+    void *(*realloc)(SIRAllocator *allocator, void *ptr, size_t size);
+    void (*free)(SIRAllocator *allocator, void *ptr);
 };
 
-struct SIRMallocAllocator : SIRAllocator {
-    static SIRMallocAllocator *get_instance()
-    {
-        static SIRMallocAllocator instance{};
-        return &instance;
-    }
+SIR_INLINE static void *SIRCMalloc(SIRAllocator *allocator, size_t size)
+{
+    (void)allocator;
+    return malloc(size);
+}
 
-    virtual void *alloc_bytes(size_t size) override
-    {
-        ZoneScoped;
-        return ::malloc(size);
-    }
+SIR_INLINE static void *
+SIRCRealloc(SIRAllocator *allocator, void *ptr, size_t size)
+{
+    (void)allocator;
+    return realloc(ptr, size);
+}
 
-    virtual void *realloc_bytes(void *ptr, size_t size) override
-    {
-        ZoneScoped;
-        return ::realloc(ptr, size);
-    }
+SIR_INLINE static void SIRCFree(SIRAllocator *allocator, void *ptr)
+{
+    (void)allocator;
+    free(ptr);
+}
 
-    virtual void free_bytes(void *ptr) override
-    {
-        ZoneScoped;
-        ::free(ptr);
-    }
+static SIRAllocator SIR_MALLOC_ALLOCATOR = {
+    .alloc = SIRCMalloc,
+    .realloc = SIRCRealloc,
+    .free = SIRCFree,
 };
 
-struct SIRArenaAllocator : SIRAllocator {
-  private:
-    struct Chunk {
-        struct Chunk *prev;
-        char *ptr;
-        size_t size;
-        size_t offset;
+SIR_INLINE static void *SIRAllocInternal(SIRAllocator *allocator, size_t size)
+{
+    return allocator->alloc(allocator, size);
+}
 
-        static Chunk *
-        create(SIRArenaAllocator *arena, Chunk *prev, size_t size);
-        void destroy(SIRArenaAllocator *arena);
-    };
+SIR_INLINE static void *
+SIRAllocInternalInit(SIRAllocator *allocator, size_t size)
+{
+    void *ptr = allocator->alloc(allocator, size);
+    memset(ptr, 0, size);
+    return ptr;
+}
 
-    struct alignas(16) Header {
-        size_t size;
-    };
+SIR_INLINE static void *SIRAllocInternalClone(
+    SIRAllocator *allocator, const void *ptr, size_t byte_size)
+{
+    void *new_ptr = allocator->alloc(allocator, byte_size);
+    memcpy(new_ptr, ptr, byte_size);
+    return new_ptr;
+}
 
-    SIRAllocator *parent;
-    Chunk *last_chunk;
+SIR_INLINE static void *
+SIRReallocInternal(SIRAllocator *allocator, void *ptr, size_t size)
+{
+    return allocator->realloc(allocator, ptr, size);
+}
 
-    static Header *get_alloc_header(void *ptr)
-    {
-        return (Header *)(((char *)ptr) - sizeof(Header));
-    }
+SIR_INLINE static void SIRFreeInternal(SIRAllocator *allocator, void *ptr)
+{
+    allocator->free(allocator, ptr);
+}
 
-  public:
-    static SIRArenaAllocator *
-    create(SIRAllocator *parent, size_t size = 1 << 16);
-    void destroy();
+#define SIRAlloc(allocator, type)                                              \
+    ((type *)SIRAllocInternal((SIRAllocator *)allocator, sizeof(type)))
+#define SIRRealloc(allocator, ptr, size)                                       \
+    (SIRReallocInternal((SIRAllocator *)allocator, ptr, size))
+#define SIRAllocSlice(allocator, type, size)                                   \
+    ((type *)SIRAllocInternal((SIRAllocator *)allocator, sizeof(type) * (size)))
+#define SIRAllocInit(allocator, type)                                          \
+    ((type *)SIRAllocInternalInit((SIRAllocator *)allocator, sizeof(type)))
+#define SIRAllocSliceInit(allocator, type, size)                               \
+    ((type *)SIRAllocInternalInit(                                             \
+        (SIRAllocator *)allocator, sizeof(type) * (size)))
+#define SIRAllocSliceClone(allocator, ptr, len)                                \
+    (SIRAllocInternalClone(                                                    \
+        (SIRAllocator *)allocator, ptr, sizeof(*ptr) * (len)))
+#define SIRFree(allocator, ptr) SIRFreeInternal((SIRAllocator *)allocator, ptr)
 
-    virtual void *alloc_bytes(size_t size) override;
-    virtual void *realloc_bytes(void *ptr, size_t size) override;
-    virtual void free_bytes(void *ptr) override;
-};
+#define SIRAllocSprintf(allocator, fmt, ...)                                   \
+    SIRAllocSprintfInternal((SIRAllocator *)allocator, fmt, __VA_ARGS__)
+#define SIRAllocVsprintf(allocator, fmt, args)                                 \
+    SIRAllocVsprintfInternal((SIRAllocator *)allocator, fmt, args)
+
+static inline SIR_PRINTF_FORMATTING(2, 3) SIRString
+    SIRAllocSprintfInternal(SIRAllocator *allocator, const char *fmt, ...)
+{
+    ZoneScoped;
+
+    SIRString str;
+
+    va_list args;
+    va_start(args, fmt);
+    str.len = stbsp_vsnprintf(NULL, 0, fmt, args);
+    va_end(args);
+
+    str.ptr = (char *)allocator->alloc(allocator, str.len + 1);
+    memset(str.ptr, 0, str.len + 1); // Needed because memory sanitizer
+                                     // was complaining about uninitialized
+                                     // memory
+
+    va_start(args, fmt);
+    stbsp_vsnprintf(str.ptr, str.len + 1, fmt, args);
+    va_end(args);
+
+    return str;
+}
+
+static inline SIRString
+SIRAllocVsprintfInternal(SIRAllocator *allocator, const char *fmt, va_list args)
+{
+    ZoneScoped;
+
+    SIRString str;
+
+    va_list args_copy;
+    va_copy(args_copy, args);
+    str.len = stbsp_vsnprintf(NULL, 0, fmt, args_copy);
+    va_end(args_copy);
+
+    str.ptr = (char *)allocator->alloc(allocator, str.len + 1);
+
+    stbsp_vsnprintf(str.ptr, str.len + 1, fmt, args);
+
+    str.ptr[str.len] = '\0';
+
+    return str;
+}
+
+#define SIRAllocNullTerminate(allocator, str)                                  \
+    SIRAllocNullTerminateInternal((SIRAllocator *)allocator, str)
+
+static inline const char *
+SIRAllocNullTerminateInternal(SIRAllocator *allocator, const SIRString &str)
+{
+    ZoneScoped;
+
+    char *result = (char *)allocator->alloc(allocator, str.len + 1);
+    memcpy(result, str.ptr, str.len);
+    result[str.len] = '\0';
+    return result;
+}
+
+typedef struct SIRArenaAllocator SIRArenaAllocator;
+
+SIRArenaAllocator *SIRArenaAllocatorCreate(SIRAllocator *parent_allocator);
+void SIRArenaAllocatorDestroy(SIRArenaAllocator *arena);
 
 template <typename T> struct SIRArray {
     T *ptr = nullptr;
     size_t len = 0;
     size_t cap = 0;
-    SIRAllocator *allocator = SIRMallocAllocator::get_instance();
+    SIRAllocator *allocator = &SIR_MALLOC_ALLOCATOR;
 
     SIR_INLINE static SIRArray create(SIRAllocator *allocator)
     {
@@ -341,7 +277,7 @@ template <typename T> struct SIRArray {
 
     SIR_INLINE void destroy()
     {
-        this->allocator->free(this->ptr);
+        SIRFree(this->allocator, this->ptr);
         this->cap = 0;
         this->len = 0;
     }
@@ -364,7 +300,8 @@ template <typename T> struct SIRArray {
                 this->cap = wanted_cap;
             }
 
-            this->ptr = this->allocator->realloc(this->ptr, this->cap);
+            this->ptr = (T *)SIRRealloc(
+                this->allocator, this->ptr, sizeof(T) * this->cap);
         }
     }
 
@@ -458,12 +395,13 @@ struct SIRStringBuilder {
     {
         ZoneScoped;
 
-        SIRSlice<char> chars = allocator->alloc<char>(this->array.len + 1);
-        memcpy(chars.ptr, this->array.ptr, this->array.len);
-        chars[chars.len - 1] = '\0';
+        size_t str_byte_len = this->array.len + 1;
+        char *str_ptr = SIRAllocSlice(allocator, char, str_byte_len);
+        memcpy(str_ptr, this->array.ptr, this->array.len);
+        str_ptr[str_byte_len - 1] = '\0';
         return SIRString{
-            chars.ptr,
-            chars.len - 1,
+            str_ptr,
+            str_byte_len - 1,
         };
     }
 
@@ -565,18 +503,18 @@ SIRStringMapCreate(SIRAllocator *allocator, size_t size)
     SIRStringMap map = {};
     map.allocator = allocator;
     map.size = size;
-    map.keys = allocator->alloc_init<SIRString>(map.size).ptr;
-    map.hashes = allocator->alloc_init<uint64_t>(map.size).ptr;
-    map.values = allocator->alloc<uintptr_t>(map.size).ptr;
+    map.keys = SIRAllocSliceInit(allocator, SIRString, map.size);
+    map.hashes = SIRAllocSliceInit(allocator, uint64_t, map.size);
+    map.values = SIRAllocSlice(allocator, uintptr_t, map.size);
 
     return map;
 }
 
 static inline void SIRStringMapDestroy(SIRStringMap *map)
 {
-    map->allocator->free(map->keys);
-    map->allocator->free(map->hashes);
-    map->allocator->free(map->values);
+    SIRFree(map->allocator, map->keys);
+    SIRFree(map->allocator, map->hashes);
+    SIRFree(map->allocator, map->values);
     map->size = 0;
     map->keys = NULL;
     map->hashes = NULL;

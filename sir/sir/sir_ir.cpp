@@ -378,24 +378,20 @@ print_function(SIRModule *module, SIRInstRef func_ref, SIRStringBuilder *sb)
 
 SIRModule *SIRModuleCreate(SIRTargetArch target_arch, SIREndianness endianness)
 {
-    auto parent_allocator = SIRMallocAllocator::get_instance();
+    SIRAllocator *parent_allocator = &SIR_MALLOC_ALLOCATOR;
 
-    auto arena = SIRArenaAllocator::create(parent_allocator);
-    auto insts = SIRArray<SIRInst>::create(SIRMallocAllocator::get_instance());
-    auto globals =
-        SIRArray<SIRInstRef>::create(SIRMallocAllocator::get_instance());
-    auto functions =
-        SIRArray<SIRInstRef>::create(SIRMallocAllocator::get_instance());
-    SIRStringMap function_map =
-        SIRStringMapCreate(SIRMallocAllocator::get_instance(), 0);
+    SIRArenaAllocator *arena = SIRArenaAllocatorCreate(&SIR_MALLOC_ALLOCATOR);
+    auto insts = SIRArray<SIRInst>::create(&SIR_MALLOC_ALLOCATOR);
+    auto globals = SIRArray<SIRInstRef>::create(&SIR_MALLOC_ALLOCATOR);
+    auto functions = SIRArray<SIRInstRef>::create(&SIR_MALLOC_ALLOCATOR);
+    SIRStringMap function_map = SIRStringMapCreate(&SIR_MALLOC_ALLOCATOR, 0);
     SIRStringMap global_string_map =
-        SIRStringMapCreate(SIRMallocAllocator::get_instance(), 0);
-    SIRStringMap type_map =
-        SIRStringMapCreate(SIRMallocAllocator::get_instance(), 0);
+        SIRStringMapCreate(&SIR_MALLOC_ALLOCATOR, 0);
+    SIRStringMap type_map = SIRStringMapCreate(&SIR_MALLOC_ALLOCATOR, 0);
 
     insts.push_back({}); // 0th inst
 
-    SIRModule *module = parent_allocator->alloc<SIRModule>();
+    SIRModule *module = SIRAllocInit(parent_allocator, SIRModule);
     *module = {
         .arena = arena,
         .insts = insts,
@@ -418,62 +414,54 @@ SIRModule *SIRModuleCreate(SIRTargetArch target_arch, SIREndianness endianness)
     };
 
     {
-        SIRType *void_type = module->arena->alloc<SIRType>();
-        *void_type = {};
+        SIRType *void_type = SIRAllocInit(module->arena, SIRType);
         void_type->kind = SIRTypeKind_Void;
         module->void_type = SIRModuleGetCachedType(module, void_type);
     }
 
     {
-        SIRType *bool_type = module->arena->alloc<SIRType>();
-        *bool_type = {};
+        SIRType *bool_type = SIRAllocInit(module->arena, SIRType);
         bool_type->kind = SIRTypeKind_Bool;
         module->bool_type = SIRModuleGetCachedType(module, bool_type);
     }
 
     {
-        SIRType *i8_type = module->arena->alloc<SIRType>();
-        *i8_type = {};
+        SIRType *i8_type = SIRAllocInit(module->arena, SIRType);
         i8_type->kind = SIRTypeKind_Int;
         i8_type->int_.bits = 8;
         module->i8_type = SIRModuleGetCachedType(module, i8_type);
     }
 
     {
-        SIRType *i16_type = module->arena->alloc<SIRType>();
-        *i16_type = {};
+        SIRType *i16_type = SIRAllocInit(module->arena, SIRType);
         i16_type->kind = SIRTypeKind_Int;
         i16_type->int_.bits = 16;
         module->i16_type = SIRModuleGetCachedType(module, i16_type);
     }
 
     {
-        SIRType *i32_type = module->arena->alloc<SIRType>();
-        *i32_type = {};
+        SIRType *i32_type = SIRAllocInit(module->arena, SIRType);
         i32_type->kind = SIRTypeKind_Int;
         i32_type->int_.bits = 32;
         module->i32_type = SIRModuleGetCachedType(module, i32_type);
     }
 
     {
-        SIRType *i64_type = module->arena->alloc<SIRType>();
-        *i64_type = {};
+        SIRType *i64_type = SIRAllocInit(module->arena, SIRType);
         i64_type->kind = SIRTypeKind_Int;
         i64_type->int_.bits = 64;
         module->i64_type = SIRModuleGetCachedType(module, i64_type);
     }
 
     {
-        SIRType *f32_type = module->arena->alloc<SIRType>();
-        *f32_type = {};
+        SIRType *f32_type = SIRAllocInit(module->arena, SIRType);
         f32_type->kind = SIRTypeKind_Float;
         f32_type->float_.bits = 32;
         module->f32_type = SIRModuleGetCachedType(module, f32_type);
     }
 
     {
-        SIRType *f64_type = module->arena->alloc<SIRType>();
-        *f64_type = {};
+        SIRType *f64_type = SIRAllocInit(module->arena, SIRType);
         f64_type->kind = SIRTypeKind_Float;
         f64_type->float_.bits = 64;
         module->f64_type = SIRModuleGetCachedType(module, f64_type);
@@ -490,10 +478,10 @@ void SIRModuleDestroy(SIRModule *module)
     SIRStringMapDestroy(&module->function_map);
     SIRStringMapDestroy(&module->global_string_map);
     SIRStringMapDestroy(&module->type_map);
-    module->arena->destroy();
+    SIRArenaAllocatorDestroy(module->arena);
 
-    auto parent_allocator = SIRMallocAllocator::get_instance();
-    parent_allocator->free(module);
+    SIRAllocator *parent_allocator = &SIR_MALLOC_ALLOCATOR;
+    SIRFree(parent_allocator, module);
 }
 
 SIRString SIRModulePrintAlloc(SIRModule *module, SIRAllocator *allocator)
@@ -519,8 +507,7 @@ SIRString SIRModulePrintAlloc(SIRModule *module, SIRAllocator *allocator)
 
 SIRType *SIRModuleCreatePointerType(SIRModule *module, SIRType *sub)
 {
-    SIRType *type = module->arena->alloc<SIRType>();
-    *type = {};
+    SIRType *type = SIRAllocInit(module->arena, SIRType);
     type->kind = SIRTypeKind_Pointer;
     type->pointer.sub = sub;
     return SIRModuleGetCachedType(module, type);
@@ -529,8 +516,7 @@ SIRType *SIRModuleCreatePointerType(SIRModule *module, SIRType *sub)
 SIRType *
 SIRModuleCreateArrayType(SIRModule *module, SIRType *sub, uint64_t count)
 {
-    SIRType *type = module->arena->alloc<SIRType>();
-    *type = {};
+    SIRType *type = SIRAllocInit(module->arena, SIRType);
     type->kind = SIRTypeKind_Array;
     type->array.sub = sub;
     type->array.count = count;
@@ -540,10 +526,11 @@ SIRModuleCreateArrayType(SIRModule *module, SIRType *sub, uint64_t count)
 SIRType *SIRModuleCreateStructType(
     SIRModule *module, SIRSlice<SIRType *> fields, bool packed)
 {
-    SIRType *type = module->arena->alloc<SIRType>();
-    *type = {};
+    SIRType *type = SIRAllocInit(module->arena, SIRType);
     type->kind = SIRTypeKind_Struct;
-    type->struct_.fields = module->arena->clone(fields);
+    type->struct_.fields.len = fields.len;
+    type->struct_.fields.ptr =
+        (SIRType **)SIRAllocSliceClone(module->arena, fields.ptr, fields.len);
     type->struct_.packed = packed;
     return SIRModuleGetCachedType(module, type);
 }
@@ -581,24 +568,29 @@ SIRInstRef SIRModuleAddFunction(
 {
     ZoneScoped;
 
-    SIRString func_name = module->arena->clone(name);
+    SIRString func_name = name;
     uint32_t func_index = 0;
     while (SIRStringMapGet(&module->function_map, func_name, NULL)) {
         func_index++;
-        func_name = module->arena->sprintf(
-            "%.*s.%u", (int)name.len, name.ptr, func_index);
+        func_name = SIRAllocSprintf(
+            module->arena, "%.*s.%u", (int)name.len, name.ptr, func_index);
     }
 
-    SIRFunction *function = module->arena->alloc<SIRFunction>();
+    SIRFunction *function = SIRAlloc(module->arena, SIRFunction);
     *function = SIRFunction{
         .name = func_name,
-        .param_types = module->arena->clone(param_types),
+        .param_types =
+            {(SIRType **)SIRAllocSliceClone(
+                 module->arena, param_types.ptr, param_types.len),
+             param_types.len},
         .return_type = return_type,
         .variadic = variadic,
 
-        .stack_slots = SIRArray<SIRInstRef>::create(module->arena),
-        .blocks = SIRArray<SIRInstRef>::create(module->arena),
-        .param_insts = SIRArray<SIRInstRef>::create(module->arena),
+        .stack_slots =
+            SIRArray<SIRInstRef>::create((SIRAllocator *)module->arena),
+        .blocks = SIRArray<SIRInstRef>::create((SIRAllocator *)module->arena),
+        .param_insts =
+            SIRArray<SIRInstRef>::create((SIRAllocator *)module->arena),
 
         .linkage = linkage,
         .calling_convention = calling_convention,
@@ -636,7 +628,9 @@ SIRInstRef SIRModuleAddGlobal(
     SIRInst global = {};
     global.kind = SIRInstKind_Global;
     global.type = SIRModuleCreatePointerType(module, type);
-    global.global.data = module->arena->clone(data);
+    global.global.data = {
+        (uint8_t *)SIRAllocSliceClone(module->arena, data.ptr, data.len),
+        data.len};
     global.global.flags = flags;
 
     SIRInstRef global_ref = module_add_inst(module, global);
@@ -660,7 +654,7 @@ SIRInstRef SIRModuleAddGlobalString(SIRModule *module, const SIRString &str)
     global.kind = SIRInstKind_Global;
     global.type = SIRModuleCreatePointerType(module, module->i8_type);
     global.global.data = {
-        (uint8_t *)module->arena->null_terminate(str), str.len + 1};
+        (uint8_t *)SIRAllocNullTerminate(module->arena, str), str.len + 1};
     global.global.flags = SIRGlobalFlags_Initialized | SIRGlobalFlags_ReadOnly;
 
     SIRInstRef global_ref = module_add_inst(module, global);
@@ -714,7 +708,8 @@ SIRInstRef SIRModuleInsertBlockAtEnd(SIRModule *module, SIRInstRef func_ref)
 
     SIRInst block = {};
     block.kind = SIRInstKind_Block;
-    block.block.inst_refs = SIRArray<SIRInstRef>::create(module->arena);
+    block.block.inst_refs =
+        SIRArray<SIRInstRef>::create((SIRAllocator *)module->arena);
     SIRInstRef block_ref = module_add_inst(module, block);
 
     func->blocks.push_back(block_ref);
@@ -724,7 +719,7 @@ SIRInstRef SIRModuleInsertBlockAtEnd(SIRModule *module, SIRInstRef func_ref)
 
 SIRBuilder *SIRBuilderCreate(SIRModule *module)
 {
-    SIRBuilder *builder = module->arena->alloc<SIRBuilder>();
+    SIRBuilder *builder = SIRAlloc(module->arena, SIRBuilder);
     *builder = SIRBuilder{
         .module = module,
         .current_func_ref = {UINT32_MAX},
@@ -1048,7 +1043,10 @@ SIRInstRef SIRBuilderInsertFuncCall(
     SIRInst inst = {};
     inst.kind = SIRInstKind_FuncCall;
     inst.type = called_function->return_type;
-    inst.func_call = {func_ref, builder->module->arena->clone(parameters)};
+    inst.func_call.func_ref = func_ref;
+    inst.func_call.parameters.len = parameters.len;
+    inst.func_call.parameters.ptr = (SIRInstRef *)SIRAllocSliceClone(
+        builder->module->arena, parameters.ptr, parameters.len);
 
     return builder_insert_inst(builder, inst);
 }

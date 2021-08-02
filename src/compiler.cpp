@@ -47,12 +47,12 @@ bool TypeRef::is_runtime(Compiler *compiler)
 
 Scope *Scope::create(Compiler *compiler, FileRef file_ref, Scope *parent)
 {
-    Scope *scope = compiler->arena->alloc<Scope>();
+    Scope *scope = SIRAlloc(compiler->arena, Scope);
     *scope = {};
 
     scope->file_ref = file_ref;
     scope->parent = parent;
-    scope->decl_refs = SIRStringMapCreate(compiler->arena, 0);
+    scope->decl_refs = SIRStringMapCreate((SIRAllocator *)compiler->arena, 0);
 
     return scope;
 }
@@ -95,37 +95,28 @@ Compiler Compiler::create()
 {
     init_parser_tables();
 
-    SIRArenaAllocator *arena =
-        SIRArenaAllocator::create(SIRMallocAllocator::get_instance());
+    SIRArenaAllocator *arena = SIRArenaAllocatorCreate(&SIR_MALLOC_ALLOCATOR);
 
-    SIRStringMap keyword_map =
-        SIRStringMapCreate(SIRMallocAllocator::get_instance(), 0);
+    SIRStringMap keyword_map = SIRStringMapCreate(&SIR_MALLOC_ALLOCATOR, 0);
     SIRStringMap builtin_function_map =
-        SIRStringMapCreate(SIRMallocAllocator::get_instance(), 0);
-    SIRArray<Error> errors = SIRArray<Error>::create(arena);
+        SIRStringMapCreate(&SIR_MALLOC_ALLOCATOR, 0);
+    SIRArray<Error> errors = SIRArray<Error>::create(&SIR_MALLOC_ALLOCATOR);
 
-    SIRStringBuilder sb =
-        SIRStringBuilder::create(SIRMallocAllocator::get_instance());
+    SIRStringBuilder sb = SIRStringBuilder::create(&SIR_MALLOC_ALLOCATOR);
 
-    SIRArray<File> files =
-        SIRArray<File>::create(SIRMallocAllocator::get_instance());
+    SIRArray<File> files = SIRArray<File>::create(&SIR_MALLOC_ALLOCATOR);
     files.push_back({}); // 0th file
 
-    SIRStringMap type_map =
-        SIRStringMapCreate(SIRMallocAllocator::get_instance(), 0);
-    SIRArray<Type> types =
-        SIRArray<Type>::create(SIRMallocAllocator::get_instance());
+    SIRStringMap type_map = SIRStringMapCreate(&SIR_MALLOC_ALLOCATOR, 0);
+    SIRArray<Type> types = SIRArray<Type>::create(&SIR_MALLOC_ALLOCATOR);
 
-    SIRArray<Decl> decls =
-        SIRArray<Decl>::create(SIRMallocAllocator::get_instance());
+    SIRArray<Decl> decls = SIRArray<Decl>::create(&SIR_MALLOC_ALLOCATOR);
     decls.push_back({}); // 0th decl
 
-    SIRArray<Stmt> stmts =
-        SIRArray<Stmt>::create(SIRMallocAllocator::get_instance());
+    SIRArray<Stmt> stmts = SIRArray<Stmt>::create(&SIR_MALLOC_ALLOCATOR);
     stmts.push_back({}); // 0th decl
 
-    SIRArray<Expr> exprs =
-        SIRArray<Expr>::create(SIRMallocAllocator::get_instance());
+    SIRArray<Expr> exprs = SIRArray<Expr>::create(&SIR_MALLOC_ALLOCATOR);
     exprs.push_back({}); // 0th expr
 
     SIRStringMapSet(&keyword_map, "extern", TokenKind_Extern);
@@ -327,7 +318,7 @@ void Compiler::destroy()
     this->errors.destroy();
     SIRStringMapDestroy(&this->builtin_function_map);
     SIRStringMapDestroy(&this->keyword_map);
-    this->arena->destroy();
+    SIRArenaAllocatorDestroy(this->arena);
 }
 
 size_t Compiler::get_error_checkpoint()
@@ -344,7 +335,7 @@ void Compiler::add_error(const Location &loc, const char *fmt, ...)
 {
     va_list args;
     va_start(args, fmt);
-    SIRString message = this->arena->vsprintf(fmt, args);
+    SIRString message = SIRAllocVsprintf(this->arena, fmt, args);
     va_end(args);
 
     Error err = {
@@ -400,7 +391,7 @@ print_time_taken(const char *task_name, timespec start_time, timespec end_time)
 void Compiler::compile(SIRString path)
 {
     try {
-        FILE *f = fopen(this->arena->null_terminate(path), "rb");
+        FILE *f = fopen(SIRAllocNullTerminate(this->arena, path), "rb");
         if (!f) {
             this->add_error(
                 Location{},
@@ -413,7 +404,9 @@ void Compiler::compile(SIRString path)
         size_t file_size = ftell(f);
         fseek(f, 0, SEEK_SET);
 
-        SIRSlice<char> file_content = this->arena->alloc<char>(file_size + 1);
+        SIRSlice<char> file_content;
+        file_content.len = file_size + 1;
+        file_content.ptr = SIRAllocSlice(this->arena, char, file_content.len);
         size_t bytes_read = fread(file_content.ptr, 1, file_size, f);
         file_content[file_size] = '\0';
 
@@ -434,7 +427,8 @@ void Compiler::compile(SIRString path)
             .text = SIRString{file_content.ptr, file_content.len},
             .line_count = 0,
             .scope = Scope::create(this, file_ref),
-            .top_level_decls = SIRArray<DeclRef>::create(this->arena),
+            .top_level_decls =
+                SIRArray<DeclRef>::create((SIRAllocator *)this->arena),
         };
 
         timespec total_start_time, total_end_time;
@@ -511,7 +505,8 @@ TypeRef Compiler::create_struct_type(
     type.kind = TypeKind_Struct;
     type.struct_.field_types = fields;
     type.struct_.field_names = field_names;
-    type.struct_.field_map = SIRStringMapCreate(this->arena, 32);
+    type.struct_.field_map =
+        SIRStringMapCreate((SIRAllocator *)this->arena, 32);
     for (size_t i = 0; i < field_names.len; ++i) {
         SIRStringMapSet(&type.struct_.field_map, field_names[i], i);
     }
@@ -587,40 +582,46 @@ SIRString Type::to_string(Compiler *compiler)
     }
     case TypeKind_Int: {
         if (this->int_.is_signed) {
-            this->str = compiler->arena->sprintf("@int(%u)", this->int_.bits);
+            this->str =
+                SIRAllocSprintf(compiler->arena, "@int(%u)", this->int_.bits);
         } else {
-            this->str = compiler->arena->sprintf("@uint(%u)", this->int_.bits);
+            this->str =
+                SIRAllocSprintf(compiler->arena, "@uint(%u)", this->int_.bits);
         }
         break;
     }
     case TypeKind_Float: {
-        this->str = compiler->arena->sprintf("@float(%u)", this->float_.bits);
+        this->str =
+            SIRAllocSprintf(compiler->arena, "@float(%u)", this->float_.bits);
         break;
     }
     case TypeKind_Pointer: {
         SIRString sub_str =
             compiler->types[this->pointer.sub_type.id].to_string(compiler);
-        this->str = compiler->arena->sprintf(
-            "@ptr(%.*s)", (int)sub_str.len, sub_str.ptr);
+        this->str = SIRAllocSprintf(
+            compiler->arena, "@ptr(%.*s)", (int)sub_str.len, sub_str.ptr);
         break;
     }
     case TypeKind_Array: {
         SIRString sub_str =
             compiler->types[this->array.sub_type.id].to_string(compiler);
-        this->str = compiler->arena->sprintf(
-            "@arr(%.*s, %lu)", (int)sub_str.len, sub_str.ptr, this->array.size);
+        this->str = SIRAllocSprintf(
+            compiler->arena,
+            "@arr(%.*s, %lu)",
+            (int)sub_str.len,
+            sub_str.ptr,
+            this->array.size);
         break;
     }
     case TypeKind_Slice: {
         SIRString sub_str =
             compiler->types[this->slice.sub_type.id].to_string(compiler);
-        this->str = compiler->arena->sprintf(
-            "@slice(%.*s)", (int)sub_str.len, sub_str.ptr);
+        this->str = SIRAllocSprintf(
+            compiler->arena, "@slice(%.*s)", (int)sub_str.len, sub_str.ptr);
         break;
     }
     case TypeKind_Tuple: {
-        SIRStringBuilder sb =
-            SIRStringBuilder::create(SIRMallocAllocator::get_instance());
+        SIRStringBuilder sb = SIRStringBuilder::create(&SIR_MALLOC_ALLOCATOR);
 
         sb.append("@tuple(");
 
@@ -636,14 +637,13 @@ SIRString Type::to_string(Compiler *compiler)
 
         sb.append(")");
 
-        this->str = sb.build_null_terminated(compiler->arena);
+        this->str = sb.build_null_terminated((SIRAllocator *)compiler->arena);
 
         sb.destroy();
         break;
     }
     case TypeKind_Struct: {
-        SIRStringBuilder sb =
-            SIRStringBuilder::create(SIRMallocAllocator::get_instance());
+        SIRStringBuilder sb = SIRStringBuilder::create(&SIR_MALLOC_ALLOCATOR);
 
         sb.append("@struct(");
 
@@ -665,14 +665,13 @@ SIRString Type::to_string(Compiler *compiler)
 
         sb.append(")");
 
-        this->str = sb.build_null_terminated(compiler->arena);
+        this->str = sb.build_null_terminated((SIRAllocator *)compiler->arena);
 
         sb.destroy();
         break;
     }
     case TypeKind_Function: {
-        SIRStringBuilder sb =
-            SIRStringBuilder::create(SIRMallocAllocator::get_instance());
+        SIRStringBuilder sb = SIRStringBuilder::create(&SIR_MALLOC_ALLOCATOR);
 
         if (!this->func.vararg) {
             sb.append("@func(");
@@ -702,7 +701,7 @@ SIRString Type::to_string(Compiler *compiler)
         sb.append(")");
         sb.append(")");
 
-        this->str = sb.build_null_terminated(compiler->arena);
+        this->str = sb.build_null_terminated((SIRAllocator*)compiler->arena);
 
         sb.destroy();
         break;

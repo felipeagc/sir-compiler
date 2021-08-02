@@ -204,7 +204,7 @@ struct X86_64AsmBuilder {
     SIRArray<MetaValue> meta_insts;
 
     size_t get_code_offset();
-    size_t encode_raw(const SIRSlice<uint8_t> &bytes);
+    size_t encode_raw(const uint8_t *bytes, size_t len);
     size_t encode(
         uint64_t mnem, FeOp op0 = 0, FeOp op1 = 0, FeOp op2 = 0, FeOp op3 = 0);
     size_t encode_at(
@@ -367,13 +367,13 @@ size_t X86_64AsmBuilder::get_code_offset()
 }
 
 SIR_INLINE
-size_t X86_64AsmBuilder::encode_raw(const SIRSlice<uint8_t> &bytes)
+size_t X86_64AsmBuilder::encode_raw(const uint8_t *bytes, size_t len)
 {
     ZoneScoped;
 
     this->obj_builder->add_to_section(
-        this->obj_builder, SIRSectionType_Text, bytes);
-    return bytes.len;
+        this->obj_builder, SIRSectionType_Text, {(uint8_t *)bytes, len});
+    return len;
 }
 
 SIR_INLINE
@@ -417,7 +417,9 @@ size_t X86_64AsmBuilder::encode_direct_call(SIRInstRef func_ref)
 {
     ZoneScoped;
 
-    size_t inst_len = this->encode_raw({0xe8, 0x00, 0x00, 0x00, 0x00});
+    uint8_t inst_bytes[5] = {0xe8, 0x00, 0x00, 0x00, 0x00};
+    size_t inst_len =
+        this->encode_raw(inst_bytes, SIR_CARRAY_LENGTH(inst_bytes));
 
     size_t curr_offset = this->get_code_offset();
 
@@ -1957,12 +1959,13 @@ void X86_64AsmBuilder::generate_function(SIRInstRef func_ref)
     SIRFunction *func = func_inst.func;
     SIR_ASSERT(func);
 
-    MetaFunction *meta_func = this->module->arena->alloc<MetaFunction>();
+    MetaFunction *meta_func = SIRAlloc(this->module->arena, MetaFunction);
     *meta_func = {};
 
-    meta_func->jump_patches = SIRArray<FuncJumpPatch>::create(module->arena);
+    meta_func->jump_patches =
+        SIRArray<FuncJumpPatch>::create((SIRAllocator *)module->arena);
     meta_func->temp_int_register_stack =
-        SIRArray<RegisterIndex>::create(module->arena);
+        SIRArray<RegisterIndex>::create((SIRAllocator *)module->arena);
 
     switch (func->calling_convention) {
     case SIRCallingConvention_SystemV: {
@@ -2313,7 +2316,7 @@ SIRCreateX86_64Builder(SIRModule *module, SIRObjectBuilder *obj_builder)
     ZoneScoped;
 
     X86_64AsmBuilder *asm_builder =
-        module->arena->alloc_init<X86_64AsmBuilder>();
+        SIRAllocInit(module->arena, X86_64AsmBuilder);
 
     asm_builder->vt.generate = generate;
     asm_builder->vt.destroy = destroy;
@@ -2322,7 +2325,7 @@ SIRCreateX86_64Builder(SIRModule *module, SIRObjectBuilder *obj_builder)
     asm_builder->obj_builder = obj_builder;
 
     asm_builder->meta_insts =
-        SIRArray<MetaValue>::create(SIRMallocAllocator::get_instance());
+        SIRArray<MetaValue>::create(&SIR_MALLOC_ALLOCATOR);
     asm_builder->meta_insts.resize(module->insts.len);
 
     for (size_t i = 0; i < asm_builder->meta_insts.len; ++i) {

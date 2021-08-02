@@ -103,8 +103,10 @@ get_ir_type(Compiler *compiler, SIRModule *module, const Type &type)
         return SIRModuleCreateArrayType(module, subtype, type.array.size);
     }
     case TypeKind_Tuple: {
-        SIRSlice<SIRType *> field_types =
-            compiler->arena->alloc<SIRType *>(type.tuple.field_types.len);
+        SIRSlice<SIRType *> field_types;
+        field_types.len = type.tuple.field_types.len;
+        field_types.ptr =
+            SIRAllocSlice(compiler->arena, SIRType *, field_types.len);
 
         for (size_t i = 0; i < type.tuple.field_types.len; ++i) {
             field_types[i] = get_ir_type(
@@ -114,8 +116,10 @@ get_ir_type(Compiler *compiler, SIRModule *module, const Type &type)
         return SIRModuleCreateStructType(module, field_types, false);
     }
     case TypeKind_Struct: {
-        SIRSlice<SIRType *> field_types =
-            compiler->arena->alloc<SIRType *>(type.struct_.field_types.len);
+        SIRSlice<SIRType *> field_types;
+        field_types.len = type.struct_.field_types.len;
+        field_types.ptr =
+            SIRAllocSlice(compiler->arena, SIRType *, field_types.len);
 
         for (size_t i = 0; i < type.struct_.field_types.len; ++i) {
             field_types[i] = get_ir_type(
@@ -270,8 +274,9 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
         case TypeKind_Function: {
             // Actual function call
 
-            SIRSlice<SIRInstRef> params = compiler->arena->alloc<SIRInstRef>(
-                expr.func_call.param_refs.len);
+            SIRSlice<SIRInstRef> params;
+            params.len = expr.func_call.param_refs.len;
+            params.ptr = SIRAllocSlice(compiler->arena, SIRInstRef, params.len);
 
             for (size_t i = 0; i < expr.func_call.param_refs.len; ++i) {
                 CodegenValue param_value =
@@ -847,8 +852,10 @@ codegen_decl(Compiler *compiler, CodegenContext *ctx, DeclRef decl_ref)
         TypeRef func_type_ref = decl.decl_type_ref;
         Type func_type = func_type_ref.get(compiler);
 
-        SIRSlice<SIRType *> param_types =
-            compiler->arena->alloc<SIRType *>(func_type.func.param_types.len);
+        SIRSlice<SIRType *> param_types;
+        param_types.len = func_type.func.param_types.len;
+        param_types.ptr =
+            SIRAllocSlice(compiler->arena, SIRType *, param_types.len);
         for (size_t i = 0; i < func_type.func.param_types.len; ++i) {
             param_types[i] = ctx->type_values[func_type.func.param_types[i].id];
         }
@@ -949,8 +956,10 @@ codegen_decl(Compiler *compiler, CodegenContext *ctx, DeclRef decl_ref)
     case DeclKind_GlobalVarDecl: {
         SIRType *ir_type = ctx->type_values[decl.decl_type_ref.id];
 
-        SIRSlice<uint8_t> global_data = compiler->arena->alloc_init<uint8_t>(
-            SIRTypeSizeOf(ctx->module, ir_type));
+        SIRSlice<uint8_t> global_data;
+        global_data.len = SIRTypeSizeOf(ctx->module, ir_type);
+        global_data.ptr =
+            SIRAllocSliceInit(compiler->arena, uint8_t, global_data.len);
 
         value = {
             true,
@@ -981,29 +990,27 @@ void codegen_file(Compiler *compiler, FileRef file_ref)
         SIRModuleCreate(SIRTargetArch_X86_64, SIREndianness_LittleEndian);
     ctx.builder = SIRBuilderCreate(ctx.module);
 
-    ctx.type_values =
-        SIRArray<SIRType *>::create(SIRMallocAllocator::get_instance());
+    ctx.type_values = SIRArray<SIRType *>::create(&SIR_MALLOC_ALLOCATOR);
     ctx.type_values.resize(compiler->types.len);
     for (size_t i = 0; i < compiler->types.len; ++i) {
         ctx.type_values[i] =
             get_ir_type(compiler, ctx.module, compiler->types[i]);
     }
 
-    ctx.decl_values =
-        SIRArray<CodegenValue>::create(SIRMallocAllocator::get_instance());
+    ctx.decl_values = SIRArray<CodegenValue>::create(&SIR_MALLOC_ALLOCATOR);
     ctx.decl_values.resize(compiler->decls.len);
     for (size_t i = 0; i < compiler->decls.len; ++i) {
         ctx.decl_values[i] = {};
     }
 
-    ctx.expr_values =
-        SIRArray<CodegenValue>::create(SIRMallocAllocator::get_instance());
+    ctx.expr_values = SIRArray<CodegenValue>::create(&SIR_MALLOC_ALLOCATOR);
     ctx.expr_values.resize(compiler->exprs.len);
     for (size_t i = 0; i < compiler->exprs.len; ++i) {
         ctx.expr_values[i] = {};
     }
 
-    ctx.function_stack = SIRArray<SIRInstRef>::create(ctx.module->arena);
+    ctx.function_stack =
+        SIRArray<SIRInstRef>::create((SIRAllocator *)ctx.module->arena);
 
     for (DeclRef decl_ref : file.top_level_decls) {
         codegen_decl(compiler, &ctx, decl_ref);
@@ -1015,10 +1022,10 @@ void codegen_file(Compiler *compiler, FileRef file_ref)
 
 #if !NDEBUG
     {
-        auto allocator = SIRMallocAllocator::get_instance();
+        SIRAllocator *allocator = &SIR_MALLOC_ALLOCATOR;
         SIRString str = SIRModulePrintAlloc(ctx.module, allocator);
         printf("%.*s", (int)str.len, str.ptr);
-        allocator->free(str);
+        SIRFree(allocator, str.ptr);
     }
 #endif
 

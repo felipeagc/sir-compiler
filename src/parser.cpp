@@ -110,14 +110,20 @@ static SIRString token_to_string(Compiler *compiler, const Token &token)
 {
     switch (token.kind) {
     case TokenKind_Error:
-        return compiler->arena->sprintf(
-            "error: %.*s", (int)token.str.len, token.str.ptr);
+        return SIRAllocSprintf(
+            compiler->arena, "error: %.*s", (int)token.str.len, token.str.ptr);
     case TokenKind_StringLiteral:
-        return compiler->arena->sprintf(
-            "string literal: \"%.*s\"", (int)token.str.len, token.str.ptr);
+        return SIRAllocSprintf(
+            compiler->arena,
+            "string literal: \"%.*s\"",
+            (int)token.str.len,
+            token.str.ptr);
     case TokenKind_Identifier:
-        return compiler->arena->sprintf(
-            "identifier: \"%.*s\"", (int)token.str.len, token.str.ptr);
+        return SIRAllocSprintf(
+            compiler->arena,
+            "identifier: \"%.*s\"",
+            (int)token.str.len,
+            token.str.ptr);
     default: return token_kind_to_string(token.kind);
     }
 
@@ -371,7 +377,7 @@ struct TokenizerState {
         ZoneScoped;
 
         TokenizerState state = *this;
-        SIRAllocator *allocator = compiler->arena;
+        SIRAllocator *allocator = (SIRAllocator *)compiler->arena;
 
         State mstate = State_WhitespaceStart;
 
@@ -437,7 +443,7 @@ struct TokenizerState {
                 if (ident_str[i] == '\\') {
                     if (i + 1 >= ident_str.len) {
                         token->kind = TokenKind_Error;
-                        token->str = allocator->clone("invalid string literal");
+                        token->str = "invalid string literal";
                         goto end;
                     }
                     ++i;
@@ -464,20 +470,21 @@ struct TokenizerState {
                 compiler->sb.append(ident_str[i]);
             }
 
-            token->str = compiler->sb.build_null_terminated(compiler->arena);
+            token->str = compiler->sb.build_null_terminated(
+                (SIRAllocator *)compiler->arena);
             break;
         }
         case TokenKind_FloatLiteral: {
             SIRString ident_str =
                 SIRString{&state.text[token->loc.offset], token->loc.len};
-            const char *strz = allocator->null_terminate(ident_str);
+            const char *strz = SIRAllocNullTerminate(allocator, ident_str);
             token->float_ = strtod(strz, NULL);
             break;
         }
         case TokenKind_IntLiteral: {
             SIRString ident_str =
                 SIRString{&state.text[token->loc.offset], token->loc.len};
-            const char *strz = allocator->null_terminate(ident_str);
+            const char *strz = SIRAllocNullTerminate(allocator, ident_str);
             token->int_ = strtol(strz, NULL, 10);
             break;
         }
@@ -693,7 +700,7 @@ static Expr parse_primary_expr(Compiler *compiler, TokenizerState *state)
         expr.loc = ident_token.loc;
         expr.builtin_call.builtin = builtin_func;
         expr.builtin_call.param_refs =
-            SIRArray<ExprRef>::create(compiler->arena);
+            SIRArray<ExprRef>::create((SIRAllocator *)compiler->arena);
 
         state->next_token(compiler, &next_token);
         while (next_token.kind != TokenKind_RParen) {
@@ -719,9 +726,9 @@ static Expr parse_primary_expr(Compiler *compiler, TokenizerState *state)
         expr.kind = ExprKind_StructType;
         expr.loc = struct_token.loc;
         expr.struct_type.field_names =
-            SIRArray<SIRString>::create(compiler->arena);
+            SIRArray<SIRString>::create((SIRAllocator *)compiler->arena);
         expr.struct_type.field_type_expr_refs =
-            SIRArray<ExprRef>::create(compiler->arena);
+            SIRArray<ExprRef>::create((SIRAllocator *)compiler->arena);
 
         state->consume_token(compiler, TokenKind_LCurly);
 
@@ -774,9 +781,10 @@ static Expr parse_func_expr(Compiler *compiler, TokenizerState *state)
     expr.loc = next_token.loc;
     expr.func = {};
 
-    expr.func.param_decl_refs = SIRArray<DeclRef>::create(compiler->arena);
+    expr.func.param_decl_refs =
+        SIRArray<DeclRef>::create((SIRAllocator *)compiler->arena);
     expr.func.return_type_expr_refs =
-        SIRArray<ExprRef>::create(compiler->arena);
+        SIRArray<ExprRef>::create((SIRAllocator *)compiler->arena);
 
     switch (next_token.kind) {
     case TokenKind_Inline: {
@@ -907,7 +915,7 @@ static Expr parse_func_call_expr(Compiler *compiler, TokenizerState *state)
             expr.kind = ExprKind_FunctionCall;
             expr.func_call.func_expr_ref = func_expr_ref;
             expr.func_call.param_refs =
-                SIRArray<ExprRef>::create(compiler->arena);
+                SIRArray<ExprRef>::create((SIRAllocator *)compiler->arena);
 
             state->next_token(compiler, &next_token);
             while (next_token.kind != TokenKind_RParen) {
@@ -1058,9 +1066,9 @@ static Expr parse_binary_expr(Compiler *compiler, TokenizerState *state)
     }
 
     SIRArray<BinaryOp> op_stack =
-        SIRArray<BinaryOp>::create(SIRMallocAllocator::get_instance());
+        SIRArray<BinaryOp>::create(&SIR_MALLOC_ALLOCATOR);
     SIRArray<BinaryOpSymbol> symbol_queue =
-        SIRArray<BinaryOpSymbol>::create(SIRMallocAllocator::get_instance());
+        SIRArray<BinaryOpSymbol>::create(&SIR_MALLOC_ALLOCATOR);
 
     static uint8_t precedences[BinaryOp_MAX] = {
         0,  // BinaryOp_Unknown,
@@ -1150,8 +1158,7 @@ static Expr parse_binary_expr(Compiler *compiler, TokenizerState *state)
         symbol_queue.push_back(op_symbol);
     }
 
-    SIRArray<Expr> expr_stack =
-        SIRArray<Expr>::create(SIRMallocAllocator::get_instance());
+    SIRArray<Expr> expr_stack = SIRArray<Expr>::create(&SIR_MALLOC_ALLOCATOR);
 
     for (size_t i = 0; i < symbol_queue.len; ++i) {
         BinaryOpSymbol symbol = symbol_queue[i];
@@ -1266,7 +1273,8 @@ static Stmt parse_stmt(Compiler *compiler, TokenizerState *state)
 
         stmt.kind = StmtKind_Block;
         stmt.loc = lcurly_token.loc;
-        stmt.block.stmt_refs = SIRArray<StmtRef>::create(compiler->arena);
+        stmt.block.stmt_refs =
+            SIRArray<StmtRef>::create((SIRAllocator *)compiler->arena);
 
         state->next_token(compiler, &next_token);
         while (next_token.kind != TokenKind_RCurly) {
@@ -1439,10 +1447,11 @@ static void parse_top_level_decl(
         func_decl.func = {};
 
         func_decl.func.param_decl_refs =
-            SIRArray<DeclRef>::create(compiler->arena);
+            SIRArray<DeclRef>::create((SIRAllocator *)compiler->arena);
         func_decl.func.return_type_expr_refs =
-            SIRArray<ExprRef>::create(compiler->arena);
-        func_decl.func.body_stmts = SIRArray<StmtRef>::create(compiler->arena);
+            SIRArray<ExprRef>::create((SIRAllocator *)compiler->arena);
+        func_decl.func.body_stmts =
+            SIRArray<StmtRef>::create((SIRAllocator *)compiler->arena);
 
         state->next_token(compiler, &next_token);
         switch (next_token.kind) {

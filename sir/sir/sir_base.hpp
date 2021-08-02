@@ -81,33 +81,12 @@ template <typename T> struct SIRSlice {
 };
 
 struct SIRString {
-    char *ptr = nullptr;
-    size_t len = 0;
-
-    SIRString()
-    {
-        this->ptr = 0;
-        this->len = 0;
-    }
-
-    SIRString(const char *str)
-    {
-        this->ptr = (char *)str;
-        this->len = strlen(str);
-    }
-
-    SIRString(const char *str, size_t len)
-    {
-        this->ptr = (char *)str;
-        this->len = len;
-    }
-
-    char &operator[](size_t index) const
-    {
-        SIR_ASSERT(index < this->len);
-        return this->ptr[index];
-    }
+    const char *ptr;
+    size_t len;
 };
+
+#define SIR_STR(str_lit) ((SIRString){str_lit, SIR_CARRAY_LENGTH(str_lit) - 1})
+#define SIR_CSTR(cstr) ((SIRString){cstr, strlen(cstr)})
 
 SIR_INLINE static bool SIRStringEqual(SIRString str1, SIRString str2)
 {
@@ -205,23 +184,21 @@ static inline SIR_PRINTF_FORMATTING(2, 3) SIRString
 {
     ZoneScoped;
 
-    SIRString str;
-
     va_list args;
     va_start(args, fmt);
-    str.len = stbsp_vsnprintf(NULL, 0, fmt, args);
+    size_t str_len = stbsp_vsnprintf(NULL, 0, fmt, args);
     va_end(args);
 
-    str.ptr = (char *)allocator->alloc(allocator, str.len + 1);
-    memset(str.ptr, 0, str.len + 1); // Needed because memory sanitizer
+    char *str_ptr = (char *)SIRAllocSlice(allocator, char, str_len + 1);
+    memset(str_ptr, 0, str_len + 1); // Needed because memory sanitizer
                                      // was complaining about uninitialized
                                      // memory
 
     va_start(args, fmt);
-    stbsp_vsnprintf(str.ptr, str.len + 1, fmt, args);
+    stbsp_vsnprintf(str_ptr, str_len + 1, fmt, args);
     va_end(args);
 
-    return str;
+    return (SIRString){str_ptr, str_len};
 }
 
 static inline SIRString
@@ -229,20 +206,19 @@ SIRAllocVsprintfInternal(SIRAllocator *allocator, const char *fmt, va_list args)
 {
     ZoneScoped;
 
-    SIRString str;
-
     va_list args_copy;
     va_copy(args_copy, args);
-    str.len = stbsp_vsnprintf(NULL, 0, fmt, args_copy);
+    size_t str_len = stbsp_vsnprintf(NULL, 0, fmt, args_copy);
     va_end(args_copy);
 
-    str.ptr = (char *)allocator->alloc(allocator, str.len + 1);
+    char *str_ptr = (char *)allocator->alloc(allocator, str_len + 1);
+    memset(str_ptr, 0, str_len + 1); // Needed because memory sanitizer
+                                     // was complaining about uninitialized
+                                     // memory
 
-    stbsp_vsnprintf(str.ptr, str.len + 1, fmt, args);
+    stbsp_vsnprintf(str_ptr, str_len + 1, fmt, args);
 
-    str.ptr[str.len] = '\0';
-
-    return str;
+    return (SIRString){str_ptr, str_len};
 }
 
 #define SIRAllocNullTerminate(allocator, str)                                  \
@@ -336,7 +312,7 @@ template <typename T> struct SIRArray {
         this->len += slice.len;
     }
 
-    SIR_INLINE void push_many(const T* data, size_t len)
+    SIR_INLINE void push_many(const T *data, size_t len)
     {
         ZoneScoped;
 

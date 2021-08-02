@@ -9,11 +9,11 @@ SIRString SIRTypeToString(SIRModule *module, SIRType *type)
 
     switch (type->kind) {
     case SIRTypeKind_Void: {
-        type->str = "@void";
+        type->str = SIR_STR("@void");
         break;
     }
     case SIRTypeKind_Bool: {
-        type->str = "@bool";
+        type->str = SIR_STR("@bool");
         break;
     }
     case SIRTypeKind_Pointer: {
@@ -45,22 +45,22 @@ SIRString SIRTypeToString(SIRModule *module, SIRType *type)
         SIRStringBuilder sb = SIRStringBuilder::create(&SIR_MALLOC_ALLOCATOR);
 
         if (type->struct_.packed) {
-            sb.append("@packed_struct(");
+            sb.append(SIR_STR("@packed_struct("));
         } else {
-            sb.append("@struct(");
+            sb.append(SIR_STR("@struct("));
         }
 
         bool first = true;
         for (auto &field_type : type->struct_.fields) {
             if (!first) {
-                sb.append(", ");
+                sb.append(SIR_STR(", "));
             }
             SIRString field_str = SIRTypeToString(module, field_type);
             sb.append(field_str);
             first = false;
         }
 
-        sb.append(")");
+        sb.append(SIR_STR(")"));
 
         type->str = sb.build_null_terminated((SIRAllocator *)module->arena);
 

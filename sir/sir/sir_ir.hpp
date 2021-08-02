@@ -271,7 +271,7 @@ SIRModuleAddStackSlot(SIRModule *module, SIRInstRef func_ref, SIRType *type);
 SIRInstRef SIRModuleGetFuncParam(
     SIRModule *module, SIRInstRef func_ref, uint32_t param_index);
 SIRInstRef SIRModuleInsertBlockAtEnd(SIRModule *module, SIRInstRef func_ref);
-SIRString SIRModulePrintAlloc(SIRModule *module, SIRAllocator *allocator);
+char *SIRModulePrintAlloc(SIRModule *module, SIRAllocator *allocator, size_t *str_len);
 
 struct SIRBuilder {
     SIRModule *module;

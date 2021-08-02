@@ -1034,9 +1034,10 @@ void codegen_file(Compiler *compiler, FileRef file_ref)
 #if !NDEBUG
     {
         SIRAllocator *allocator = &SIR_MALLOC_ALLOCATOR;
-        SIRString str = SIRModulePrintAlloc(ctx.module, allocator);
-        printf("%.*s", (int)str.len, str.ptr);
-        SIRFree(allocator, str.ptr);
+        size_t str_len = 0;
+        char *str = SIRModulePrintAlloc(ctx.module, allocator, &str_len);
+        printf("%.*s", (int)str_len, str);
+        SIRFree(allocator, str);
     }
 #endif
 
@@ -1046,7 +1047,7 @@ void codegen_file(Compiler *compiler, FileRef file_ref)
 
     asm_builder->generate(asm_builder);
 
-    obj_builder->output_to_file(obj_builder, "./main.o");
+    obj_builder->output_to_file(obj_builder, SIR_STR("./main.o"));
 
     asm_builder->destroy(asm_builder);
     obj_builder->destroy(obj_builder);

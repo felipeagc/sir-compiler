@@ -4,7 +4,7 @@
 SIRString SIRCallingConventionToString(SIRCallingConvention calling_convention)
 {
     switch (calling_convention) {
-    case SIRCallingConvention_SystemV: return "system_v";
+    case SIRCallingConvention_SystemV: return SIR_STR("system_v");
     }
 
     SIR_ASSERT(0);
@@ -13,8 +13,8 @@ SIRString SIRCallingConventionToString(SIRCallingConvention calling_convention)
 SIRString SIRLinkageToString(SIRLinkage linkage)
 {
     switch (linkage) {
-    case SIRLinkage_Internal: return "internal";
-    case SIRLinkage_External: return "external";
+    case SIRLinkage_Internal: return SIR_STR("internal");
+    case SIRLinkage_External: return SIR_STR("external");
     }
 
     SIR_ASSERT(0);
@@ -237,11 +237,11 @@ print_instruction(SIRModule *module, SIRInstRef inst_ref, SIRStringBuilder *sb)
             inst_ref.id,
             inst.func_call.func_ref.id);
         for (size_t i = 0; i < inst.func_call.params_len; ++i) {
-            if (i > 0) sb->append(", ");
+            if (i > 0) sb->append(SIR_STR(", "));
             SIRInstRef param_inst_ref = inst.func_call.params[i];
             sb->sprintf("%%r%u", param_inst_ref.id);
         }
-        sb->append(")");
+        sb->append(SIR_STR(")"));
         break;
     }
 
@@ -302,7 +302,7 @@ print_instruction(SIRModule *module, SIRInstRef inst_ref, SIRStringBuilder *sb)
     }
     }
 
-    sb->append("\n");
+    sb->append(SIR_STR("\n"));
 }
 
 static void
@@ -315,11 +315,11 @@ print_block(SIRModule *module, SIRInstRef block_ref, SIRStringBuilder *sb)
     sb->sprintf("  block %%r%u:\n", block_ref.id);
 
     for (SIRInstRef inst_ref : block->block.inst_refs) {
-        sb->append("    ");
+        sb->append(SIR_STR("    "));
         print_instruction(module, inst_ref, sb);
     }
 
-    sb->append("\n");
+    sb->append(SIR_STR("\n"));
 }
 
 static void
@@ -345,14 +345,14 @@ print_function(SIRModule *module, SIRInstRef func_ref, SIRStringBuilder *sb)
         SIRType *param_type = func->param_types[i];
         SIRInstRef param_inst_ref = func->param_insts[i];
 
-        if (i != 0) sb->append(", ");
+        if (i != 0) sb->append(SIR_STR(", "));
 
         sb->sprintf("%%r%u: ", param_inst_ref.id);
         sb->append(SIRTypeToString(module, param_type));
     }
-    sb->append(") -> ");
+    sb->append(SIR_STR(") -> "));
     sb->append(SIRTypeToString(module, func->return_type));
-    sb->append(" {\n");
+    sb->append(SIR_STR(" {\n"));
 
     for (SIRInstRef stack_slot_ref : func->stack_slots) {
         SIRInst *stack_slot = &module->insts[stack_slot_ref.id];
@@ -366,14 +366,14 @@ print_function(SIRModule *module, SIRInstRef func_ref, SIRStringBuilder *sb)
     }
 
     if (func->stack_slots.len > 0) {
-        sb->append("\n");
+        sb->append(SIR_STR("\n"));
     }
 
     for (SIRInstRef block_ref : func->blocks) {
         print_block(module, block_ref, sb);
     }
 
-    sb->append("}\n\n");
+    sb->append(SIR_STR("}\n\n"));
 }
 
 SIRModule *SIRModuleCreate(SIRTargetArch target_arch, SIREndianness endianness)
@@ -484,7 +484,7 @@ void SIRModuleDestroy(SIRModule *module)
     SIRFree(parent_allocator, module);
 }
 
-SIRString SIRModulePrintAlloc(SIRModule *module, SIRAllocator *allocator)
+char *SIRModulePrintAlloc(SIRModule *module, SIRAllocator *allocator, size_t *str_len)
 {
     ZoneScoped;
 
@@ -494,7 +494,7 @@ SIRString SIRModulePrintAlloc(SIRModule *module, SIRAllocator *allocator)
         print_instruction(module, global_ref, &sb);
     }
 
-    sb.append("\n");
+    sb.append(SIR_STR("\n"));
 
     for (SIRInstRef func_ref : module->functions) {
         print_function(module, func_ref, &sb);
@@ -502,7 +502,8 @@ SIRString SIRModulePrintAlloc(SIRModule *module, SIRAllocator *allocator)
 
     SIRString result = sb.build_null_terminated(allocator);
     sb.destroy();
-    return result;
+    *str_len = result.len;
+    return (char*)result.ptr;
 }
 
 SIRType *SIRModuleCreatePointerType(SIRModule *module, SIRType *sub)

@@ -60,7 +60,7 @@ Scope *Scope::create(Compiler *compiler, FileRef file_ref, Scope *parent)
 void Scope::add(Compiler *compiler, DeclRef decl_ref)
 {
     SIRString name = compiler->decls[decl_ref.id].name;
-    if (!SIRStringEqual(name, "_")) {
+    if (!SIRStringEqual(name, SIR_STR("_"))) {
         DeclRef found_decl = this->lookup(name);
         if (found_decl.id != 0) {
             const Location &loc = compiler->decls[decl_ref.id].loc;
@@ -77,7 +77,7 @@ void Scope::add(Compiler *compiler, DeclRef decl_ref)
 
 DeclRef Scope::lookup(const SIRString &name)
 {
-    if (SIRStringEqual(name, "_")) return {0};
+    if (SIRStringEqual(name, SIR_STR("_"))) return {0};
 
     uintptr_t out_ref_id = 0;
     if (SIRStringMapGet(&this->decl_refs, name, &out_ref_id)) {
@@ -119,43 +119,43 @@ Compiler Compiler::create()
     SIRArray<Expr> exprs = SIRArray<Expr>::create(&SIR_MALLOC_ALLOCATOR);
     exprs.push_back({}); // 0th expr
 
-    SIRStringMapSet(&keyword_map, "extern", TokenKind_Extern);
-    SIRStringMapSet(&keyword_map, "extern", TokenKind_Extern);
-    SIRStringMapSet(&keyword_map, "vararg", TokenKind_VarArg);
-    SIRStringMapSet(&keyword_map, "export", TokenKind_Export);
-    SIRStringMapSet(&keyword_map, "inline", TokenKind_Inline);
-    SIRStringMapSet(&keyword_map, "def", TokenKind_Def);
-    SIRStringMapSet(&keyword_map, "type", TokenKind_Type);
-    SIRStringMapSet(&keyword_map, "struct", TokenKind_Struct);
-    SIRStringMapSet(&keyword_map, "global", TokenKind_Global);
-    SIRStringMapSet(&keyword_map, "macro", TokenKind_Macro);
-    SIRStringMapSet(&keyword_map, "null", TokenKind_Null);
-    SIRStringMapSet(&keyword_map, "true", TokenKind_True);
-    SIRStringMapSet(&keyword_map, "false", TokenKind_False);
-    SIRStringMapSet(&keyword_map, "if", TokenKind_If);
-    SIRStringMapSet(&keyword_map, "else", TokenKind_Else);
-    SIRStringMapSet(&keyword_map, "while", TokenKind_While);
-    SIRStringMapSet(&keyword_map, "break", TokenKind_Break);
-    SIRStringMapSet(&keyword_map, "continue", TokenKind_Continue);
-    SIRStringMapSet(&keyword_map, "return", TokenKind_Return);
-    SIRStringMapSet(&keyword_map, "void", TokenKind_Void);
-    SIRStringMapSet(&keyword_map, "bool", TokenKind_Bool);
-    SIRStringMapSet(&keyword_map, "u8", TokenKind_U8);
-    SIRStringMapSet(&keyword_map, "u16", TokenKind_U16);
-    SIRStringMapSet(&keyword_map, "u32", TokenKind_U32);
-    SIRStringMapSet(&keyword_map, "u64", TokenKind_U64);
-    SIRStringMapSet(&keyword_map, "i8", TokenKind_I8);
-    SIRStringMapSet(&keyword_map, "i16", TokenKind_I16);
-    SIRStringMapSet(&keyword_map, "i32", TokenKind_I32);
-    SIRStringMapSet(&keyword_map, "i64", TokenKind_I64);
-    SIRStringMapSet(&keyword_map, "f32", TokenKind_F32);
-    SIRStringMapSet(&keyword_map, "f64", TokenKind_F64);
-    SIRStringMapSet(&keyword_map, "and", TokenKind_And);
-    SIRStringMapSet(&keyword_map, "or", TokenKind_Or);
+    SIRStringMapSet(&keyword_map, SIR_STR("extern"), TokenKind_Extern);
+    SIRStringMapSet(&keyword_map, SIR_STR("extern"), TokenKind_Extern);
+    SIRStringMapSet(&keyword_map, SIR_STR("vararg"), TokenKind_VarArg);
+    SIRStringMapSet(&keyword_map, SIR_STR("export"), TokenKind_Export);
+    SIRStringMapSet(&keyword_map, SIR_STR("inline"), TokenKind_Inline);
+    SIRStringMapSet(&keyword_map, SIR_STR("def"), TokenKind_Def);
+    SIRStringMapSet(&keyword_map, SIR_STR("type"), TokenKind_Type);
+    SIRStringMapSet(&keyword_map, SIR_STR("struct"), TokenKind_Struct);
+    SIRStringMapSet(&keyword_map, SIR_STR("global"), TokenKind_Global);
+    SIRStringMapSet(&keyword_map, SIR_STR("macro"), TokenKind_Macro);
+    SIRStringMapSet(&keyword_map, SIR_STR("null"), TokenKind_Null);
+    SIRStringMapSet(&keyword_map, SIR_STR("true"), TokenKind_True);
+    SIRStringMapSet(&keyword_map, SIR_STR("false"), TokenKind_False);
+    SIRStringMapSet(&keyword_map, SIR_STR("if"), TokenKind_If);
+    SIRStringMapSet(&keyword_map, SIR_STR("else"), TokenKind_Else);
+    SIRStringMapSet(&keyword_map, SIR_STR("while"), TokenKind_While);
+    SIRStringMapSet(&keyword_map, SIR_STR("break"), TokenKind_Break);
+    SIRStringMapSet(&keyword_map, SIR_STR("continue"), TokenKind_Continue);
+    SIRStringMapSet(&keyword_map, SIR_STR("return"), TokenKind_Return);
+    SIRStringMapSet(&keyword_map, SIR_STR("void"), TokenKind_Void);
+    SIRStringMapSet(&keyword_map, SIR_STR("bool"), TokenKind_Bool);
+    SIRStringMapSet(&keyword_map, SIR_STR("u8"), TokenKind_U8);
+    SIRStringMapSet(&keyword_map, SIR_STR("u16"), TokenKind_U16);
+    SIRStringMapSet(&keyword_map, SIR_STR("u32"), TokenKind_U32);
+    SIRStringMapSet(&keyword_map, SIR_STR("u64"), TokenKind_U64);
+    SIRStringMapSet(&keyword_map, SIR_STR("i8"), TokenKind_I8);
+    SIRStringMapSet(&keyword_map, SIR_STR("i16"), TokenKind_I16);
+    SIRStringMapSet(&keyword_map, SIR_STR("i32"), TokenKind_I32);
+    SIRStringMapSet(&keyword_map, SIR_STR("i64"), TokenKind_I64);
+    SIRStringMapSet(&keyword_map, SIR_STR("f32"), TokenKind_F32);
+    SIRStringMapSet(&keyword_map, SIR_STR("f64"), TokenKind_F64);
+    SIRStringMapSet(&keyword_map, SIR_STR("and"), TokenKind_And);
+    SIRStringMapSet(&keyword_map, SIR_STR("or"), TokenKind_Or);
 
-    SIRStringMapSet(&builtin_function_map, "sizeof", BuiltinFunction_Sizeof);
-    SIRStringMapSet(&builtin_function_map, "alignof", BuiltinFunction_Alignof);
-    SIRStringMapSet(&builtin_function_map, "ptrcast", BuiltinFunction_PtrCast);
+    SIRStringMapSet(&builtin_function_map, SIR_STR("sizeof"), BuiltinFunction_Sizeof);
+    SIRStringMapSet(&builtin_function_map, SIR_STR("alignof"), BuiltinFunction_Alignof);
+    SIRStringMapSet(&builtin_function_map, SIR_STR("ptrcast"), BuiltinFunction_PtrCast);
 
     Compiler compiler = {
         .arena = arena,
@@ -557,27 +557,27 @@ SIRString Type::to_string(Compiler *compiler)
 
     switch (this->kind) {
     case TypeKind_Unknown: {
-        this->str = "@unknown";
+        this->str = SIR_STR("@unknown");
         break;
     }
     case TypeKind_Void: {
-        this->str = "@void";
+        this->str = SIR_STR("@void");
         break;
     }
     case TypeKind_Type: {
-        this->str = "@type";
+        this->str = SIR_STR("@type");
         break;
     }
     case TypeKind_Bool: {
-        this->str = "@bool";
+        this->str = SIR_STR("@bool");
         break;
     }
     case TypeKind_UntypedInt: {
-        this->str = "@untyped_int";
+        this->str = SIR_STR("@untyped_int");
         break;
     }
     case TypeKind_UntypedFloat: {
-        this->str = "@untyped_float";
+        this->str = SIR_STR("@untyped_float");
         break;
     }
     case TypeKind_Int: {
@@ -623,19 +623,19 @@ SIRString Type::to_string(Compiler *compiler)
     case TypeKind_Tuple: {
         SIRStringBuilder sb = SIRStringBuilder::create(&SIR_MALLOC_ALLOCATOR);
 
-        sb.append("@tuple(");
+        sb.append(SIR_STR("@tuple("));
 
         for (size_t i = 0; i < this->tuple.field_types.len; ++i) {
             auto field_type_ref = this->tuple.field_types[i];
             Type *field_type = &compiler->types[field_type_ref.id];
             if (i > 0) {
-                sb.append(", ");
+                sb.append(SIR_STR(", "));
             }
             SIRString field_str = field_type->to_string(compiler);
             sb.append(field_str);
         }
 
-        sb.append(")");
+        sb.append(SIR_STR(")"));
 
         this->str = sb.build_null_terminated((SIRAllocator *)compiler->arena);
 
@@ -645,7 +645,7 @@ SIRString Type::to_string(Compiler *compiler)
     case TypeKind_Struct: {
         SIRStringBuilder sb = SIRStringBuilder::create(&SIR_MALLOC_ALLOCATOR);
 
-        sb.append("@struct(");
+        sb.append(SIR_STR("@struct("));
 
         for (size_t i = 0; i < this->struct_.field_types.len; ++i) {
             auto field_type_ref = this->struct_.field_types[i];
@@ -653,17 +653,17 @@ SIRString Type::to_string(Compiler *compiler)
             Type *field_type = &compiler->types[field_type_ref.id];
 
             if (i > 0) {
-                sb.append(",");
+                sb.append(SIR_STR(","));
             }
 
             sb.append(field_name);
-            sb.append(":");
+            sb.append(SIR_STR(":"));
 
             SIRString field_str = field_type->to_string(compiler);
             sb.append(field_str);
         }
 
-        sb.append(")");
+        sb.append(SIR_STR(")"));
 
         this->str = sb.build_null_terminated((SIRAllocator *)compiler->arena);
 
@@ -674,32 +674,32 @@ SIRString Type::to_string(Compiler *compiler)
         SIRStringBuilder sb = SIRStringBuilder::create(&SIR_MALLOC_ALLOCATOR);
 
         if (!this->func.vararg) {
-            sb.append("@func(");
+            sb.append(SIR_STR("@func("));
         } else {
-            sb.append("@func_vararg(");
+            sb.append(SIR_STR("@func_vararg("));
         }
 
         Type *return_type = &compiler->types[this->func.return_type.id];
         sb.append(return_type->to_string(compiler));
 
-        sb.append(",");
+        sb.append(SIR_STR(","));
 
-        sb.append("(");
+        sb.append(SIR_STR("("));
 
         for (size_t i = 0; i < this->func.param_types.len; ++i) {
             auto field_type_ref = this->func.param_types[i];
             Type *field_type = &compiler->types[field_type_ref.id];
 
             if (i > 0) {
-                sb.append(",");
+                sb.append(SIR_STR(","));
             }
 
             SIRString field_str = field_type->to_string(compiler);
             sb.append(field_str);
         }
 
-        sb.append(")");
-        sb.append(")");
+        sb.append(SIR_STR(")"));
+        sb.append(SIR_STR(")"));
 
         this->str = sb.build_null_terminated((SIRAllocator*)compiler->arena);
 

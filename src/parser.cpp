@@ -1,109 +1,109 @@
 #include "compiler.hpp"
 #include <Tracy.hpp>
 
-const char *token_kind_to_string(TokenKind kind)
+static inline SIRString token_kind_to_string(TokenKind kind)
 {
     switch (kind) {
-    case TokenKind_Unknown: return "<unknown>";
-    case TokenKind_Error: return "<error>";
+    case TokenKind_Unknown: return SIR_STR("<unknown>");
+    case TokenKind_Error: return SIR_STR("<error>");
 
-    case TokenKind_LParen: return "(";
-    case TokenKind_RParen: return ")";
-    case TokenKind_LBracket: return "[";
-    case TokenKind_RBracket: return "]";
-    case TokenKind_LCurly: return "{";
-    case TokenKind_RCurly: return "}";
+    case TokenKind_LParen: return SIR_STR("(");
+    case TokenKind_RParen: return SIR_STR(")");
+    case TokenKind_LBracket: return SIR_STR("[");
+    case TokenKind_RBracket: return SIR_STR("]");
+    case TokenKind_LCurly: return SIR_STR("{");
+    case TokenKind_RCurly: return SIR_STR("}");
 
-    case TokenKind_Colon: return ":";
-    case TokenKind_Comma: return ",";
-    case TokenKind_Dot: return ".";
-    case TokenKind_Semicolon: return ";";
-    case TokenKind_Question: return "?";
+    case TokenKind_Colon: return SIR_STR(":");
+    case TokenKind_Comma: return SIR_STR(",");
+    case TokenKind_Dot: return SIR_STR(".");
+    case TokenKind_Semicolon: return SIR_STR(";");
+    case TokenKind_Question: return SIR_STR("?");
 
-    case TokenKind_Equal: return "=";
+    case TokenKind_Equal: return SIR_STR("=");
 
-    case TokenKind_And: return "and";
-    case TokenKind_Or: return "or";
+    case TokenKind_And: return SIR_STR("and");
+    case TokenKind_Or: return SIR_STR("or");
 
-    case TokenKind_Sub: return "-";
-    case TokenKind_Add: return "+";
-    case TokenKind_Mul: return "*";
-    case TokenKind_Div: return "/";
-    case TokenKind_Mod: return "%";
-    case TokenKind_Arrow: return "=>";
+    case TokenKind_Sub: return SIR_STR("-");
+    case TokenKind_Add: return SIR_STR("+");
+    case TokenKind_Mul: return SIR_STR("*");
+    case TokenKind_Div: return SIR_STR("/");
+    case TokenKind_Mod: return SIR_STR("%");
+    case TokenKind_Arrow: return SIR_STR("=>");
 
-    case TokenKind_Not: return "!";
-    case TokenKind_BitAnd: return "&";
-    case TokenKind_BitOr: return "|";
-    case TokenKind_BitXor: return "^";
-    case TokenKind_BitNot: return "~";
+    case TokenKind_Not: return SIR_STR("!");
+    case TokenKind_BitAnd: return SIR_STR("&");
+    case TokenKind_BitOr: return SIR_STR("|");
+    case TokenKind_BitXor: return SIR_STR("^");
+    case TokenKind_BitNot: return SIR_STR("~");
 
-    case TokenKind_EqualEqual: return "==";
-    case TokenKind_NotEqual: return "!=";
-    case TokenKind_Less: return "<";
-    case TokenKind_LessEqual: return "<=";
-    case TokenKind_Greater: return ">";
-    case TokenKind_GreaterEqual: return ">=";
+    case TokenKind_EqualEqual: return SIR_STR("==");
+    case TokenKind_NotEqual: return SIR_STR("!=");
+    case TokenKind_Less: return SIR_STR("<");
+    case TokenKind_LessEqual: return SIR_STR("<=");
+    case TokenKind_Greater: return SIR_STR(">");
+    case TokenKind_GreaterEqual: return SIR_STR(">=");
 
-    case TokenKind_LShift: return "<<";
-    case TokenKind_RShift: return ">>";
+    case TokenKind_LShift: return SIR_STR("<<");
+    case TokenKind_RShift: return SIR_STR(">>");
 
-    case TokenKind_AddEqual: return "+=";
-    case TokenKind_SubEqual: return "-=";
-    case TokenKind_MulEqual: return "*=";
-    case TokenKind_DivEqual: return "/=";
-    case TokenKind_ModEqual: return "%=";
+    case TokenKind_AddEqual: return SIR_STR("+=");
+    case TokenKind_SubEqual: return SIR_STR("-=");
+    case TokenKind_MulEqual: return SIR_STR("*=");
+    case TokenKind_DivEqual: return SIR_STR("/=");
+    case TokenKind_ModEqual: return SIR_STR("%=");
 
-    case TokenKind_BitAndEqual: return "&=";
-    case TokenKind_BitOrEqual: return "|=";
-    case TokenKind_BitXorEqual: return "^=";
-    case TokenKind_BitNotEqual: return "~=";
-    case TokenKind_LShiftEqual: return "<<=";
-    case TokenKind_RShiftEqual: return ">>=";
+    case TokenKind_BitAndEqual: return SIR_STR("&=");
+    case TokenKind_BitOrEqual: return SIR_STR("|=");
+    case TokenKind_BitXorEqual: return SIR_STR("^=");
+    case TokenKind_BitNotEqual: return SIR_STR("~=");
+    case TokenKind_LShiftEqual: return SIR_STR("<<=");
+    case TokenKind_RShiftEqual: return SIR_STR(">>=");
 
-    case TokenKind_Const: return "const";
-    case TokenKind_Extern: return "extern";
-    case TokenKind_Export: return "export";
-    case TokenKind_VarArg: return "vararg";
-    case TokenKind_Global: return "global";
-    case TokenKind_Inline: return "inline";
-    case TokenKind_Macro: return "macro";
-    case TokenKind_Def: return "def";
-    case TokenKind_Type: return "type";
-    case TokenKind_Struct: return "struct";
-    case TokenKind_Union: return "union";
-    case TokenKind_If: return "if";
-    case TokenKind_Else: return "else";
-    case TokenKind_While: return "while";
-    case TokenKind_Break: return "break";
-    case TokenKind_Continue: return "continue";
-    case TokenKind_Return: return "return";
-    case TokenKind_Void: return "void";
-    case TokenKind_Bool: return "bool";
-    case TokenKind_True: return "true";
-    case TokenKind_False: return "false";
-    case TokenKind_Null: return "null";
-    case TokenKind_U8: return "u8";
-    case TokenKind_U16: return "u16";
-    case TokenKind_U32: return "u32";
-    case TokenKind_U64: return "u64";
-    case TokenKind_I8: return "i8";
-    case TokenKind_I16: return "i16";
-    case TokenKind_I32: return "i32";
-    case TokenKind_I64: return "i64";
-    case TokenKind_F32: return "f32";
-    case TokenKind_F64: return "f64";
-    case TokenKind_Identifier: return "<identifier>";
-    case TokenKind_BuiltinIdentifier: return "<builtin identifier>";
-    case TokenKind_StringLiteral: return "<string literal>";
-    case TokenKind_CharLiteral: return "<character literal>";
-    case TokenKind_IntLiteral: return "<integer literal>";
-    case TokenKind_FloatLiteral: return "<float literal>";
+    case TokenKind_Const: return SIR_STR("const");
+    case TokenKind_Extern: return SIR_STR("extern");
+    case TokenKind_Export: return SIR_STR("export");
+    case TokenKind_VarArg: return SIR_STR("vararg");
+    case TokenKind_Global: return SIR_STR("global");
+    case TokenKind_Inline: return SIR_STR("inline");
+    case TokenKind_Macro: return SIR_STR("macro");
+    case TokenKind_Def: return SIR_STR("def");
+    case TokenKind_Type: return SIR_STR("type");
+    case TokenKind_Struct: return SIR_STR("struct");
+    case TokenKind_Union: return SIR_STR("union");
+    case TokenKind_If: return SIR_STR("if");
+    case TokenKind_Else: return SIR_STR("else");
+    case TokenKind_While: return SIR_STR("while");
+    case TokenKind_Break: return SIR_STR("break");
+    case TokenKind_Continue: return SIR_STR("continue");
+    case TokenKind_Return: return SIR_STR("return");
+    case TokenKind_Void: return SIR_STR("void");
+    case TokenKind_Bool: return SIR_STR("bool");
+    case TokenKind_True: return SIR_STR("true");
+    case TokenKind_False: return SIR_STR("false");
+    case TokenKind_Null: return SIR_STR("null");
+    case TokenKind_U8: return SIR_STR("u8");
+    case TokenKind_U16: return SIR_STR("u16");
+    case TokenKind_U32: return SIR_STR("u32");
+    case TokenKind_U64: return SIR_STR("u64");
+    case TokenKind_I8: return SIR_STR("i8");
+    case TokenKind_I16: return SIR_STR("i16");
+    case TokenKind_I32: return SIR_STR("i32");
+    case TokenKind_I64: return SIR_STR("i64");
+    case TokenKind_F32: return SIR_STR("f32");
+    case TokenKind_F64: return SIR_STR("f64");
+    case TokenKind_Identifier: return SIR_STR("<identifier>");
+    case TokenKind_BuiltinIdentifier: return SIR_STR("<builtin identifier>");
+    case TokenKind_StringLiteral: return SIR_STR("<string literal>");
+    case TokenKind_CharLiteral: return SIR_STR("<character literal>");
+    case TokenKind_IntLiteral: return SIR_STR("<integer literal>");
+    case TokenKind_FloatLiteral: return SIR_STR("<float literal>");
 
-    case TokenKind_EOF: return "<eof>";
+    case TokenKind_EOF: return SIR_STR("<eof>");
     }
 
-    return "<unknown>";
+    return SIR_STR("<unknown>");
 }
 
 static SIRString token_to_string(Compiler *compiler, const Token &token)
@@ -128,7 +128,7 @@ static SIRString token_to_string(Compiler *compiler, const Token &token)
     }
 
     SIR_ASSERT(0);
-    return "";
+    return SIR_STR("");
 }
 
 SIR_INLINE static bool is_whitespace(char c)
@@ -360,12 +360,15 @@ struct TokenizerState {
                 compiler->halt_compilation();
             }
 
+            SIRString expected_token_string = token_kind_to_string(token_kind);
+
             compiler->add_error(
                 token.loc,
-                "unexpected token: '%.*s', expecting '%s'",
+                "unexpected token: '%.*s', expecting '%.*s'",
                 (int)token_string.len,
                 token_string.ptr,
-                token_kind_to_string(token_kind));
+                (int)expected_token_string.len,
+                expected_token_string.ptr);
             compiler->halt_compilation();
         }
 
@@ -440,16 +443,16 @@ struct TokenizerState {
 
             compiler->sb.reset();
             for (size_t i = 0; i < ident_str.len; ++i) {
-                if (ident_str[i] == '\\') {
+                if (ident_str.ptr[i] == '\\') {
                     if (i + 1 >= ident_str.len) {
                         token->kind = TokenKind_Error;
-                        token->str = "invalid string literal";
+                        token->str = SIR_STR("invalid string literal");
                         goto end;
                     }
                     ++i;
 
-                    char actual_char = ident_str[i];
-                    switch (ident_str[i]) {
+                    char actual_char = ident_str.ptr[i];
+                    switch (ident_str.ptr[i]) {
                     case 'n': actual_char = '\n'; break;
                     case 'r': actual_char = '\r'; break;
                     case 't': actual_char = '\t'; break;
@@ -467,7 +470,7 @@ struct TokenizerState {
                     continue;
                 }
 
-                compiler->sb.append(ident_str[i]);
+                compiler->sb.append(ident_str.ptr[i]);
             }
 
             token->str = compiler->sb.build_null_terminated(

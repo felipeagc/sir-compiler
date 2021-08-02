@@ -614,7 +614,7 @@ SIRObjectBuilder *SIRCreateELF64Bbuilder(SIRModule *module)
     elf_init_section(
         builder,
         builder->null_index,
-        "",
+        SIR_STR(""),
         {
             .sh_name = 0,
             .sh_type = Elf64SectionType_Null,
@@ -631,7 +631,7 @@ SIRObjectBuilder *SIRCreateELF64Bbuilder(SIRModule *module)
     elf_init_section(
         builder,
         builder->shstrtab_index,
-        ".shstrtab",
+        SIR_STR(".shstrtab"),
         {
             .sh_name = 0,
             .sh_type = Elf64SectionType_StrTab,
@@ -648,7 +648,7 @@ SIRObjectBuilder *SIRCreateELF64Bbuilder(SIRModule *module)
     elf_init_section(
         builder,
         builder->strtab_index,
-        ".strtab",
+        SIR_STR(".strtab"),
         {
             .sh_name = 0,
             .sh_type = Elf64SectionType_StrTab,
@@ -665,7 +665,7 @@ SIRObjectBuilder *SIRCreateELF64Bbuilder(SIRModule *module)
     elf_init_section(
         builder,
         builder->symtab_index,
-        ".symtab",
+        SIR_STR(".symtab"),
         {
             .sh_name = 0,
             .sh_type = Elf64SectionType_SymTab,
@@ -684,7 +684,7 @@ SIRObjectBuilder *SIRCreateELF64Bbuilder(SIRModule *module)
         elf_init_section(
             builder,
             builder->text_index,
-            ".text",
+            SIR_STR(".text"),
             {
                 .sh_name = 0,
                 .sh_type = Elf64SectionType_ProgBits,
@@ -702,7 +702,7 @@ SIRObjectBuilder *SIRCreateELF64Bbuilder(SIRModule *module)
         elf_init_section(
             builder,
             builder->rela_text_index,
-            ".rela.text",
+            SIR_STR(".rela.text"),
             {
                 .sh_name = 0,
                 .sh_type = Elf64SectionType_Rela,
@@ -723,7 +723,7 @@ SIRObjectBuilder *SIRCreateELF64Bbuilder(SIRModule *module)
     elf_init_section(
         builder,
         builder->data_index,
-        ".data",
+        SIR_STR(".data"),
         {
             .sh_name = 0,
             .sh_type = Elf64SectionType_ProgBits,
@@ -740,7 +740,7 @@ SIRObjectBuilder *SIRCreateELF64Bbuilder(SIRModule *module)
     elf_init_section(
         builder,
         builder->bss_index,
-        ".bss",
+        SIR_STR(".bss"),
         {
             .sh_name = 0,
             .sh_type = Elf64SectionType_NoBits,
@@ -757,7 +757,7 @@ SIRObjectBuilder *SIRCreateELF64Bbuilder(SIRModule *module)
     elf_init_section(
         builder,
         builder->rodata_index,
-        ".rodata",
+        SIR_STR(".rodata"),
         {
             .sh_name = 0,
             .sh_type = Elf64SectionType_ProgBits,
@@ -775,25 +775,25 @@ SIRObjectBuilder *SIRCreateELF64Bbuilder(SIRModule *module)
 
     builder->text_symbol_ref = builder->vt.add_symbol(
         &builder->vt,
-        "",
+        SIR_STR(""),
         SIRSectionType_Text,
         SIRSymbolType_Section,
         SIRLinkage_Internal);
     builder->data_symbol_ref = builder->vt.add_symbol(
         &builder->vt,
-        "",
+        SIR_STR(""),
         SIRSectionType_Data,
         SIRSymbolType_Section,
         SIRLinkage_Internal);
     builder->bss_symbol_ref = builder->vt.add_symbol(
         &builder->vt,
-        "",
+        SIR_STR(""),
         SIRSectionType_BSS,
         SIRSymbolType_Section,
         SIRLinkage_Internal);
     builder->rodata_symbol_ref = builder->vt.add_symbol(
         &builder->vt,
-        "",
+        SIR_STR(""),
         SIRSectionType_ROData,
         SIRSymbolType_Section,
         SIRLinkage_Internal);

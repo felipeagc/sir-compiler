@@ -636,6 +636,61 @@ void X86_64AsmBuilder::encode_memcpy(
     }
 }
 
+enum SysVParamClass {
+    SysVParamClass_Int = 0,
+    SysVParamClass_SSE,
+};
+
+static void extract_type_sysv_classes(
+    X86_64AsmBuilder *builder,
+    SIRType *type,
+    uint32_t *field_offset,
+    uint8_t *byte_classes)
+{
+    uint32_t type_align = SIRTypeAlignOf(builder->module, type);
+    uint32_t type_size = SIRTypeSizeOf(builder->module, type);
+
+    switch (type->kind) {
+    case SIRTypeKind_Void:
+    case SIRTypeKind_Bool: {
+        SIR_ASSERT(0);
+    }
+    case SIRTypeKind_Pointer:
+    case SIRTypeKind_Int: {
+        *field_offset = SIR_ROUND_UP(type_align, *field_offset); // Add padding
+        for (size_t j = 0; j < type_size; ++j) {
+            byte_classes[*field_offset + j] = SysVParamClass_Int;
+        }
+        *field_offset += type_size;
+        break;
+    }
+    case SIRTypeKind_Float: {
+        *field_offset = SIR_ROUND_UP(type_align, *field_offset); // Add padding
+        for (size_t i = 0; i < type_size; ++i) {
+            byte_classes[*field_offset + i] = SysVParamClass_SSE;
+        }
+        *field_offset += type_size;
+        break;
+    }
+    case SIRTypeKind_Struct: {
+        for (size_t i = 0; i < type->struct_.fields_len; ++i) {
+            SIRType *field_type = type->struct_.fields[i];
+            extract_type_sysv_classes(
+                builder, field_type, field_offset, byte_classes);
+        }
+        break;
+    }
+    case SIRTypeKind_Array: {
+        for (size_t i = 0; i < type->array.count; ++i) {
+            SIRType *field_type = type->array.sub;
+            extract_type_sysv_classes(
+                builder, field_type, field_offset, byte_classes);
+        }
+        break;
+    }
+    }
+}
+
 void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
 {
     ZoneScoped;
@@ -1828,13 +1883,13 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
 
         switch (called_func->calling_convention) {
         case SIRCallingConvention_SystemV: {
-            switch (called_func->return_type->kind) {
+            SIRType *return_type = called_func->return_type;
+            switch (return_type->kind) {
             case SIRTypeKind_Void: break;
 
             case SIRTypeKind_Int: {
                 MetaValue returned_value = create_int_register_value(
-                    called_func->return_type->int_.bits >> 3,
-                    RegisterIndex_RAX);
+                    return_type->int_.bits >> 3, RegisterIndex_RAX);
                 this->encode_mnem(
                     Mnem_MOV, &returned_value, &this->meta_insts[inst_ref.id]);
                 break;
@@ -1850,14 +1905,75 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
 
             case SIRTypeKind_Float: {
                 MetaValue returned_value = create_float_register_value(
-                    called_func->return_type->float_.bits >> 3,
-                    RegisterIndex_XMM0);
+                    return_type->float_.bits >> 3, RegisterIndex_XMM0);
                 this->encode_mnem(
                     Mnem_MOV, &returned_value, &this->meta_insts[inst_ref.id]);
                 break;
             }
 
-            default: SIR_ASSERT(!"unhandled return type");
+            default: {
+                size_t return_type_size =
+                    SIRTypeSizeOf(this->module, return_type);
+                if (return_type_size <= 16) {
+                    uint8_t byte_classes[16] = {};
+
+                    uint32_t field_offset = 0;
+                    extract_type_sysv_classes(
+                        this, return_type, &field_offset, byte_classes);
+
+                    MetaValue returned_value = this->meta_insts[inst_ref.id];
+                    SIR_ASSERT(
+                        returned_value.kind == MetaValueKind_IRegisterMemory);
+
+                    // First register
+                    {
+                        SysVParamClass class1 = SysVParamClass_SSE;
+                        for (size_t i = 0; i < 8; ++i) {
+                            if (byte_classes[i] == SysVParamClass_Int) {
+                                class1 = SysVParamClass_Int;
+                                break;
+                            }
+                        }
+
+                        MetaValue loc1 = (class1 == SysVParamClass_Int)
+                                             ? create_int_register_value(
+                                                   8, RegisterIndex_RAX)
+                                             : create_float_register_value(
+                                                   8, RegisterIndex_XMM0);
+
+                        MetaValue returned_value1 = returned_value;
+                        returned_value1.size_class = SizeClass_8;
+
+                        this->encode_mnem(Mnem_MOV, &loc1, &returned_value1);
+                    }
+
+                    // Second register
+                    if (return_type_size > 8) {
+                        SysVParamClass class2 = SysVParamClass_SSE;
+                        for (size_t i = 8; i < 16; ++i) {
+                            if (byte_classes[i] == SysVParamClass_Int) {
+                                class2 = SysVParamClass_Int;
+                                break;
+                            }
+                        }
+
+                        MetaValue loc2 = (class2 == SysVParamClass_Int)
+                                             ? create_int_register_value(
+                                                   8, RegisterIndex_RDX)
+                                             : create_float_register_value(
+                                                   8, RegisterIndex_XMM1);
+
+                        MetaValue returned_value2 = returned_value;
+                        returned_value2.size_class = SizeClass_8;
+                        returned_value2.regmem.offset += 8;
+
+                        this->encode_mnem(Mnem_MOV, &loc2, &returned_value2);
+                    }
+                } else {
+                    SIR_ASSERT(!"unimplemented returning larger values");
+                }
+                break;
+            }
             }
             break;
         }
@@ -1875,30 +1991,104 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
         SIRInst returned_inst =
             SIRModuleGetInst(this->module, inst.return_value.inst_ref);
 
+        SIRType *return_type = returned_inst.type;
+
         // TODO: ABI compliance
-        MetaValue result_location = {};
-        switch (returned_inst.type->kind) {
+        switch (return_type->kind) {
         case SIRTypeKind_Int: {
-            result_location = create_int_register_value(
+            MetaValue result_location = create_int_register_value(
                 returned_inst.type->int_.bits >> 3, RegisterIndex_RAX);
+
+            this->encode_mnem(
+                Mnem_MOV,
+                &this->meta_insts[inst.return_value.inst_ref.id],
+                &result_location);
             break;
         }
         case SIRTypeKind_Pointer: {
-            result_location = create_int_register_value(8, RegisterIndex_RAX);
+            MetaValue result_location =
+                create_int_register_value(8, RegisterIndex_RAX);
+
+            this->encode_mnem(
+                Mnem_MOV,
+                &this->meta_insts[inst.return_value.inst_ref.id],
+                &result_location);
             break;
         }
         case SIRTypeKind_Float: {
-            result_location =
-                create_float_register_value(8, RegisterIndex_XMM0);
+            MetaValue result_location = create_float_register_value(
+                returned_inst.type->float_.bits >> 3, RegisterIndex_XMM0);
+
+            this->encode_mnem(
+                Mnem_MOV,
+                &this->meta_insts[inst.return_value.inst_ref.id],
+                &result_location);
             break;
         }
-        default: SIR_ASSERT(0); break;
-        }
+        default: {
+            size_t return_type_size = SIRTypeSizeOf(this->module, return_type);
+            if (return_type_size <= 16) {
+                uint8_t byte_classes[16] = {};
 
-        this->encode_mnem(
-            Mnem_MOV,
-            &this->meta_insts[inst.return_value.inst_ref.id],
-            &result_location);
+                uint32_t field_offset = 0;
+                extract_type_sysv_classes(
+                    this, return_type, &field_offset, byte_classes);
+
+                MetaValue returned_value =
+                    this->meta_insts[inst.return_value.inst_ref.id];
+                SIR_ASSERT(
+                    returned_value.kind == MetaValueKind_IRegisterMemory);
+
+                // First register
+                {
+                    SysVParamClass class1 = SysVParamClass_SSE;
+                    for (size_t i = 0; i < 8; ++i) {
+                        if (byte_classes[i] == SysVParamClass_Int) {
+                            class1 = SysVParamClass_Int;
+                            break;
+                        }
+                    }
+
+                    MetaValue loc1 =
+                        (class1 == SysVParamClass_Int)
+                            ? create_int_register_value(8, RegisterIndex_RAX)
+                            : create_float_register_value(
+                                  8, RegisterIndex_XMM0);
+
+                    MetaValue returned_value1 = returned_value;
+                    returned_value1.size_class = SizeClass_8;
+
+                    this->encode_mnem(Mnem_MOV, &returned_value1, &loc1);
+                }
+
+                // Second register
+                if (return_type_size > 8) {
+                    SysVParamClass class2 = SysVParamClass_SSE;
+                    for (size_t i = 8; i < 16; ++i) {
+                        if (byte_classes[i] == SysVParamClass_Int) {
+                            class2 = SysVParamClass_Int;
+                            break;
+                        }
+                    }
+
+                    MetaValue loc2 =
+                        (class2 == SysVParamClass_Int)
+                            ? create_int_register_value(8, RegisterIndex_RDX)
+                            : create_float_register_value(
+                                  8, RegisterIndex_XMM1);
+
+                    MetaValue returned_value2 = returned_value;
+                    returned_value2.size_class = SizeClass_8;
+                    returned_value2.regmem.offset += 8;
+
+                    this->encode_mnem(Mnem_MOV, &returned_value2, &loc2);
+                }
+            } else {
+                SIR_ASSERT(!"unimplemented returning larger values");
+            }
+            break;
+        }
+        }
 
         this->encode_function_ending(func_ref);
         break;

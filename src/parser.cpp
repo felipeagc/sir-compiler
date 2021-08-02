@@ -740,6 +740,8 @@ static Expr parse_primary_expr(Compiler *compiler, TokenizerState *state)
             Token field_ident_token =
                 state->consume_token(compiler, TokenKind_Identifier);
 
+            state->consume_token(compiler, TokenKind_Colon);
+
             Expr field_type_expr = parse_expr(compiler, state);
 
             expr.struct_type.field_names.push_back(field_ident_token.str);

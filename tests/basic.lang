@@ -31,11 +31,11 @@ def test_stack_params(
 }
 
 type StructParam struct {
-	a i32,
-	b i32,
-	c i32,
-	d i32,
-	e i32,
+	a: i32,
+	b: i32,
+	c: i32,
+	d: i32,
+	e: i32,
 };
 
 def test_large_params(s: StructParam) {
@@ -129,19 +129,19 @@ def export main() {
 
 	{
 		printf(
-			"@sizeof(struct{a i32}) = %d\n",
-			i32(@sizeof(struct { a i32 })),
+			"@sizeof(struct{a: i32}) = %d\n",
+			i32(@sizeof(struct {a: i32})),
 		);
 		printf(
-			"@sizeof(struct{a i32, b i64}) = %d\n",
-			i32(@sizeof(struct { a i32, b i64 })),
+			"@sizeof(struct{a: i32, b: i64}) = %d\n",
+			i32(@sizeof(struct {a: i32, b: i64})),
 		);
 	}
 
 	{
 		s: struct {
-			a i32,
-			b i64,
+			a: i32,
+			b: i64,
 		};
 		s.a = 123;
 		printf("s.a = %d\n", s.a);
@@ -156,8 +156,8 @@ def export main() {
 
 	{
 		type LocalType struct {
-			a [2]i32,
-			b i64,
+			a: [2]i32,
+			b: i64,
 		};
 
 		printf("@sizeof(LocalType) = %d\n", i32(@sizeof(LocalType)));
@@ -178,9 +178,9 @@ def export main() {
 
 	{
 		type S struct {
-			a i32,
-			b i32,
-			c i32,
+			a: i32,
+			b: i32,
+			c: i32,
 		};
 
 		a: S;

@@ -123,6 +123,25 @@ static RegisterIndex SYSV_FLOAT_PARAM_REGS[8] = {
     RegisterIndex_XMM7,
 };
 
+static RegisterIndex SYSV_CALLEE_SAVED[] = {
+    RegisterIndex_RBX,
+    RegisterIndex_R12,
+    RegisterIndex_R13,
+    RegisterIndex_R14,
+    RegisterIndex_R15,
+};
+
+static RegisterIndex SYSV_CALLER_SAVED[] = {
+    RegisterIndex_RAX,
+    RegisterIndex_RCX,
+    RegisterIndex_RDX,
+    RegisterIndex_RSI,
+    RegisterIndex_RDI,
+    RegisterIndex_R8,
+    RegisterIndex_R9,
+    RegisterIndex_R11,
+};
+
 struct MetaValue {
     union {
         struct {
@@ -1972,32 +1991,13 @@ void X86_64AsmBuilder::generate_function(SIRInstRef func_ref)
 
     switch (func->calling_convention) {
     case SIRCallingConvention_SystemV: {
-        static RegisterIndex system_v_callee_saved[] = {
-            RegisterIndex_RBX,
-            RegisterIndex_R12,
-            RegisterIndex_R13,
-            RegisterIndex_R14,
-            RegisterIndex_R15,
-        };
-
-        static RegisterIndex system_v_caller_saved[] = {
-            RegisterIndex_RAX,
-            RegisterIndex_RCX,
-            RegisterIndex_RDX,
-            RegisterIndex_RSI,
-            RegisterIndex_RDI,
-            RegisterIndex_R8,
-            RegisterIndex_R9,
-            RegisterIndex_R11,
-        };
-
         meta_func->callee_saved_registers_len =
-            SIR_CARRAY_LENGTH(system_v_callee_saved);
-        meta_func->callee_saved_registers = &system_v_callee_saved[0];
+            SIR_CARRAY_LENGTH(SYSV_CALLEE_SAVED);
+        meta_func->callee_saved_registers = &SYSV_CALLEE_SAVED[0];
 
         meta_func->caller_saved_registers_len =
-            SIR_CARRAY_LENGTH(system_v_caller_saved);
-        meta_func->caller_saved_registers = &system_v_caller_saved[0];
+            SIR_CARRAY_LENGTH(SYSV_CALLER_SAVED);
+        meta_func->caller_saved_registers = &SYSV_CALLER_SAVED[0];
 
         break;
     }

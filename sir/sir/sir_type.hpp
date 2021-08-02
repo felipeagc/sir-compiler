@@ -30,7 +30,8 @@ struct SIRType {
             uint64_t count;
         } array;
         struct {
-            SIRSlice<SIRType *> fields;
+            SIRType ** fields;
+            uint32_t fields_len;
             bool packed;
         } struct_;
     };

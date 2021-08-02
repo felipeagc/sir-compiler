@@ -6,8 +6,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
-#include <new>
-#include <initializer_list>
 #include <Tracy.hpp>
 #include "stb_sprintf.h"
 
@@ -36,13 +34,32 @@
         if (!(x)) {                                                            \
             fprintf(                                                           \
                 stderr,                                                        \
-                "ACE assertion failure: '%s' at %s:%d\n",                      \
+                "SIR assertion failure: '%s' at %s:%d\n",                      \
                 SIR_MACRO_STR(x),                                              \
                 __FILE__,                                                      \
                 __LINE__);                                                     \
             abort();                                                           \
         }                                                                      \
     } while (0)
+
+/*
+#ifdef NDEBUG
+#define SIR_ASSERT(x) (void)(x)
+#else
+#define SIR_ASSERT(x)                                                          \
+    do {                                                                       \
+        if (!(x)) {                                                            \
+            fprintf(                                                           \
+                stderr,                                                        \
+                "SIR assertion failure: '%s' at %s:%d\n",                      \
+                SIR_MACRO_STR(x),                                              \
+                __FILE__,                                                      \
+                __LINE__);                                                     \
+            abort();                                                           \
+        }                                                                      \
+    } while (0)
+#endif
+*/
 
 template <typename T> struct SIRSlice {
     T *ptr = nullptr;

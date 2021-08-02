@@ -50,14 +50,13 @@ SIRString SIRTypeToString(SIRModule *module, SIRType *type)
             sb.append(SIR_STR("@struct("));
         }
 
-        bool first = true;
-        for (auto &field_type : type->struct_.fields) {
-            if (!first) {
+        for (size_t i = 0; i < type->struct_.fields_len; ++i) {
+            SIRType *field_type = type->struct_.fields[i];
+            if (i == 0) {
                 sb.append(SIR_STR(", "));
             }
             SIRString field_str = SIRTypeToString(module, field_type);
             sb.append(field_str);
-            first = false;
         }
 
         sb.append(SIR_STR(")"));
@@ -97,7 +96,8 @@ uint32_t SIRTypeSizeOf(SIRModule *module, SIRType *type)
     case SIRTypeKind_Struct: {
         type->size = 0;
 
-        for (auto &field_type : type->struct_.fields) {
+        for (size_t i = 0; i < type->struct_.fields_len; ++i) {
+            SIRType *field_type = type->struct_.fields[i];
             uint32_t field_align = SIRTypeAlignOf(module, field_type);
             type->size = SIR_ROUND_UP(field_align, type->size); // Add padding
 
@@ -138,7 +138,8 @@ uint32_t SIRTypeAlignOf(SIRModule *module, SIRType *type)
     case SIRTypeKind_Struct: {
         type->alignment = 0;
 
-        for (auto &field_type : type->struct_.fields) {
+        for (size_t i = 0; i < type->struct_.fields_len; ++i) {
+            SIRType *field_type = type->struct_.fields[i];
             uint32_t field_align = SIRTypeAlignOf(module, field_type);
             if (field_align > type->alignment) {
                 type->alignment = field_align;

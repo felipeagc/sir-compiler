@@ -213,8 +213,8 @@ static void elf_output_symbol(Elf64Builder *builder, size_t symbol_index)
     case SIRSectionType_ROData: section_index = builder->rodata_index; break;
     }
 
-    Elf64SymbolBinding binding;
-    Elf64SymbolType type;
+    Elf64SymbolBinding binding = Elf64SymbolBinding_Local;
+    Elf64SymbolType type = Elf64SymbolType_NoType;
 
     switch (symbol->linkage) {
     case SIRLinkage_Internal: binding = Elf64SymbolBinding_Local; break;

@@ -8,6 +8,7 @@ SIRString SIRCallingConventionToString(SIRCallingConvention calling_convention)
     }
 
     SIR_ASSERT(0);
+    return (SIRString){};
 }
 
 SIRString SIRLinkageToString(SIRLinkage linkage)
@@ -18,6 +19,7 @@ SIRString SIRLinkageToString(SIRLinkage linkage)
     }
 
     SIR_ASSERT(0);
+    return (SIRString){};
 }
 
 static const char *binop_to_string(SIRBinaryOperation op)
@@ -484,7 +486,8 @@ void SIRModuleDestroy(SIRModule *module)
     SIRFree(parent_allocator, module);
 }
 
-char *SIRModulePrintAlloc(SIRModule *module, SIRAllocator *allocator, size_t *str_len)
+char *
+SIRModulePrintAlloc(SIRModule *module, SIRAllocator *allocator, size_t *str_len)
 {
     ZoneScoped;
 
@@ -503,7 +506,7 @@ char *SIRModulePrintAlloc(SIRModule *module, SIRAllocator *allocator, size_t *st
     SIRString result = sb.build_null_terminated(allocator);
     sb.destroy();
     *str_len = result.len;
-    return (char*)result.ptr;
+    return (char *)result.ptr;
 }
 
 SIRType *SIRModuleCreatePointerType(SIRModule *module, SIRType *sub)
@@ -529,8 +532,8 @@ SIRType *SIRModuleCreateStructType(
 {
     SIRType *type = SIRAllocInit(module->arena, SIRType);
     type->kind = SIRTypeKind_Struct;
-    type->struct_.fields.len = field_count;
-    type->struct_.fields.ptr =
+    type->struct_.fields_len = field_count;
+    type->struct_.fields =
         (SIRType **)SIRAllocSliceClone(module->arena, fields, field_count);
     type->struct_.packed = packed;
     return SIRModuleGetCachedType(module, type);

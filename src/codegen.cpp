@@ -1,8 +1,7 @@
 #include "compiler.hpp"
 #include <Tracy.hpp>
 
-#include <sir_ir.hpp>
-#include <sir_obj.hpp>
+#include <sir.h>
 
 struct CodegenContext;
 
@@ -35,8 +34,8 @@ static SIRInstRef load_lvalue(CodegenContext *ctx, const CodegenValue &value)
 
 static SIRInstRef value_into_bool(CodegenContext *ctx, SIRInstRef inst_ref)
 {
-    SIRType *type = SIRModuleGetInst(ctx->module, inst_ref).type;
-    if (type->kind == SIRTypeKind_Int) {
+    SIRType *type = SIRModuleGetInstType(ctx->module, inst_ref);
+    if (SIRModuleGetTypeKind(ctx->module, type) == SIRTypeKind_Int) {
         return SIRBuilderInsertBinop(
             ctx->builder,
             SIRBinaryOperation_INE,
@@ -294,9 +293,9 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
             CodegenValue func_value =
                 codegen_expr(compiler, ctx, expr.func_call.func_expr_ref);
 
-            SIRInst func_inst =
-                SIRModuleGetInst(ctx->module, func_value.inst_ref);
-            switch (func_inst.kind) {
+            SIRInstKind func_inst_kind =
+                SIRModuleGetInstKind(ctx->module, func_value.inst_ref);
+            switch (func_inst_kind) {
             case SIRInstKind_Function: {
                 value = {
                     false,
@@ -768,12 +767,12 @@ codegen_stmt(Compiler *compiler, CodegenContext *ctx, StmtRef stmt_ref)
             ctx, codegen_expr(compiler, ctx, stmt.if_.cond_expr_ref));
         cond_value = value_into_bool(ctx, cond_value);
 
-        auto current_func = ctx->builder->current_func_ref;
+        SIRInstRef current_func = SIRBuilderGetCurrentFunction(ctx->builder);
 
         if (stmt.if_.false_stmt_ref.id == 0) {
-            auto true_block =
+            SIRInstRef true_block =
                 SIRModuleInsertBlockAtEnd(ctx->module, current_func);
-            auto merge_block =
+            SIRInstRef merge_block =
                 SIRModuleInsertBlockAtEnd(ctx->module, current_func);
 
             SIRBuilderInsertBranch(
@@ -785,11 +784,11 @@ codegen_stmt(Compiler *compiler, CodegenContext *ctx, StmtRef stmt_ref)
 
             SIRBuilderPositionAtEnd(ctx->builder, merge_block);
         } else {
-            auto true_block =
+            SIRInstRef true_block =
                 SIRModuleInsertBlockAtEnd(ctx->module, current_func);
-            auto false_block =
+            SIRInstRef false_block =
                 SIRModuleInsertBlockAtEnd(ctx->module, current_func);
-            auto merge_block =
+            SIRInstRef merge_block =
                 SIRModuleInsertBlockAtEnd(ctx->module, current_func);
 
             SIRBuilderInsertBranch(
@@ -810,11 +809,14 @@ codegen_stmt(Compiler *compiler, CodegenContext *ctx, StmtRef stmt_ref)
     }
 
     case StmtKind_While: {
-        auto current_func = ctx->builder->current_func_ref;
+        SIRInstRef current_func = SIRBuilderGetCurrentFunction(ctx->builder);
 
-        auto cond_block = SIRModuleInsertBlockAtEnd(ctx->module, current_func);
-        auto true_block = SIRModuleInsertBlockAtEnd(ctx->module, current_func);
-        auto merge_block = SIRModuleInsertBlockAtEnd(ctx->module, current_func);
+        SIRInstRef cond_block =
+            SIRModuleInsertBlockAtEnd(ctx->module, current_func);
+        SIRInstRef true_block =
+            SIRModuleInsertBlockAtEnd(ctx->module, current_func);
+        SIRInstRef merge_block =
+            SIRModuleInsertBlockAtEnd(ctx->module, current_func);
 
         SIRBuilderInsertJump(ctx->builder, cond_block);
         SIRBuilderPositionAtEnd(ctx->builder, cond_block);
@@ -912,18 +914,26 @@ codegen_decl(Compiler *compiler, CodegenContext *ctx, DeclRef decl_ref)
                 codegen_stmt(compiler, ctx, stmt_ref);
             }
 
-            SIRInst last_block =
-                SIRModuleGetInst(module, ctx->builder->current_block_ref);
-            if (return_type->kind == SIRTypeKind_Void) {
-                if (last_block.block.inst_refs.len == 0 ||
-                    SIRModuleGetInst(module, *last_block.block.inst_refs.last())
-                            .kind != SIRInstKind_ReturnVoid) {
+            SIRInstRef last_block = SIRBuilderGetCurrentBlock(ctx->builder);
+
+            uint32_t last_block_inst_count =
+                SIRModuleGetBlockInstructionCount(module, last_block);
+            SIRInstRef last_inst = SIRModuleGetBlockInstruction(
+                module, last_block, last_block_inst_count - 1);
+            SIRInstKind last_inst_kind =
+                SIRModuleGetInstKind(module, last_inst);
+
+            SIRTypeKind return_type_kind =
+                SIRModuleGetTypeKind(module, return_type);
+
+            if (return_type_kind == SIRTypeKind_Void) {
+                if (last_block_inst_count == 0 ||
+                    last_inst_kind != SIRInstKind_ReturnVoid) {
                     SIRBuilderInsertReturnVoid(ctx->builder);
                 }
             } else {
-                if (last_block.block.inst_refs.len == 0 ||
-                    SIRModuleGetInst(module, *last_block.block.inst_refs.last())
-                            .kind != SIRInstKind_ReturnValue) {
+                if (last_block_inst_count == 0 ||
+                    last_inst_kind != SIRInstKind_ReturnValue) {
                     compiler->add_error(
                         decl.loc,
                         "no return statement for '%.*s'",
@@ -1037,11 +1047,10 @@ void codegen_file(Compiler *compiler, FileRef file_ref)
 
 #if !NDEBUG
     {
-        SIRAllocator *allocator = &SIR_MALLOC_ALLOCATOR;
         size_t str_len = 0;
-        char *str = SIRModulePrintAlloc(ctx.module, allocator, &str_len);
+        char *str = SIRModulePrintToString(ctx.module, &str_len);
         printf("%.*s", (int)str_len, str);
-        SIRFree(allocator, str);
+        free(str);
     }
 #endif
 
@@ -1049,12 +1058,13 @@ void codegen_file(Compiler *compiler, FileRef file_ref)
     SIRAsmBuilder *asm_builder =
         SIRCreateX86_64Builder(ctx.module, obj_builder);
 
-    asm_builder->generate(asm_builder);
+    SIRAsmBuilderGenerate(asm_builder);
 
-    obj_builder->output_to_file(obj_builder, SIR_STR("./main.o"));
+    const char *path = "./main.o";
+    SIRObjectBuilderOutputToFile(obj_builder, path, strlen(path));
 
-    asm_builder->destroy(asm_builder);
-    obj_builder->destroy(obj_builder);
+    SIRAsmBuilderDestroy(asm_builder);
+    SIRObjectBuilderDestroy(obj_builder);
 
     ctx.type_values.destroy();
     ctx.decl_values.destroy();

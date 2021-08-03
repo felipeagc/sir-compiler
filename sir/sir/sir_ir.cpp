@@ -486,12 +486,11 @@ void SIRModuleDestroy(SIRModule *module)
     SIRFree(parent_allocator, module);
 }
 
-char *
-SIRModulePrintAlloc(SIRModule *module, SIRAllocator *allocator, size_t *str_len)
+char *SIRModulePrintToString(SIRModule *module, size_t *str_len)
 {
     ZoneScoped;
 
-    SIRStringBuilder sb = SIRStringBuilder::create(allocator);
+    SIRStringBuilder sb = SIRStringBuilder::create(&SIR_MALLOC_ALLOCATOR);
 
     for (SIRInstRef global_ref : module->globals) {
         print_instruction(module, global_ref, &sb);
@@ -503,7 +502,7 @@ SIRModulePrintAlloc(SIRModule *module, SIRAllocator *allocator, size_t *str_len)
         print_function(module, func_ref, &sb);
     }
 
-    SIRString result = sb.build_null_terminated(allocator);
+    SIRString result = sb.build_null_terminated(&SIR_MALLOC_ALLOCATOR);
     sb.destroy();
     *str_len = result.len;
     return (char *)result.ptr;
@@ -795,6 +794,16 @@ void SIRBuilderSetFunction(SIRBuilder *builder, SIRInstRef func_ref)
 void SIRBuilderPositionAtEnd(SIRBuilder *builder, SIRInstRef block_ref)
 {
     builder->current_block_ref = block_ref;
+}
+
+SIRInstRef SIRBuilderGetCurrentFunction(SIRBuilder *builder)
+{
+    return builder->current_func_ref;
+}
+
+SIRInstRef SIRBuilderGetCurrentBlock(SIRBuilder *builder)
+{
+    return builder->current_block_ref;
 }
 
 static SIRInstRef builder_insert_inst(SIRBuilder *builder, const SIRInst &inst)
@@ -1168,4 +1177,35 @@ void SIRBuilderInsertReturnVoid(SIRBuilder *builder)
     inst.kind = SIRInstKind_ReturnVoid;
 
     builder_insert_inst(builder, inst);
+}
+
+SIRInstKind SIRModuleGetInstKind(SIRModule *module, SIRInstRef inst_ref)
+{
+    return module->insts[inst_ref.id].kind;
+}
+
+SIRType *SIRModuleGetInstType(SIRModule *module, SIRInstRef inst_ref)
+{
+    return module->insts[inst_ref.id].type;
+}
+
+SIRTypeKind SIRModuleGetTypeKind(SIRModule *module, SIRType *type)
+{
+    (void)module;
+    return type->kind;
+}
+
+uint32_t
+SIRModuleGetBlockInstructionCount(SIRModule *module, SIRInstRef block_ref)
+{
+    return (uint32_t)module->insts[block_ref.id].block.inst_refs.len;
+}
+
+SIRInstRef SIRModuleGetBlockInstruction(
+    SIRModule *module, SIRInstRef block_ref, uint32_t inst_index)
+{
+    if (module->insts[block_ref.id].block.inst_refs.len <= inst_index) {
+        return (SIRInstRef){0};
+    }
+    return module->insts[block_ref.id].block.inst_refs[inst_index];
 }

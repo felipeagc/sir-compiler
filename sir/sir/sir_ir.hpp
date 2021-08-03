@@ -25,34 +25,6 @@ struct SIRFunction {
     SIRCallingConvention calling_convention;
 };
 
-enum SIRInstKind : uint8_t {
-    SIRInstKind_Unknown = 0,
-    SIRInstKind_Global,
-    SIRInstKind_StackSlot,
-    SIRInstKind_Block,
-    SIRInstKind_ImmediateInt,
-    SIRInstKind_ImmediateFloat,
-    SIRInstKind_ImmediateBool,
-    SIRInstKind_Function,
-    SIRInstKind_FunctionParameter,
-    SIRInstKind_ReturnVoid,
-    SIRInstKind_ReturnValue,
-    SIRInstKind_Load,
-    SIRInstKind_Store,
-    SIRInstKind_Jump,
-    SIRInstKind_Branch,
-    SIRInstKind_FuncCall,
-    SIRInstKind_PtrCast,
-    SIRInstKind_ZExt,
-    SIRInstKind_SExt,
-    SIRInstKind_Trunc,
-    SIRInstKind_ArrayElemPtr,
-    SIRInstKind_StructElemPtr,
-    SIRInstKind_ExtractArrayElem,
-    SIRInstKind_ExtractStructElem,
-    SIRInstKind_Binop,
-};
-
 struct SIRInst {
     union {
         SIRFunction *func;
@@ -176,6 +148,4 @@ SIRInst SIRModuleGetInst(SIRModule *module, SIRInstRef inst_ref)
     return module->insts[inst_ref.id];
 }
 
-char *SIRModulePrintAlloc(
-    SIRModule *module, SIRAllocator *allocator, size_t *str_len);
 SIRType *SIRModuleGetCachedType(SIRModule *module, SIRType *type);

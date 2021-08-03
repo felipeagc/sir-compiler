@@ -5,16 +5,6 @@
 
 struct SIRModule;
 
-enum SIRTypeKind {
-    SIRTypeKind_Void,
-    SIRTypeKind_Int,
-    SIRTypeKind_Float,
-    SIRTypeKind_Bool,
-    SIRTypeKind_Pointer,
-    SIRTypeKind_Array,
-    SIRTypeKind_Struct,
-};
-
 struct SIRType {
     union {
         struct {

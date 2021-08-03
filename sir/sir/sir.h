@@ -83,6 +83,44 @@ typedef enum SIRBinaryOperation {
     SIRBinaryOperation_MAX,
 } SIRBinaryOperation;
 
+typedef enum SIRInstKind {
+    SIRInstKind_Unknown = 0,
+    SIRInstKind_Global,
+    SIRInstKind_StackSlot,
+    SIRInstKind_Block,
+    SIRInstKind_ImmediateInt,
+    SIRInstKind_ImmediateFloat,
+    SIRInstKind_ImmediateBool,
+    SIRInstKind_Function,
+    SIRInstKind_FunctionParameter,
+    SIRInstKind_ReturnVoid,
+    SIRInstKind_ReturnValue,
+    SIRInstKind_Load,
+    SIRInstKind_Store,
+    SIRInstKind_Jump,
+    SIRInstKind_Branch,
+    SIRInstKind_FuncCall,
+    SIRInstKind_PtrCast,
+    SIRInstKind_ZExt,
+    SIRInstKind_SExt,
+    SIRInstKind_Trunc,
+    SIRInstKind_ArrayElemPtr,
+    SIRInstKind_StructElemPtr,
+    SIRInstKind_ExtractArrayElem,
+    SIRInstKind_ExtractStructElem,
+    SIRInstKind_Binop,
+} SIRInstKind;
+
+typedef enum SIRTypeKind {
+    SIRTypeKind_Void,
+    SIRTypeKind_Int,
+    SIRTypeKind_Float,
+    SIRTypeKind_Bool,
+    SIRTypeKind_Pointer,
+    SIRTypeKind_Array,
+    SIRTypeKind_Struct,
+} SIRTypeKind;
+
 typedef struct SIRInstRef {
     uint32_t id;
 } SIRInstRef;
@@ -133,8 +171,17 @@ SIRInstRef SIRModuleGetFuncParam(
     SIRModule *module, SIRInstRef func_ref, uint32_t param_index);
 SIRInstRef SIRModuleInsertBlockAtEnd(SIRModule *module, SIRInstRef func_ref);
 
+SIRInstKind SIRModuleGetInstKind(SIRModule *module, SIRInstRef inst_ref);
+SIRType *SIRModuleGetInstType(SIRModule *module, SIRInstRef inst_ref);
+SIRTypeKind SIRModuleGetTypeKind(SIRModule *module, SIRType *type);
 uint32_t SIRTypeSizeOf(SIRModule *module, SIRType *type);
 uint32_t SIRTypeAlignOf(SIRModule *module, SIRType *type);
+uint32_t
+SIRModuleGetBlockInstructionCount(SIRModule *module, SIRInstRef block_ref);
+SIRInstRef SIRModuleGetBlockInstruction(
+    SIRModule *module, SIRInstRef block_ref, uint32_t inst_index);
+
+char *SIRModulePrintToString(SIRModule *module, size_t *str_len);
 
 /*
  *  SIRBuilder functions
@@ -142,6 +189,8 @@ uint32_t SIRTypeAlignOf(SIRModule *module, SIRType *type);
 SIRBuilder *SIRBuilderCreate(SIRModule *module);
 void SIRBuilderSetFunction(SIRBuilder *builder, SIRInstRef func_ref);
 void SIRBuilderPositionAtEnd(SIRBuilder *builder, SIRInstRef block_ref);
+SIRInstRef SIRBuilderGetCurrentFunction(SIRBuilder *builder);
+SIRInstRef SIRBuilderGetCurrentBlock(SIRBuilder *builder);
 
 SIRInstRef
 SIRBuilderInsertImmInt(SIRBuilder *builder, SIRType *type, uint64_t value);
@@ -199,9 +248,14 @@ void SIRBuilderInsertReturnVoid(SIRBuilder *builder);
  */
 
 SIRObjectBuilder *SIRCreateELF64Bbuilder(SIRModule *module);
+void SIRObjectBuilderDestroy(SIRObjectBuilder *obj_builder);
+void SIRObjectBuilderOutputToFile(
+    SIRObjectBuilder *obj_builder, const char *path, size_t path_len);
 
 SIRAsmBuilder *
 SIRCreateX86_64Builder(SIRModule *module, SIRObjectBuilder *obj_builder);
+void SIRAsmBuilderGenerate(SIRAsmBuilder *asm_builder);
+void SIRAsmBuilderDestroy(SIRAsmBuilder *asm_builder);
 
 #ifdef __cplusplus
 }

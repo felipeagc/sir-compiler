@@ -9,6 +9,7 @@ add_library(
   sir/sir_type.cpp
   sir/stb_sprintf.c
 
+  sir/sir_obj.cpp
   sir/sir_obj.hpp
   sir/sir_elf64.cpp
 

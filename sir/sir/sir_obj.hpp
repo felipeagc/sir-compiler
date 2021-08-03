@@ -1,5 +1,6 @@
 #pragma once
 
+#include "sir.h"
 #include "sir_base.hpp"
 #include "sir_ir.hpp"
 
@@ -68,8 +69,3 @@ struct SIRAsmBuilder {
     void (*generate)(SIRAsmBuilder *asm_builder);
     void (*destroy)(SIRAsmBuilder *asm_builder);
 };
-
-SIRObjectBuilder *SIRCreateELF64Bbuilder(SIRModule *module);
-
-SIRAsmBuilder *
-SIRCreateX86_64Builder(SIRModule *module, SIRObjectBuilder *obj_builder);

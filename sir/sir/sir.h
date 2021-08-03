@@ -11,6 +11,8 @@ extern "C" {
 typedef struct SIRModule SIRModule;
 typedef struct SIRBuilder SIRBuilder;
 typedef struct SIRType SIRType;
+typedef struct SIRAsmBuilder SIRAsmBuilder;
+typedef struct SIRObjectBuilder SIRObjectBuilder;
 
 typedef enum SIRCallingConvention {
     SIRCallingConvention_SystemV,
@@ -131,6 +133,9 @@ SIRInstRef SIRModuleGetFuncParam(
     SIRModule *module, SIRInstRef func_ref, uint32_t param_index);
 SIRInstRef SIRModuleInsertBlockAtEnd(SIRModule *module, SIRInstRef func_ref);
 
+uint32_t SIRTypeSizeOf(SIRModule *module, SIRType *type);
+uint32_t SIRTypeAlignOf(SIRModule *module, SIRType *type);
+
 /*
  *  SIRBuilder functions
  */
@@ -188,6 +193,15 @@ void SIRBuilderInsertBranch(
 
 void SIRBuilderInsertReturnValue(SIRBuilder *builder, SIRInstRef inst_ref);
 void SIRBuilderInsertReturnVoid(SIRBuilder *builder);
+
+/*
+ * Code generation functions
+ */
+
+SIRObjectBuilder *SIRCreateELF64Bbuilder(SIRModule *module);
+
+SIRAsmBuilder *
+SIRCreateX86_64Builder(SIRModule *module, SIRObjectBuilder *obj_builder);
 
 #ifdef __cplusplus
 }

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "sir.h"
 #include "sir_base.hpp"
 
 struct SIRModule;
@@ -43,5 +44,3 @@ struct SIRType {
 };
 
 SIRString SIRTypeToString(SIRModule *module, SIRType *type);
-uint32_t SIRTypeSizeOf(SIRModule *module, SIRType *type);
-uint32_t SIRTypeAlignOf(SIRModule *module, SIRType *type);

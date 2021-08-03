@@ -59,24 +59,24 @@ get_ir_type(Compiler *compiler, SIRModule *module, const Type &type)
     case TypeKind_Type: return nullptr;
 
     case TypeKind_Void: {
-        return module->void_type;
+        return SIRModuleGetVoidType(module);
     }
     case TypeKind_Bool: {
-        return module->i8_type;
+        return SIRModuleGetI8Type(module);
     }
     case TypeKind_Int: {
         switch (type.int_.bits) {
-        case 8: return module->i8_type;
-        case 16: return module->i16_type;
-        case 32: return module->i32_type;
-        case 64: return module->i64_type;
+        case 8: return SIRModuleGetI8Type(module);
+        case 16: return SIRModuleGetI16Type(module);
+        case 32: return SIRModuleGetI32Type(module);
+        case 64: return SIRModuleGetI64Type(module);
         }
         break;
     }
     case TypeKind_Float: {
         switch (type.float_.bits) {
-        case 32: return module->f32_type;
-        case 64: return module->f64_type;
+        case 32: return SIRModuleGetF32Type(module);
+        case 64: return SIRModuleGetF64Type(module);
         }
         break;
     }
@@ -221,7 +221,10 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
 
             value = {
                 false,
-                SIRModuleAddGlobalString(ctx->module, expr.str_literal.str)};
+                SIRModuleAddGlobalString(
+                    ctx->module,
+                    expr.str_literal.str.ptr,
+                    expr.str_literal.str.len)};
 
             break;
         }
@@ -878,7 +881,8 @@ codegen_decl(Compiler *compiler, CodegenContext *ctx, DeclRef decl_ref)
             false,
             SIRModuleAddFunction(
                 module,
-                decl.name,
+                decl.name.ptr,
+                decl.name.len,
                 SIRCallingConvention_SystemV,
                 linkage,
                 func_type.func.vararg,
@@ -1021,7 +1025,7 @@ void codegen_file(Compiler *compiler, FileRef file_ref)
     }
 
     ctx.function_stack =
-        SIRArray<SIRInstRef>::create((SIRAllocator *)ctx.module->arena);
+        SIRArray<SIRInstRef>::create((SIRAllocator *)compiler->arena);
 
     for (DeclRef decl_ref : file.top_level_decls) {
         codegen_decl(compiler, &ctx, decl_ref);

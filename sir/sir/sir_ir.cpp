@@ -509,6 +509,46 @@ SIRModulePrintAlloc(SIRModule *module, SIRAllocator *allocator, size_t *str_len)
     return (char *)result.ptr;
 }
 
+SIRType *SIRModuleGetVoidType(SIRModule *module)
+{
+    return module->void_type;
+}
+
+SIRType *SIRModuleGetBoolType(SIRModule *module)
+{
+    return module->bool_type;
+}
+
+SIRType *SIRModuleGetI8Type(SIRModule *module)
+{
+    return module->i8_type;
+}
+
+SIRType *SIRModuleGetI16Type(SIRModule *module)
+{
+    return module->i16_type;
+}
+
+SIRType *SIRModuleGetI32Type(SIRModule *module)
+{
+    return module->i32_type;
+}
+
+SIRType *SIRModuleGetI64Type(SIRModule *module)
+{
+    return module->i64_type;
+}
+
+SIRType *SIRModuleGetF32Type(SIRModule *module)
+{
+    return module->f32_type;
+}
+
+SIRType *SIRModuleGetF64Type(SIRModule *module)
+{
+    return module->f64_type;
+}
+
 SIRType *SIRModuleCreatePointerType(SIRModule *module, SIRType *sub)
 {
     SIRType *type = SIRAllocInit(module->arena, SIRType);
@@ -563,7 +603,8 @@ static SIRInstRef module_add_inst(SIRModule *module, const SIRInst &inst)
 
 SIRInstRef SIRModuleAddFunction(
     SIRModule *module,
-    SIRString name,
+    const char *name,
+    size_t name_len,
     SIRCallingConvention calling_convention,
     SIRLinkage linkage,
     bool variadic,
@@ -573,12 +614,16 @@ SIRInstRef SIRModuleAddFunction(
 {
     ZoneScoped;
 
-    SIRString func_name = name;
+    SIRString func_name;
+    func_name.ptr =
+        (const char *)SIRAllocSliceClone(module->arena, name, name_len);
+    func_name.len = name_len;
+
     uint32_t func_index = 0;
     while (SIRStringMapGet(&module->function_map, func_name, NULL)) {
         func_index++;
         func_name = SIRAllocSprintf(
-            module->arena, "%.*s.%u", (int)name.len, name.ptr, func_index);
+            module->arena, "%.*s.%u", (int)name_len, name, func_index);
     }
 
     SIRFunction *function = SIRAlloc(module->arena, SIRFunction);
@@ -648,28 +693,34 @@ SIRInstRef SIRModuleAddGlobal(
     return global_ref;
 }
 
-SIRInstRef SIRModuleAddGlobalString(SIRModule *module, const SIRString &str)
+SIRInstRef
+SIRModuleAddGlobalString(SIRModule *module, const char *str, size_t str_len)
 {
     ZoneScoped;
 
+    SIRString sir_str;
+    sir_str.ptr = str;
+    sir_str.len = str_len;
+
     uintptr_t existing_global_ref_id = 0;
     if (SIRStringMapGet(
-            &module->global_string_map, str, &existing_global_ref_id)) {
+            &module->global_string_map, sir_str, &existing_global_ref_id)) {
         return (SIRInstRef){(uint32_t)existing_global_ref_id};
     }
 
     SIRInst global = {};
     global.kind = SIRInstKind_Global;
     global.type = SIRModuleCreatePointerType(module, module->i8_type);
-    global.global.data = (uint8_t *)SIRAllocNullTerminate(module->arena, str);
-    global.global.data_len = str.len + 1;
+    global.global.data =
+        (uint8_t *)SIRAllocNullTerminate(module->arena, sir_str);
+    global.global.data_len = sir_str.len + 1;
     global.global.flags = SIRGlobalFlags_Initialized | SIRGlobalFlags_ReadOnly;
 
     SIRInstRef global_ref = module_add_inst(module, global);
 
     module->globals.push_back(global_ref);
 
-    SIRStringMapSet(&module->global_string_map, str, global_ref.id);
+    SIRStringMapSet(&module->global_string_map, sir_str, global_ref.id);
 
     return global_ref;
 }

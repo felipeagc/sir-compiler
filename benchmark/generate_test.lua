@@ -31,10 +31,10 @@
 local file = io.open("test_benchmark.lang", "w")
 io.output(file)
 
-local func_count = 10000
+local func_count = 1000
 local stmt_count = 100
 
-io.write("def extern puts(arg: *u8);")
+io.write("def extern puts(arg: *u8);\n\n")
 
 for i = 1,func_count do
 	io.write(string.format("def func%d() {\n", i))

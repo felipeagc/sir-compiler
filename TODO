@@ -1,9 +1,10 @@
 Frontend:
+- break/continue
 
 Backend:
+- return value through stack
 
 Misc:
-- Implement hashmap growth
 
 Resources:
 - SysV ABI: https://c9x.me/compile/doc/abi.html

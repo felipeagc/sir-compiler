@@ -1,7 +1,25 @@
-def extern vararg printf(_: *u8);
+def extern vararg printf(arg: *u8);
+def extern puts(arg: *u8);
 
-// Comment
+type S struct {
+	a: i32,
+	b: f64,
+};
 
-def main() {
-	printf("hello\"\n");
+type P struct {
+	a: i32,
+	b: i32,
+	c: f64,
+};
+
+def func1(p1: i32, p2: i32, p3: i32, p4: i32, p5: i32, s1: P): S {
+	printf("%f\n", s1.c);
+	s: S;
+	return s;
+}
+
+def export main() {
+	p: P;
+	p.c = 3;
+	func1(1, 2, 3, 4, 5, p);
 }

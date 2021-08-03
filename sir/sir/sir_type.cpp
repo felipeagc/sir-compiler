@@ -52,7 +52,7 @@ SIRString SIRTypeToString(SIRModule *module, SIRType *type)
 
         for (size_t i = 0; i < type->struct_.fields_len; ++i) {
             SIRType *field_type = type->struct_.fields[i];
-            if (i == 0) {
+            if (i != 0) {
                 sb.append(SIR_STR(", "));
             }
             SIRString field_str = SIRTypeToString(module, field_type);

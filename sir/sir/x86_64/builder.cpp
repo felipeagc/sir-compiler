@@ -557,7 +557,16 @@ X86_64AsmBuilder::get_func_call_stack_parameters_size(SIRInstRef func_call_ref)
             default: {
                 // TODO: proper ABI handling of other parameter types
                 size_t param_size = SIRTypeSizeOf(this->module, param_type);
-                stack_parameters_size += param_size;
+
+                bool use_regs = false;
+
+                if (param_size <= 16) {
+                    SIR_ASSERT(!"TODO: handle small parameters");
+                }
+
+                if (!use_regs) {
+                    stack_parameters_size += param_size;
+                }
                 break;
             }
             }
@@ -688,6 +697,36 @@ static void extract_type_sysv_classes(
         }
         break;
     }
+    }
+}
+
+static void sysv_get_type_register_classes(
+    X86_64AsmBuilder *builder,
+    SIRType *type,
+    SysVParamClass *class1,
+    SysVParamClass *class2)
+{
+    uint32_t type_size = SIRTypeSizeOf(builder->module, type);
+    SIR_ASSERT(type_size <= 16);
+
+    uint8_t byte_classes[16] = {};
+    uint32_t field_offset = 0;
+    extract_type_sysv_classes(builder, type, &field_offset, byte_classes);
+
+    *class1 = SysVParamClass_SSE;
+    for (size_t i = 0; i < 8 && i < type_size; ++i) {
+        if (byte_classes[i] == SysVParamClass_Int) {
+            *class1 = SysVParamClass_Int;
+            break;
+        }
+    }
+
+    *class2 = SysVParamClass_SSE;
+    for (size_t i = 8; i < type_size; ++i) {
+        if (byte_classes[i] == SysVParamClass_Int) {
+            *class2 = SysVParamClass_Int;
+            break;
+        }
     }
 }
 
@@ -1845,18 +1884,28 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
                 }
                 default: {
                     size_t param_size = SIRTypeSizeOf(this->module, param_type);
+                    bool use_regs = false;
 
-                    param_stack_offset =
-                        SIR_ROUND_UP(param_align, param_stack_offset);
-                    dest_param_value = create_int_register_memory_value(
-                        param_size,
-                        RegisterIndex_RSP,
-                        0,
-                        RegisterIndex_None,
-                        param_stack_offset);
-                    param_stack_offset +=
-                        param_size; // TODO: not sure if this should have
-                                    // alignment added to it
+                    if (param_size <= 16) {
+                        SIR_ASSERT(!"TODO: handle passing <= 16 byte params");
+                    }
+
+                    if (use_regs) {
+
+                    } else {
+                        param_stack_offset =
+                            SIR_ROUND_UP(param_align, param_stack_offset);
+                        dest_param_value = create_int_register_memory_value(
+                            param_size,
+                            RegisterIndex_RSP,
+                            0,
+                            RegisterIndex_None,
+                            param_stack_offset);
+                        param_stack_offset +=
+                            param_size; // TODO: not sure if this should have
+                                        // alignment added to it
+                    }
+
                     break;
                 }
                 }
@@ -1915,11 +1964,10 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
                 size_t return_type_size =
                     SIRTypeSizeOf(this->module, return_type);
                 if (return_type_size <= 16) {
-                    uint8_t byte_classes[16] = {};
-
-                    uint32_t field_offset = 0;
-                    extract_type_sysv_classes(
-                        this, return_type, &field_offset, byte_classes);
+                    SysVParamClass class1 = SysVParamClass_SSE;
+                    SysVParamClass class2 = SysVParamClass_SSE;
+                    sysv_get_type_register_classes(
+                        this, return_type, &class1, &class2);
 
                     MetaValue returned_value = this->meta_insts[inst_ref.id];
                     SIR_ASSERT(
@@ -1927,14 +1975,6 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
 
                     // First register
                     {
-                        SysVParamClass class1 = SysVParamClass_SSE;
-                        for (size_t i = 0; i < 8; ++i) {
-                            if (byte_classes[i] == SysVParamClass_Int) {
-                                class1 = SysVParamClass_Int;
-                                break;
-                            }
-                        }
-
                         MetaValue loc1 = (class1 == SysVParamClass_Int)
                                              ? create_int_register_value(
                                                    8, RegisterIndex_RAX)
@@ -1949,14 +1989,6 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
 
                     // Second register
                     if (return_type_size > 8) {
-                        SysVParamClass class2 = SysVParamClass_SSE;
-                        for (size_t i = 8; i < 16; ++i) {
-                            if (byte_classes[i] == SysVParamClass_Int) {
-                                class2 = SysVParamClass_Int;
-                                break;
-                            }
-                        }
-
                         MetaValue loc2 = (class2 == SysVParamClass_Int)
                                              ? create_int_register_value(
                                                    8, RegisterIndex_RDX)
@@ -1993,7 +2025,6 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
 
         SIRType *return_type = returned_inst.type;
 
-        // TODO: ABI compliance
         switch (return_type->kind) {
         case SIRTypeKind_Int: {
             MetaValue result_location = create_int_register_value(
@@ -2028,11 +2059,10 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
         default: {
             size_t return_type_size = SIRTypeSizeOf(this->module, return_type);
             if (return_type_size <= 16) {
-                uint8_t byte_classes[16] = {};
-
-                uint32_t field_offset = 0;
-                extract_type_sysv_classes(
-                    this, return_type, &field_offset, byte_classes);
+                SysVParamClass class1 = SysVParamClass_SSE;
+                SysVParamClass class2 = SysVParamClass_SSE;
+                sysv_get_type_register_classes(
+                    this, return_type, &class1, &class2);
 
                 MetaValue returned_value =
                     this->meta_insts[inst.return_value.inst_ref.id];
@@ -2041,14 +2071,6 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
 
                 // First register
                 {
-                    SysVParamClass class1 = SysVParamClass_SSE;
-                    for (size_t i = 0; i < 8; ++i) {
-                        if (byte_classes[i] == SysVParamClass_Int) {
-                            class1 = SysVParamClass_Int;
-                            break;
-                        }
-                    }
-
                     MetaValue loc1 =
                         (class1 == SysVParamClass_Int)
                             ? create_int_register_value(8, RegisterIndex_RAX)
@@ -2063,14 +2085,6 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
 
                 // Second register
                 if (return_type_size > 8) {
-                    SysVParamClass class2 = SysVParamClass_SSE;
-                    for (size_t i = 8; i < 16; ++i) {
-                        if (byte_classes[i] == SysVParamClass_Int) {
-                            class2 = SysVParamClass_Int;
-                            break;
-                        }
-                    }
-
                     MetaValue loc2 =
                         (class2 == SysVParamClass_Int)
                             ? create_int_register_value(8, RegisterIndex_RDX)
@@ -2084,7 +2098,7 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
                     this->encode_mnem(Mnem_MOV, &returned_value2, &loc2);
                 }
             } else {
-                SIR_ASSERT(!"unimplemented returning larger values");
+                SIR_ASSERT(!"TODO: unimplemented returning larger values");
             }
             break;
         }
@@ -2410,18 +2424,135 @@ void X86_64AsmBuilder::generate_function(SIRInstRef func_ref)
                 break;
             }
             default: {
-                // TODO: proper ABI handling of other parameter types
-
                 size_t param_size = SIRTypeSizeOf(this->module, param_type);
-                MetaValue param_value = create_int_register_memory_value(
-                    param_size,
-                    RegisterIndex_RBP,
-                    0,
-                    RegisterIndex_None,
-                    stack_param_offset);
-                stack_param_offset += param_size;
 
-                this->encode_memcpy(param_size, param_value, param_meta_inst);
+                bool use_regs = false;
+
+                SysVParamClass class1 = SysVParamClass_SSE;
+                SysVParamClass class2 = SysVParamClass_SSE;
+
+                if (param_size <= 16) {
+                    uint32_t param_int_regs = 0;
+                    uint32_t param_float_regs = 0;
+
+                    sysv_get_type_register_classes(
+                        this, param_type, &class1, &class2);
+
+                    switch (class1) {
+                    case SysVParamClass_Int: param_int_regs += 1; break;
+                    case SysVParamClass_SSE: param_float_regs += 1; break;
+                    }
+
+                    if (param_size > 8) {
+                        switch (class2) {
+                        case SysVParamClass_Int: param_int_regs += 1; break;
+                        case SysVParamClass_SSE: param_float_regs += 1; break;
+                        }
+                    }
+
+                    int32_t param_available_int_regs =
+                        (SIR_CARRAY_LENGTH(SYSV_INT_PARAM_REGS) -
+                         used_int_regs - param_int_regs);
+                    int32_t param_available_float_regs =
+                        (SIR_CARRAY_LENGTH(SYSV_FLOAT_PARAM_REGS) -
+                         used_float_regs - param_float_regs);
+
+                    use_regs = (param_available_int_regs >= 0) &&
+                               (param_available_float_regs >= 0);
+                }
+
+                if (use_regs) {
+                    // First register
+                    {
+                        size_t param_size1 = SIR_MIN(param_size, 8);
+
+                        switch (param_size1) {
+                        case 1:
+                        case 2:
+                        case 4:
+                        case 8: {
+                            MetaValue param_meta_inst1 = param_meta_inst;
+                            param_meta_inst1.size_class =
+                                SIZE_CLASSES[param_size1];
+
+                            MetaValue param_value1;
+                            switch (class1) {
+                            case SysVParamClass_Int:
+                                param_value1 = create_int_register_value(
+                                    param_size1,
+                                    SYSV_INT_PARAM_REGS[used_int_regs++]);
+                                break;
+                            case SysVParamClass_SSE:
+                                param_value1 = create_float_register_value(
+                                    param_size1,
+                                    SYSV_FLOAT_PARAM_REGS[used_float_regs++]);
+                                break;
+                            }
+                            this->encode_mnem(
+                                Mnem_MOV, &param_value1, &param_meta_inst1);
+                            break;
+                        }
+                        default: {
+                            // TODO: proper ABI handling of other parameter
+                            // sizes
+                            SIR_ASSERT(!"unhandled parameter size");
+                            break;
+                        }
+                        }
+                    }
+
+                    // Second register
+                    if (param_size > 8) {
+                        size_t param_size2 = param_size - 8;
+
+                        switch (param_size2) {
+                        case 1:
+                        case 2:
+                        case 4:
+                        case 8: {
+                            MetaValue param_meta_inst2 = param_meta_inst;
+                            param_meta_inst2.size_class =
+                                SIZE_CLASSES[param_size2];
+                            param_meta_inst2.regmem.offset += 8;
+
+                            MetaValue param_value2;
+                            switch (class2) {
+                            case SysVParamClass_Int:
+                                param_value2 = create_int_register_value(
+                                    param_size2,
+                                    SYSV_INT_PARAM_REGS[used_int_regs++]);
+                                break;
+                            case SysVParamClass_SSE:
+                                param_value2 = create_float_register_value(
+                                    param_size2,
+                                    SYSV_FLOAT_PARAM_REGS[used_float_regs++]);
+                                break;
+                            }
+                            this->encode_mnem(
+                                Mnem_MOV, &param_value2, &param_meta_inst2);
+                            break;
+                        }
+                        default: {
+                            // TODO: proper ABI handling of other parameter
+                            // sizes
+                            SIR_ASSERT(!"unhandled parameter size");
+                            break;
+                        }
+                        }
+                    }
+                } else {
+                    MetaValue param_value = create_int_register_memory_value(
+                        param_size,
+                        RegisterIndex_RBP,
+                        0,
+                        RegisterIndex_None,
+                        stack_param_offset);
+                    stack_param_offset += param_size;
+
+                    this->encode_memcpy(
+                        param_size, param_value, param_meta_inst);
+                }
+
                 break;
             }
             }

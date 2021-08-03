@@ -27,6 +27,9 @@
 
 #define SIR_CARRAY_LENGTH(arr) (sizeof(arr) / sizeof(arr[0]))
 
+#define SIR_MAX(a, b) (((a) > (b)) ? (a) : (b))
+#define SIR_MIN(a, b) (((a) < (b)) ? (a) : (b))
+
 #define SIR_MACRO_STR(x) #x
 
 #define SIR_ASSERT(x)                                                          \

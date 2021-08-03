@@ -628,9 +628,9 @@ SIRString Type::to_string(Compiler *compiler)
         for (size_t i = 0; i < this->tuple.field_types.len; ++i) {
             auto field_type_ref = this->tuple.field_types[i];
             Type *field_type = &compiler->types[field_type_ref.id];
-            if (i > 0) {
-                sb.append(SIR_STR(", "));
-            }
+
+            if (i > 0) sb.append(SIR_STR(", "));
+
             SIRString field_str = field_type->to_string(compiler);
             sb.append(field_str);
         }

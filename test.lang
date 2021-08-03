@@ -12,9 +12,9 @@ type P struct {
 	c: f64,
 };
 
-def func1(p1: i32, p2: i32, p3: i32, p4: i32, p5: i32, s1: P): S {
+def func1(p1: i32, p2: i32, p3: i32, p4: i32, p5: i32, s1: P): P {
 	printf("%f\n", s1.c);
-	s: S;
+	s: P;
 	return s;
 }
 

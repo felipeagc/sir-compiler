@@ -123,6 +123,16 @@ static RegisterIndex SYSV_FLOAT_PARAM_REGS[8] = {
     RegisterIndex_XMM7,
 };
 
+static RegisterIndex SYSV_INT_RETURN_REGS[2] = {
+    RegisterIndex_RAX,
+    RegisterIndex_RDX,
+};
+
+static RegisterIndex SYSV_FLOAT_RETURN_REGS[2] = {
+    RegisterIndex_XMM0,
+    RegisterIndex_XMM1,
+};
+
 static RegisterIndex SYSV_CALLEE_SAVED[] = {
     RegisterIndex_RBX,
     RegisterIndex_R12,
@@ -2116,7 +2126,11 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
             default: {
                 size_t return_type_size =
                     SIRTypeSizeOf(this->module, return_type);
+
                 if (return_type_size <= 16) {
+                    uint32_t used_int_regs = 0;
+                    uint32_t used_float_regs = 0;
+
                     SysVParamClass class1 = SysVParamClass_SSE;
                     SysVParamClass class2 = SysVParamClass_SSE;
                     sysv_get_type_register_classes(
@@ -2128,11 +2142,17 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
 
                     // First register
                     {
-                        MetaValue loc1 = (class1 == SysVParamClass_Int)
-                                             ? create_int_register_value(
-                                                   8, RegisterIndex_RAX)
-                                             : create_float_register_value(
-                                                   8, RegisterIndex_XMM0);
+                        MetaValue loc1 = {};
+                        switch (class1) {
+                        case SysVParamClass_Int:
+                            loc1 = create_int_register_value(
+                                8, SYSV_INT_RETURN_REGS[used_int_regs++]);
+                            break;
+                        case SysVParamClass_SSE:
+                            loc1 = create_float_register_value(
+                                8, SYSV_FLOAT_RETURN_REGS[used_float_regs++]);
+                            break;
+                        }
 
                         MetaValue returned_value1 = returned_value;
                         returned_value1.size_class = SizeClass_8;
@@ -2142,11 +2162,17 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
 
                     // Second register
                     if (return_type_size > 8) {
-                        MetaValue loc2 = (class2 == SysVParamClass_Int)
-                                             ? create_int_register_value(
-                                                   8, RegisterIndex_RDX)
-                                             : create_float_register_value(
-                                                   8, RegisterIndex_XMM1);
+                        MetaValue loc2 = {};
+                        switch (class2) {
+                        case SysVParamClass_Int:
+                            loc2 = create_int_register_value(
+                                8, SYSV_INT_RETURN_REGS[used_int_regs++]);
+                            break;
+                        case SysVParamClass_SSE:
+                            loc2 = create_float_register_value(
+                                8, SYSV_FLOAT_RETURN_REGS[used_float_regs++]);
+                            break;
+                        }
 
                         MetaValue returned_value2 = returned_value;
                         returned_value2.size_class = SizeClass_8;
@@ -2211,7 +2237,11 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
         }
         default: {
             size_t return_type_size = SIRTypeSizeOf(this->module, return_type);
+
             if (return_type_size <= 16) {
+                uint32_t used_int_regs = 0;
+                uint32_t used_float_regs = 0;
+
                 SysVParamClass class1 = SysVParamClass_SSE;
                 SysVParamClass class2 = SysVParamClass_SSE;
                 sysv_get_type_register_classes(
@@ -2224,11 +2254,17 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
 
                 // First register
                 {
-                    MetaValue loc1 =
-                        (class1 == SysVParamClass_Int)
-                            ? create_int_register_value(8, RegisterIndex_RAX)
-                            : create_float_register_value(
-                                  8, RegisterIndex_XMM0);
+                    MetaValue loc1 = {};
+                    switch (class1) {
+                    case SysVParamClass_Int:
+                        loc1 = create_int_register_value(
+                            8, SYSV_INT_RETURN_REGS[used_int_regs++]);
+                        break;
+                    case SysVParamClass_SSE:
+                        loc1 = create_float_register_value(
+                            8, SYSV_FLOAT_RETURN_REGS[used_float_regs++]);
+                        break;
+                    }
 
                     MetaValue returned_value1 = returned_value;
                     returned_value1.size_class = SizeClass_8;
@@ -2238,11 +2274,17 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
 
                 // Second register
                 if (return_type_size > 8) {
-                    MetaValue loc2 =
-                        (class2 == SysVParamClass_Int)
-                            ? create_int_register_value(8, RegisterIndex_RDX)
-                            : create_float_register_value(
-                                  8, RegisterIndex_XMM1);
+                    MetaValue loc2 = {};
+                    switch (class2) {
+                    case SysVParamClass_Int:
+                        loc2 = create_int_register_value(
+                            8, SYSV_INT_RETURN_REGS[used_int_regs++]);
+                        break;
+                    case SysVParamClass_SSE:
+                        loc2 = create_float_register_value(
+                            8, SYSV_FLOAT_RETURN_REGS[used_float_regs++]);
+                        break;
+                    }
 
                     MetaValue returned_value2 = returned_value;
                     returned_value2.size_class = SizeClass_8;

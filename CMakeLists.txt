@@ -37,8 +37,6 @@ add_library(
   sir/sir_base.cpp
   sir/sir_ir.hpp
   sir/sir_ir.cpp
-  sir/sir_type.hpp
-  sir/sir_type.cpp
   sir/stb_sprintf.c
 
   sir/sir_obj.cpp

@@ -1,5 +1,4 @@
 #include "sir_ir.hpp"
-#include <Tracy.hpp>
 
 SIRString SIRCallingConventionToString(SIRCallingConvention calling_convention)
 {

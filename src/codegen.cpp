@@ -1,5 +1,4 @@
 #include "compiler.hpp"
-#include <Tracy.hpp>
 
 #include <sir.h>
 

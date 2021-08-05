@@ -1,6 +1,5 @@
 #include "sir_obj.hpp"
 #include "x86_64/encoder.h"
-#include <Tracy.hpp>
 
 struct X86_64AsmBuilder;
 

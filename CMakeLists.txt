@@ -15,9 +15,44 @@ if (NOT MSVC)
 	# set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fsanitize=memory -fsanitize-memory-track-origins")
 endif()
 
-# add_definitions(-DTRACY_ENABLE)
+set(TRACY_ENABLE OFF)
+if (TRACY_ENABLE)
+	add_definitions(-DTRACY_ENABLE)
+endif()
 
-add_subdirectory(sir)
+if (TRACY_ENABLE)
+	add_library(
+		tracy_client
+
+		thirdparty/tracy/TracyClient.cpp
+	)
+	target_link_libraries(tracy_client PUBLIC pthread dl rt)
+	target_include_directories(tracy_client PUBLIC thirdparty/tracy)
+endif()
+
+add_library(
+  sir
+
+  sir/sir_base.hpp
+  sir/sir_base.cpp
+  sir/sir_ir.hpp
+  sir/sir_ir.cpp
+  sir/sir_type.hpp
+  sir/sir_type.cpp
+  sir/stb_sprintf.c
+
+  sir/sir_obj.cpp
+  sir/sir_obj.hpp
+  sir/sir_elf64.cpp
+
+  sir/x86_64/builder.cpp
+  sir/x86_64/encoder.h
+  sir/x86_64/encoder.c
+)
+target_include_directories(sir PUBLIC sir)
+if (TRACY_ENABLE)
+	target_link_libraries(sir PRIVATE tracy_client)
+endif()
 
 add_executable(
 	compiler
@@ -29,4 +64,7 @@ add_executable(
 	src/codegen.cpp
 )
 target_link_libraries(compiler PRIVATE sir)
+if (TRACY_ENABLE)
+	target_link_libraries(compiler PRIVATE tracy_client)
+endif()
 

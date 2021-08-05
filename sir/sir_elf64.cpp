@@ -1,6 +1,5 @@
 #include "sir_base.hpp"
 #include "sir_obj.hpp"
-#include <Tracy.hpp>
 
 #define SIR_ELF64_ST_BIND(info) ((info) >> 4)
 #define SIR_ELF64_ST_TYPE(info) ((info)&0xf)

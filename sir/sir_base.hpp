@@ -6,8 +6,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
-#include <Tracy.hpp>
 #include "stb_sprintf.h"
+
+#ifdef TRACY_ENABLE
+#include <Tracy.hpp>
+#else
+#define ZoneScoped
+#endif
 
 #if defined(_MSC_VER)
 #define SIR_INLINE __forceinline

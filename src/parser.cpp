@@ -1,5 +1,4 @@
 #include "compiler.hpp"
-#include <Tracy.hpp>
 
 static inline String token_kind_to_string(TokenKind kind)
 {

@@ -253,7 +253,7 @@ void SIRObjectBuilderOutputToFile(
     SIRObjectBuilder *obj_builder, const char *path, size_t path_len);
 
 SIRAsmBuilder *
-SIRCreateX86_64Builder(SIRModule *module, SIRObjectBuilder *obj_builder);
+SIRCreateX64Builder(SIRModule *module, SIRObjectBuilder *obj_builder);
 void SIRAsmBuilderGenerate(SIRAsmBuilder *asm_builder);
 void SIRAsmBuilderDestroy(SIRAsmBuilder *asm_builder);
 

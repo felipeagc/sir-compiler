@@ -1,7 +1,7 @@
 #include "sir_obj.hpp"
-#include "x86_64/encoder.h"
+#include "sir_x64_encoder.h"
 
-struct X86_64AsmBuilder;
+struct X64AsmBuilder;
 
 enum RegisterIndex : uint8_t {
     RegisterIndex_None = 0,
@@ -203,7 +203,7 @@ struct MetaValue {
     }
 
     SIR_INLINE void add_relocation(
-        X86_64AsmBuilder *builder,
+        X64AsmBuilder *builder,
         OperandKind other_operand_kind = OperandKind_None,
         SizeClass other_operand_size_class = SizeClass_None) const;
 };
@@ -226,7 +226,7 @@ struct MetaFunction {
     SIRSymbolRef symbol_ref{};
 };
 
-struct X86_64AsmBuilder {
+struct X64AsmBuilder {
     SIRAsmBuilder vt;
     SIRModule *module;
     SIRObjectBuilder *obj_builder;
@@ -261,7 +261,7 @@ struct X86_64AsmBuilder {
 };
 
 SIR_INLINE void MetaValue::add_relocation(
-    X86_64AsmBuilder *builder,
+    X64AsmBuilder *builder,
     OperandKind other_operand_kind,
     SizeClass other_operand_size_class) const
 {
@@ -390,14 +390,14 @@ MetaValue create_global_value(
 }
 
 SIR_INLINE
-size_t X86_64AsmBuilder::get_code_offset()
+size_t X64AsmBuilder::get_code_offset()
 {
     return this->obj_builder->get_section_size(
         this->obj_builder, SIRSectionType_Text);
 }
 
 SIR_INLINE
-size_t X86_64AsmBuilder::encode_raw(const uint8_t *bytes, size_t len)
+size_t X64AsmBuilder::encode_raw(const uint8_t *bytes, size_t len)
 {
     ZoneScoped;
 
@@ -408,7 +408,7 @@ size_t X86_64AsmBuilder::encode_raw(const uint8_t *bytes, size_t len)
 
 SIR_INLINE
 size_t
-X86_64AsmBuilder::encode(uint64_t mnem, FeOp op0, FeOp op1, FeOp op2, FeOp op3)
+X64AsmBuilder::encode(uint64_t mnem, FeOp op0, FeOp op1, FeOp op2, FeOp op3)
 {
     ZoneScoped;
 
@@ -425,7 +425,7 @@ X86_64AsmBuilder::encode(uint64_t mnem, FeOp op0, FeOp op1, FeOp op2, FeOp op3)
 }
 
 SIR_INLINE
-size_t X86_64AsmBuilder::encode_at(
+size_t X64AsmBuilder::encode_at(
     size_t offset, uint64_t mnem, FeOp op0, FeOp op1, FeOp op2, FeOp op3)
 {
     ZoneScoped;
@@ -443,7 +443,7 @@ size_t X86_64AsmBuilder::encode_at(
 }
 
 SIR_INLINE
-size_t X86_64AsmBuilder::encode_direct_call(SIRInstRef func_ref)
+size_t X64AsmBuilder::encode_direct_call(SIRInstRef func_ref)
 {
     ZoneScoped;
 
@@ -461,7 +461,7 @@ size_t X86_64AsmBuilder::encode_direct_call(SIRInstRef func_ref)
     return inst_len;
 }
 
-void X86_64AsmBuilder::encode_function_ending(SIRInstRef func_ref)
+void X64AsmBuilder::encode_function_ending(SIRInstRef func_ref)
 {
     ZoneScoped;
 
@@ -487,7 +487,7 @@ void X86_64AsmBuilder::encode_function_ending(SIRInstRef func_ref)
     this->encode(FE_RET);
 }
 
-void X86_64AsmBuilder::encode_mnem(
+void X64AsmBuilder::encode_mnem(
     Mnem mnem, const MetaValue *source, const MetaValue *dest)
 {
     ZoneScoped;
@@ -522,7 +522,7 @@ enum SysVParamClass {
 };
 
 static void extract_type_sysv_classes(
-    X86_64AsmBuilder *builder,
+    X64AsmBuilder *builder,
     SIRType *type,
     uint32_t *field_offset,
     uint8_t *byte_classes)
@@ -572,7 +572,7 @@ static void extract_type_sysv_classes(
 }
 
 static void sysv_get_type_register_classes(
-    X86_64AsmBuilder *builder,
+    X64AsmBuilder *builder,
     SIRType *type,
     SysVParamClass *class1,
     SysVParamClass *class2)
@@ -602,7 +602,7 @@ static void sysv_get_type_register_classes(
 }
 
 static bool sysv_param_should_use_regs(
-    X86_64AsmBuilder *builder,
+    X64AsmBuilder *builder,
     SIRType *param_type,
     SysVParamClass *class1,
     SysVParamClass *class2,
@@ -645,7 +645,7 @@ static bool sysv_param_should_use_regs(
 }
 
 size_t
-X86_64AsmBuilder::get_func_call_stack_parameters_size(SIRInstRef func_call_ref)
+X64AsmBuilder::get_func_call_stack_parameters_size(SIRInstRef func_call_ref)
 {
     size_t stack_parameters_size = 0;
 
@@ -732,7 +732,7 @@ X86_64AsmBuilder::get_func_call_stack_parameters_size(SIRInstRef func_call_ref)
     return stack_parameters_size;
 }
 
-void X86_64AsmBuilder::move_inst_rvalue(
+void X64AsmBuilder::move_inst_rvalue(
     SIRInstRef inst_ref, const MetaValue *dest_value)
 {
     SIRInst inst = SIRModuleGetInst(this->module, inst_ref);
@@ -771,7 +771,7 @@ void X86_64AsmBuilder::move_inst_rvalue(
     }
 }
 
-void X86_64AsmBuilder::encode_memcpy(
+void X64AsmBuilder::encode_memcpy(
     size_t value_size, MetaValue source_value, MetaValue dest_value)
 {
     SIR_ASSERT(source_value.kind == MetaValueKind_IRegisterMemory);
@@ -797,7 +797,7 @@ void X86_64AsmBuilder::encode_memcpy(
     }
 }
 
-void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
+void X64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
 {
     ZoneScoped;
 
@@ -2348,7 +2348,7 @@ void X86_64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
     }
 }
 
-MetaValue X86_64AsmBuilder::generate_global(
+MetaValue X64AsmBuilder::generate_global(
     uint32_t flags, const uint8_t *data, size_t data_len)
 {
     ZoneScoped;
@@ -2372,7 +2372,7 @@ MetaValue X86_64AsmBuilder::generate_global(
     return create_global_value(data_len, section_type, offset);
 }
 
-void X86_64AsmBuilder::generate_function(SIRInstRef func_ref)
+void X64AsmBuilder::generate_function(SIRInstRef func_ref)
 {
     ZoneScoped;
 
@@ -2785,7 +2785,7 @@ void X86_64AsmBuilder::generate_function(SIRInstRef func_ref)
 static void generate(SIRAsmBuilder *asm_builder)
 {
     ZoneScoped;
-    X86_64AsmBuilder *builder = (X86_64AsmBuilder *)asm_builder;
+    X64AsmBuilder *builder = (X64AsmBuilder *)asm_builder;
 
     // Generate globals
     for (SIRInstRef global_ref : builder->module->globals) {
@@ -2802,17 +2802,16 @@ static void generate(SIRAsmBuilder *asm_builder)
 
 static void destroy(SIRAsmBuilder *asm_builder)
 {
-    X86_64AsmBuilder *builder = (X86_64AsmBuilder *)asm_builder;
+    X64AsmBuilder *builder = (X64AsmBuilder *)asm_builder;
     builder->meta_insts.destroy();
 }
 
 SIRAsmBuilder *
-SIRCreateX86_64Builder(SIRModule *module, SIRObjectBuilder *obj_builder)
+SIRCreateX64Builder(SIRModule *module, SIRObjectBuilder *obj_builder)
 {
     ZoneScoped;
 
-    X86_64AsmBuilder *asm_builder =
-        SIRAllocInit(module->arena, X86_64AsmBuilder);
+    X64AsmBuilder *asm_builder = SIRAllocInit(module->arena, X64AsmBuilder);
 
     asm_builder->vt.generate = generate;
     asm_builder->vt.destroy = destroy;

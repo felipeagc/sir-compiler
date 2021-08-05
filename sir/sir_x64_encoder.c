@@ -3,7 +3,7 @@
 #include <stdint.h>
 #include <stdio.h>
 
-#include "encoder.h"
+#include "sir_x64_encoder.h"
 
 #define LIKELY(x) __builtin_expect((x), 1)
 #define UNLIKELY(x) __builtin_expect((x), 0)
@@ -310,7 +310,7 @@ struct EncodeDesc {
 };
 
 static const struct EncodeDesc descs[] = {
-#include "enc_cases.h"
+#include "sir_x64_enc_cases.h"
 };
 
 int

@@ -43,9 +43,11 @@ add_library(
   sir/sir_obj.hpp
   sir/sir_elf64.cpp
 
-  sir/x86_64/builder.cpp
-  sir/x86_64/encoder.h
-  sir/x86_64/encoder.c
+  sir/sir_x64.cpp
+  sir/sir_x64_encoder.c
+  sir/sir_x64_encoder.h
+  sir/sir_x64_enc_cases.h
+  sir/sir_x64_enc_mnems.h
 )
 target_include_directories(sir PUBLIC sir)
 if (TRACY_ENABLE)

@@ -22,6 +22,7 @@ add_subdirectory(sir)
 add_executable(
 	compiler
 	src/main.cpp
+	src/base.cpp
 	src/compiler.cpp
 	src/parser.cpp
 	src/analysis.cpp

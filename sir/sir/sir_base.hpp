@@ -482,7 +482,7 @@ static inline SIRStringMap
 SIRStringMapCreate(SIRAllocator *allocator, size_t size);
 static inline void SIRStringMapDestroy(SIRStringMap *map);
 static inline void
-SIRStringMapSet(SIRStringMap *map, SIRString key, const uintptr_t &value);
+SIRStringMapSet(SIRStringMap *map, SIRString key, uintptr_t value);
 static inline bool
 SIRStringMapGet(SIRStringMap *map, SIRString key, uintptr_t *out_value);
 
@@ -552,7 +552,7 @@ static inline void SIRStringMapGrow(SIRStringMap *map)
 }
 
 static inline void
-SIRStringMapSet(SIRStringMap *map, SIRString key, const uintptr_t &value)
+SIRStringMapSet(SIRStringMap *map, SIRString key, uintptr_t value)
 {
     ZoneScoped;
 

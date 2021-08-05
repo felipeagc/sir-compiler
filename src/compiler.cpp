@@ -47,20 +47,20 @@ bool TypeRef::is_runtime(Compiler *compiler)
 
 Scope *Scope::create(Compiler *compiler, FileRef file_ref, Scope *parent)
 {
-    Scope *scope = SIRAlloc(compiler->arena, Scope);
+    Scope *scope = compiler->arena->alloc<Scope>();
     *scope = {};
 
     scope->file_ref = file_ref;
     scope->parent = parent;
-    scope->decl_refs = SIRStringMapCreate((SIRAllocator *)compiler->arena, 0);
+    scope->decl_refs = StringMap<DeclRef>::create(compiler->arena);
 
     return scope;
 }
 
 void Scope::add(Compiler *compiler, DeclRef decl_ref)
 {
-    SIRString name = compiler->decls[decl_ref.id].name;
-    if (!SIRStringEqual(name, SIR_STR("_"))) {
+    String name = compiler->decls[decl_ref.id].name;
+    if (!name.equal("_")) {
         DeclRef found_decl = this->lookup(name);
         if (found_decl.id != 0) {
             const Location &loc = compiler->decls[decl_ref.id].loc;
@@ -70,18 +70,18 @@ void Scope::add(Compiler *compiler, DeclRef decl_ref)
                 (int)name.len,
                 name.ptr);
         } else {
-            SIRStringMapSet(&this->decl_refs, name, decl_ref.id);
+            this->decl_refs.set(name, decl_ref);
         }
     }
 }
 
-DeclRef Scope::lookup(const SIRString &name)
+DeclRef Scope::lookup(const String &name)
 {
-    if (SIRStringEqual(name, SIR_STR("_"))) return {0};
+    if (name.equal("_")) return {0};
 
-    uintptr_t out_ref_id = 0;
-    if (SIRStringMapGet(&this->decl_refs, name, &out_ref_id)) {
-        return (DeclRef){(uint32_t)out_ref_id};
+    DeclRef found_decl_ref = {0};
+    if (this->decl_refs.get(name, &found_decl_ref)) {
+        return found_decl_ref;
     }
 
     if (this->parent) {
@@ -95,67 +95,71 @@ Compiler Compiler::create()
 {
     init_parser_tables();
 
-    SIRArenaAllocator *arena = SIRArenaAllocatorCreate(&SIR_MALLOC_ALLOCATOR);
+    ArenaAllocator *arena =
+        ArenaAllocator::create(MallocAllocator::get_instance());
 
-    SIRStringMap keyword_map = SIRStringMapCreate(&SIR_MALLOC_ALLOCATOR, 0);
-    SIRStringMap builtin_function_map =
-        SIRStringMapCreate(&SIR_MALLOC_ALLOCATOR, 0);
-    SIRArray<Error> errors = SIRArray<Error>::create(&SIR_MALLOC_ALLOCATOR);
+    StringMap<TokenKind> keyword_map =
+        StringMap<TokenKind>::create(MallocAllocator::get_instance());
+    StringMap<BuiltinFunction> builtin_function_map =
+        StringMap<BuiltinFunction>::create(MallocAllocator::get_instance());
+    Array<Error> errors = Array<Error>::create(MallocAllocator::get_instance());
 
-    SIRStringBuilder sb = SIRStringBuilder::create(&SIR_MALLOC_ALLOCATOR);
+    StringBuilder sb = StringBuilder::create(MallocAllocator::get_instance());
 
-    SIRArray<File> files = SIRArray<File>::create(&SIR_MALLOC_ALLOCATOR);
+    Array<File> files = Array<File>::create(MallocAllocator::get_instance());
     files.push_back({}); // 0th file
 
-    SIRStringMap type_map = SIRStringMapCreate(&SIR_MALLOC_ALLOCATOR, 0);
-    SIRArray<Type> types = SIRArray<Type>::create(&SIR_MALLOC_ALLOCATOR);
+    StringMap<TypeRef> type_map =
+        StringMap<TypeRef>::create(MallocAllocator::get_instance());
+    Array<Type> types = Array<Type>::create(MallocAllocator::get_instance());
+    types.push_back({}); // 0th type
 
-    SIRArray<Decl> decls = SIRArray<Decl>::create(&SIR_MALLOC_ALLOCATOR);
+    Array<Decl> decls = Array<Decl>::create(MallocAllocator::get_instance());
     decls.push_back({}); // 0th decl
 
-    SIRArray<Stmt> stmts = SIRArray<Stmt>::create(&SIR_MALLOC_ALLOCATOR);
+    Array<Stmt> stmts = Array<Stmt>::create(MallocAllocator::get_instance());
     stmts.push_back({}); // 0th decl
 
-    SIRArray<Expr> exprs = SIRArray<Expr>::create(&SIR_MALLOC_ALLOCATOR);
+    Array<Expr> exprs = Array<Expr>::create(MallocAllocator::get_instance());
     exprs.push_back({}); // 0th expr
 
-    SIRStringMapSet(&keyword_map, SIR_STR("extern"), TokenKind_Extern);
-    SIRStringMapSet(&keyword_map, SIR_STR("extern"), TokenKind_Extern);
-    SIRStringMapSet(&keyword_map, SIR_STR("vararg"), TokenKind_VarArg);
-    SIRStringMapSet(&keyword_map, SIR_STR("export"), TokenKind_Export);
-    SIRStringMapSet(&keyword_map, SIR_STR("inline"), TokenKind_Inline);
-    SIRStringMapSet(&keyword_map, SIR_STR("def"), TokenKind_Def);
-    SIRStringMapSet(&keyword_map, SIR_STR("type"), TokenKind_Type);
-    SIRStringMapSet(&keyword_map, SIR_STR("struct"), TokenKind_Struct);
-    SIRStringMapSet(&keyword_map, SIR_STR("global"), TokenKind_Global);
-    SIRStringMapSet(&keyword_map, SIR_STR("macro"), TokenKind_Macro);
-    SIRStringMapSet(&keyword_map, SIR_STR("null"), TokenKind_Null);
-    SIRStringMapSet(&keyword_map, SIR_STR("true"), TokenKind_True);
-    SIRStringMapSet(&keyword_map, SIR_STR("false"), TokenKind_False);
-    SIRStringMapSet(&keyword_map, SIR_STR("if"), TokenKind_If);
-    SIRStringMapSet(&keyword_map, SIR_STR("else"), TokenKind_Else);
-    SIRStringMapSet(&keyword_map, SIR_STR("while"), TokenKind_While);
-    SIRStringMapSet(&keyword_map, SIR_STR("break"), TokenKind_Break);
-    SIRStringMapSet(&keyword_map, SIR_STR("continue"), TokenKind_Continue);
-    SIRStringMapSet(&keyword_map, SIR_STR("return"), TokenKind_Return);
-    SIRStringMapSet(&keyword_map, SIR_STR("void"), TokenKind_Void);
-    SIRStringMapSet(&keyword_map, SIR_STR("bool"), TokenKind_Bool);
-    SIRStringMapSet(&keyword_map, SIR_STR("u8"), TokenKind_U8);
-    SIRStringMapSet(&keyword_map, SIR_STR("u16"), TokenKind_U16);
-    SIRStringMapSet(&keyword_map, SIR_STR("u32"), TokenKind_U32);
-    SIRStringMapSet(&keyword_map, SIR_STR("u64"), TokenKind_U64);
-    SIRStringMapSet(&keyword_map, SIR_STR("i8"), TokenKind_I8);
-    SIRStringMapSet(&keyword_map, SIR_STR("i16"), TokenKind_I16);
-    SIRStringMapSet(&keyword_map, SIR_STR("i32"), TokenKind_I32);
-    SIRStringMapSet(&keyword_map, SIR_STR("i64"), TokenKind_I64);
-    SIRStringMapSet(&keyword_map, SIR_STR("f32"), TokenKind_F32);
-    SIRStringMapSet(&keyword_map, SIR_STR("f64"), TokenKind_F64);
-    SIRStringMapSet(&keyword_map, SIR_STR("and"), TokenKind_And);
-    SIRStringMapSet(&keyword_map, SIR_STR("or"), TokenKind_Or);
+    keyword_map.set("extern", TokenKind_Extern);
+    keyword_map.set("extern", TokenKind_Extern);
+    keyword_map.set("vararg", TokenKind_VarArg);
+    keyword_map.set("export", TokenKind_Export);
+    keyword_map.set("inline", TokenKind_Inline);
+    keyword_map.set("def", TokenKind_Def);
+    keyword_map.set("type", TokenKind_Type);
+    keyword_map.set("struct", TokenKind_Struct);
+    keyword_map.set("global", TokenKind_Global);
+    keyword_map.set("macro", TokenKind_Macro);
+    keyword_map.set("null", TokenKind_Null);
+    keyword_map.set("true", TokenKind_True);
+    keyword_map.set("false", TokenKind_False);
+    keyword_map.set("if", TokenKind_If);
+    keyword_map.set("else", TokenKind_Else);
+    keyword_map.set("while", TokenKind_While);
+    keyword_map.set("break", TokenKind_Break);
+    keyword_map.set("continue", TokenKind_Continue);
+    keyword_map.set("return", TokenKind_Return);
+    keyword_map.set("void", TokenKind_Void);
+    keyword_map.set("bool", TokenKind_Bool);
+    keyword_map.set("u8", TokenKind_U8);
+    keyword_map.set("u16", TokenKind_U16);
+    keyword_map.set("u32", TokenKind_U32);
+    keyword_map.set("u64", TokenKind_U64);
+    keyword_map.set("i8", TokenKind_I8);
+    keyword_map.set("i16", TokenKind_I16);
+    keyword_map.set("i32", TokenKind_I32);
+    keyword_map.set("i64", TokenKind_I64);
+    keyword_map.set("f32", TokenKind_F32);
+    keyword_map.set("f64", TokenKind_F64);
+    keyword_map.set("and", TokenKind_And);
+    keyword_map.set("or", TokenKind_Or);
 
-    SIRStringMapSet(&builtin_function_map, SIR_STR("sizeof"), BuiltinFunction_Sizeof);
-    SIRStringMapSet(&builtin_function_map, SIR_STR("alignof"), BuiltinFunction_Alignof);
-    SIRStringMapSet(&builtin_function_map, SIR_STR("ptrcast"), BuiltinFunction_PtrCast);
+    builtin_function_map.set("sizeof", BuiltinFunction_Sizeof);
+    builtin_function_map.set("alignof", BuiltinFunction_Alignof);
+    builtin_function_map.set("ptrcast", BuiltinFunction_PtrCast);
 
     Compiler compiler = {
         .arena = arena,
@@ -310,15 +314,15 @@ void Compiler::destroy()
     this->exprs.destroy();
     this->stmts.destroy();
     this->decls.destroy();
-    SIRStringMapDestroy(&this->type_map);
+    this->type_map.destroy();
     this->types.destroy();
     this->files.destroy();
 
     this->sb.destroy();
     this->errors.destroy();
-    SIRStringMapDestroy(&this->builtin_function_map);
-    SIRStringMapDestroy(&this->keyword_map);
-    SIRArenaAllocatorDestroy(this->arena);
+    this->builtin_function_map.destroy();
+    this->keyword_map.destroy();
+    this->arena->destroy();
 }
 
 size_t Compiler::get_error_checkpoint()
@@ -335,7 +339,7 @@ void Compiler::add_error(const Location &loc, const char *fmt, ...)
 {
     va_list args;
     va_start(args, fmt);
-    SIRString message = SIRAllocVsprintf(this->arena, fmt, args);
+    String message = this->arena->vsprintf(fmt, args);
     va_end(args);
 
     Error err = {
@@ -352,7 +356,7 @@ void Compiler::halt_compilation()
 
 void Compiler::print_errors()
 {
-    SIR_ASSERT(this->errors.len > 0);
+    LANG_ASSERT(this->errors.len > 0);
 
     for (Error &err : this->errors) {
         if (err.loc.file_ref.id) {
@@ -388,10 +392,10 @@ print_time_taken(const char *task_name, timespec start_time, timespec end_time)
     printf("%s time: %.3lf seconds\n", task_name, time);
 }
 
-void Compiler::compile(SIRString path)
+void Compiler::compile(String path)
 {
     try {
-        FILE *f = fopen(SIRAllocNullTerminate(this->arena, path), "rb");
+        FILE *f = fopen(this->arena->null_terminate(path), "rb");
         if (!f) {
             this->add_error(
                 Location{},
@@ -404,9 +408,7 @@ void Compiler::compile(SIRString path)
         size_t file_size = ftell(f);
         fseek(f, 0, SEEK_SET);
 
-        SIRSlice<char> file_content;
-        file_content.len = file_size + 1;
-        file_content.ptr = SIRAllocSlice(this->arena, char, file_content.len);
+        Slice<char> file_content = this->arena->alloc<char>(file_size + 1);
         size_t bytes_read = fread(file_content.ptr, 1, file_size, f);
         file_content[file_size] = '\0';
 
@@ -424,11 +426,10 @@ void Compiler::compile(SIRString path)
         FileRef file_ref = this->add_file({});
         this->files[file_ref.id] = {
             .path = path,
-            .text = SIRString{file_content.ptr, file_content.len},
+            .text = String{file_content.ptr, file_content.len},
             .line_count = 0,
             .scope = Scope::create(this, file_ref),
-            .top_level_decls =
-                SIRArray<DeclRef>::create((SIRAllocator *)this->arena),
+            .top_level_decls = Array<DeclRef>::create(this->arena),
         };
 
         timespec total_start_time, total_end_time;
@@ -478,15 +479,15 @@ void Compiler::compile(SIRString path)
 
 TypeRef Compiler::get_cached_type(Type &type)
 {
-    SIRString type_string = type.to_string(this);
-    uintptr_t existing_type_ref_id = 0;
-    if (SIRStringMapGet(&this->type_map, type_string, &existing_type_ref_id)) {
-        return (TypeRef){(uint32_t)existing_type_ref_id};
+    String type_string = type.to_string(this);
+    TypeRef existing_type_ref = {};
+    if (this->type_map.get(type_string, &existing_type_ref)) {
+        return existing_type_ref;
     }
 
     TypeRef type_ref = {(uint32_t)this->types.len};
     this->types.push_back(type);
-    SIRStringMapSet(&this->type_map, type_string, type_ref.id);
+    this->type_map.set(type_string, type_ref);
     return type_ref;
 }
 
@@ -498,22 +499,21 @@ TypeRef Compiler::create_pointer_type(TypeRef sub)
     return this->get_cached_type(type);
 }
 
-TypeRef Compiler::create_struct_type(
-    SIRSlice<TypeRef> fields, SIRSlice<SIRString> field_names)
+TypeRef
+Compiler::create_struct_type(Slice<TypeRef> fields, Slice<String> field_names)
 {
     Type type = {};
     type.kind = TypeKind_Struct;
     type.struct_.field_types = fields;
     type.struct_.field_names = field_names;
-    type.struct_.field_map =
-        SIRStringMapCreate((SIRAllocator *)this->arena, 32);
+    type.struct_.field_map = StringMap<uint32_t>::create(this->arena, 32);
     for (size_t i = 0; i < field_names.len; ++i) {
-        SIRStringMapSet(&type.struct_.field_map, field_names[i], i);
+        type.struct_.field_map.set(field_names[i], i);
     }
     return this->get_cached_type(type);
 }
 
-TypeRef Compiler::create_tuple_type(SIRSlice<TypeRef> fields)
+TypeRef Compiler::create_tuple_type(Slice<TypeRef> fields)
 {
     Type type = {};
     type.kind = TypeKind_Tuple;
@@ -539,7 +539,7 @@ TypeRef Compiler::create_slice_type(TypeRef sub)
 }
 
 TypeRef Compiler::create_func_type(
-    TypeRef return_type, SIRSlice<TypeRef> param_types, bool vararg)
+    TypeRef return_type, Slice<TypeRef> param_types, bool vararg)
 {
     Type type = {};
     type.kind = TypeKind_Function;
@@ -549,7 +549,7 @@ TypeRef Compiler::create_func_type(
     return this->get_cached_type(type);
 }
 
-SIRString Type::to_string(Compiler *compiler)
+String Type::to_string(Compiler *compiler)
 {
     if (this->str.len > 0) {
         return this->str;
@@ -557,95 +557,90 @@ SIRString Type::to_string(Compiler *compiler)
 
     switch (this->kind) {
     case TypeKind_Unknown: {
-        this->str = SIR_STR("@unknown");
+        this->str = "@unknown";
         break;
     }
     case TypeKind_Void: {
-        this->str = SIR_STR("@void");
+        this->str = "@void";
         break;
     }
     case TypeKind_Type: {
-        this->str = SIR_STR("@type");
+        this->str = "@type";
         break;
     }
     case TypeKind_Bool: {
-        this->str = SIR_STR("@bool");
+        this->str = "@bool";
         break;
     }
     case TypeKind_UntypedInt: {
-        this->str = SIR_STR("@untyped_int");
+        this->str = "@untyped_int";
         break;
     }
     case TypeKind_UntypedFloat: {
-        this->str = SIR_STR("@untyped_float");
+        this->str = "@untyped_float";
         break;
     }
     case TypeKind_Int: {
         if (this->int_.is_signed) {
-            this->str =
-                SIRAllocSprintf(compiler->arena, "@int(%u)", this->int_.bits);
+            this->str = compiler->arena->sprintf("@int(%u)", this->int_.bits);
         } else {
-            this->str =
-                SIRAllocSprintf(compiler->arena, "@uint(%u)", this->int_.bits);
+            this->str = compiler->arena->sprintf("@uint(%u)", this->int_.bits);
         }
         break;
     }
     case TypeKind_Float: {
-        this->str =
-            SIRAllocSprintf(compiler->arena, "@float(%u)", this->float_.bits);
+        this->str = compiler->arena->sprintf("@float(%u)", this->float_.bits);
         break;
     }
     case TypeKind_Pointer: {
-        SIRString sub_str =
+        String sub_str =
             compiler->types[this->pointer.sub_type.id].to_string(compiler);
-        this->str = SIRAllocSprintf(
-            compiler->arena, "@ptr(%.*s)", (int)sub_str.len, sub_str.ptr);
+        this->str = compiler->arena->sprintf(
+            "@ptr(%.*s)", (int)sub_str.len, sub_str.ptr);
         break;
     }
     case TypeKind_Array: {
-        SIRString sub_str =
+        String sub_str =
             compiler->types[this->array.sub_type.id].to_string(compiler);
-        this->str = SIRAllocSprintf(
-            compiler->arena,
-            "@arr(%.*s, %lu)",
-            (int)sub_str.len,
-            sub_str.ptr,
-            this->array.size);
+        this->str = compiler->arena->sprintf(
+            "@arr(%.*s, %lu)", (int)sub_str.len, sub_str.ptr, this->array.size);
         break;
     }
     case TypeKind_Slice: {
-        SIRString sub_str =
+        String sub_str =
             compiler->types[this->slice.sub_type.id].to_string(compiler);
-        this->str = SIRAllocSprintf(
-            compiler->arena, "@slice(%.*s)", (int)sub_str.len, sub_str.ptr);
+        this->str = compiler->arena->sprintf(
+            "@slice(%.*s)", (int)sub_str.len, sub_str.ptr);
         break;
     }
     case TypeKind_Tuple: {
-        SIRStringBuilder sb = SIRStringBuilder::create(&SIR_MALLOC_ALLOCATOR);
+        StringBuilder sb =
+            StringBuilder::create(MallocAllocator::get_instance());
 
-        sb.append(SIR_STR("@tuple("));
+        sb.append("@tuple(");
 
         for (size_t i = 0; i < this->tuple.field_types.len; ++i) {
             auto field_type_ref = this->tuple.field_types[i];
             Type *field_type = &compiler->types[field_type_ref.id];
 
-            if (i > 0) sb.append(SIR_STR(", "));
+            if (i > 0) sb.append(", ");
 
-            SIRString field_str = field_type->to_string(compiler);
+            String field_str = field_type->to_string(compiler);
             sb.append(field_str);
         }
 
-        sb.append(SIR_STR(")"));
+        sb.append(")");
 
-        this->str = sb.build_null_terminated((SIRAllocator *)compiler->arena);
+        this->str = sb.build_null_terminated(compiler->arena);
 
         sb.destroy();
         break;
     }
     case TypeKind_Struct: {
-        SIRStringBuilder sb = SIRStringBuilder::create(&SIR_MALLOC_ALLOCATOR);
+        StringBuilder sb =
+            StringBuilder::create(MallocAllocator::get_instance());
 
-        sb.append(SIR_STR("@struct("));
+        sb.append("@struct(");
 
         for (size_t i = 0; i < this->struct_.field_types.len; ++i) {
             auto field_type_ref = this->struct_.field_types[i];
@@ -653,55 +648,56 @@ SIRString Type::to_string(Compiler *compiler)
             Type *field_type = &compiler->types[field_type_ref.id];
 
             if (i > 0) {
-                sb.append(SIR_STR(","));
+                sb.append(",");
             }
 
             sb.append(field_name);
-            sb.append(SIR_STR(":"));
+            sb.append(":");
 
-            SIRString field_str = field_type->to_string(compiler);
+            String field_str = field_type->to_string(compiler);
             sb.append(field_str);
         }
 
-        sb.append(SIR_STR(")"));
+        sb.append(")");
 
-        this->str = sb.build_null_terminated((SIRAllocator *)compiler->arena);
+        this->str = sb.build_null_terminated(compiler->arena);
 
         sb.destroy();
         break;
     }
     case TypeKind_Function: {
-        SIRStringBuilder sb = SIRStringBuilder::create(&SIR_MALLOC_ALLOCATOR);
+        StringBuilder sb =
+            StringBuilder::create(MallocAllocator::get_instance());
 
         if (!this->func.vararg) {
-            sb.append(SIR_STR("@func("));
+            sb.append("@func(");
         } else {
-            sb.append(SIR_STR("@func_vararg("));
+            sb.append("@func_vararg(");
         }
 
         Type *return_type = &compiler->types[this->func.return_type.id];
         sb.append(return_type->to_string(compiler));
 
-        sb.append(SIR_STR(","));
+        sb.append(",");
 
-        sb.append(SIR_STR("("));
+        sb.append("(");
 
         for (size_t i = 0; i < this->func.param_types.len; ++i) {
             auto field_type_ref = this->func.param_types[i];
             Type *field_type = &compiler->types[field_type_ref.id];
 
             if (i > 0) {
-                sb.append(SIR_STR(","));
+                sb.append(",");
             }
 
-            SIRString field_str = field_type->to_string(compiler);
+            String field_str = field_type->to_string(compiler);
             sb.append(field_str);
         }
 
-        sb.append(SIR_STR(")"));
-        sb.append(SIR_STR(")"));
+        sb.append(")");
+        sb.append(")");
 
-        this->str = sb.build_null_terminated((SIRAllocator*)compiler->arena);
+        this->str = sb.build_null_terminated(compiler->arena);
 
         sb.destroy();
         break;
@@ -738,7 +734,7 @@ uint32_t Type::size_of(Compiler *compiler)
             this->array.sub_type.get(compiler).size_of(compiler);
         uint32_t subtype_alignment =
             this->array.sub_type.get(compiler).align_of(compiler);
-        uint32_t stride = SIR_ROUND_UP(subtype_alignment, subtype_size);
+        uint32_t stride = LANG_ROUND_UP(subtype_alignment, subtype_size);
         size = stride * this->array.size;
         break;
     }
@@ -759,7 +755,7 @@ uint32_t Type::size_of(Compiler *compiler)
         for (TypeRef field_type_ref : this->struct_.field_types) {
             Type field_type = field_type_ref.get(compiler);
             uint32_t field_align = field_type.align_of(compiler);
-            size = SIR_ROUND_UP(field_align, size); // Add padding
+            size = LANG_ROUND_UP(field_align, size); // Add padding
 
             uint32_t field_size = field_type.size_of(compiler);
             size += field_size;
@@ -771,7 +767,7 @@ uint32_t Type::size_of(Compiler *compiler)
         for (TypeRef field_type_ref : this->tuple.field_types) {
             Type field_type = field_type_ref.get(compiler);
             uint32_t field_align = field_type.align_of(compiler);
-            size = SIR_ROUND_UP(field_align, size); // Add padding
+            size = LANG_ROUND_UP(field_align, size); // Add padding
 
             uint32_t field_size = field_type.size_of(compiler);
             size += field_size;
@@ -781,7 +777,7 @@ uint32_t Type::size_of(Compiler *compiler)
     }
 
     uint32_t self_alignment = this->align_of(compiler);
-    size = SIR_ROUND_UP(self_alignment, size); // Round size up for alignment
+    size = LANG_ROUND_UP(self_alignment, size); // Round size up for alignment
 
     return size;
 }

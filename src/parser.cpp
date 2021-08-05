@@ -1,159 +1,153 @@
 #include "compiler.hpp"
 #include <Tracy.hpp>
 
-static inline SIRString token_kind_to_string(TokenKind kind)
+static inline String token_kind_to_string(TokenKind kind)
 {
     switch (kind) {
-    case TokenKind_Unknown: return SIR_STR("<unknown>");
-    case TokenKind_Error: return SIR_STR("<error>");
+    case TokenKind_Unknown: return "<unknown>";
+    case TokenKind_Error: return "<error>";
 
-    case TokenKind_LParen: return SIR_STR("(");
-    case TokenKind_RParen: return SIR_STR(")");
-    case TokenKind_LBracket: return SIR_STR("[");
-    case TokenKind_RBracket: return SIR_STR("]");
-    case TokenKind_LCurly: return SIR_STR("{");
-    case TokenKind_RCurly: return SIR_STR("}");
+    case TokenKind_LParen: return "(";
+    case TokenKind_RParen: return ")";
+    case TokenKind_LBracket: return "[";
+    case TokenKind_RBracket: return "]";
+    case TokenKind_LCurly: return "{";
+    case TokenKind_RCurly: return "}";
 
-    case TokenKind_Colon: return SIR_STR(":");
-    case TokenKind_Comma: return SIR_STR(",");
-    case TokenKind_Dot: return SIR_STR(".");
-    case TokenKind_Semicolon: return SIR_STR(";");
-    case TokenKind_Question: return SIR_STR("?");
+    case TokenKind_Colon: return ":";
+    case TokenKind_Comma: return ",";
+    case TokenKind_Dot: return ".";
+    case TokenKind_Semicolon: return ";";
+    case TokenKind_Question: return "?";
 
-    case TokenKind_Equal: return SIR_STR("=");
+    case TokenKind_Equal: return "=";
 
-    case TokenKind_And: return SIR_STR("and");
-    case TokenKind_Or: return SIR_STR("or");
+    case TokenKind_And: return "and";
+    case TokenKind_Or: return "or";
 
-    case TokenKind_Sub: return SIR_STR("-");
-    case TokenKind_Add: return SIR_STR("+");
-    case TokenKind_Mul: return SIR_STR("*");
-    case TokenKind_Div: return SIR_STR("/");
-    case TokenKind_Mod: return SIR_STR("%");
-    case TokenKind_Arrow: return SIR_STR("=>");
+    case TokenKind_Sub: return "-";
+    case TokenKind_Add: return "+";
+    case TokenKind_Mul: return "*";
+    case TokenKind_Div: return "/";
+    case TokenKind_Mod: return "%";
+    case TokenKind_Arrow: return "=>";
 
-    case TokenKind_Not: return SIR_STR("!");
-    case TokenKind_BitAnd: return SIR_STR("&");
-    case TokenKind_BitOr: return SIR_STR("|");
-    case TokenKind_BitXor: return SIR_STR("^");
-    case TokenKind_BitNot: return SIR_STR("~");
+    case TokenKind_Not: return "!";
+    case TokenKind_BitAnd: return "&";
+    case TokenKind_BitOr: return "|";
+    case TokenKind_BitXor: return "^";
+    case TokenKind_BitNot: return "~";
 
-    case TokenKind_EqualEqual: return SIR_STR("==");
-    case TokenKind_NotEqual: return SIR_STR("!=");
-    case TokenKind_Less: return SIR_STR("<");
-    case TokenKind_LessEqual: return SIR_STR("<=");
-    case TokenKind_Greater: return SIR_STR(">");
-    case TokenKind_GreaterEqual: return SIR_STR(">=");
+    case TokenKind_EqualEqual: return "==";
+    case TokenKind_NotEqual: return "!=";
+    case TokenKind_Less: return "<";
+    case TokenKind_LessEqual: return "<=";
+    case TokenKind_Greater: return ">";
+    case TokenKind_GreaterEqual: return ">=";
 
-    case TokenKind_LShift: return SIR_STR("<<");
-    case TokenKind_RShift: return SIR_STR(">>");
+    case TokenKind_LShift: return "<<";
+    case TokenKind_RShift: return ">>";
 
-    case TokenKind_AddEqual: return SIR_STR("+=");
-    case TokenKind_SubEqual: return SIR_STR("-=");
-    case TokenKind_MulEqual: return SIR_STR("*=");
-    case TokenKind_DivEqual: return SIR_STR("/=");
-    case TokenKind_ModEqual: return SIR_STR("%=");
+    case TokenKind_AddEqual: return "+=";
+    case TokenKind_SubEqual: return "-=";
+    case TokenKind_MulEqual: return "*=";
+    case TokenKind_DivEqual: return "/=";
+    case TokenKind_ModEqual: return "%=";
 
-    case TokenKind_BitAndEqual: return SIR_STR("&=");
-    case TokenKind_BitOrEqual: return SIR_STR("|=");
-    case TokenKind_BitXorEqual: return SIR_STR("^=");
-    case TokenKind_BitNotEqual: return SIR_STR("~=");
-    case TokenKind_LShiftEqual: return SIR_STR("<<=");
-    case TokenKind_RShiftEqual: return SIR_STR(">>=");
+    case TokenKind_BitAndEqual: return "&=";
+    case TokenKind_BitOrEqual: return "|=";
+    case TokenKind_BitXorEqual: return "^=";
+    case TokenKind_BitNotEqual: return "~=";
+    case TokenKind_LShiftEqual: return "<<=";
+    case TokenKind_RShiftEqual: return ">>=";
 
-    case TokenKind_Const: return SIR_STR("const");
-    case TokenKind_Extern: return SIR_STR("extern");
-    case TokenKind_Export: return SIR_STR("export");
-    case TokenKind_VarArg: return SIR_STR("vararg");
-    case TokenKind_Global: return SIR_STR("global");
-    case TokenKind_Inline: return SIR_STR("inline");
-    case TokenKind_Macro: return SIR_STR("macro");
-    case TokenKind_Def: return SIR_STR("def");
-    case TokenKind_Type: return SIR_STR("type");
-    case TokenKind_Struct: return SIR_STR("struct");
-    case TokenKind_Union: return SIR_STR("union");
-    case TokenKind_If: return SIR_STR("if");
-    case TokenKind_Else: return SIR_STR("else");
-    case TokenKind_While: return SIR_STR("while");
-    case TokenKind_Break: return SIR_STR("break");
-    case TokenKind_Continue: return SIR_STR("continue");
-    case TokenKind_Return: return SIR_STR("return");
-    case TokenKind_Void: return SIR_STR("void");
-    case TokenKind_Bool: return SIR_STR("bool");
-    case TokenKind_True: return SIR_STR("true");
-    case TokenKind_False: return SIR_STR("false");
-    case TokenKind_Null: return SIR_STR("null");
-    case TokenKind_U8: return SIR_STR("u8");
-    case TokenKind_U16: return SIR_STR("u16");
-    case TokenKind_U32: return SIR_STR("u32");
-    case TokenKind_U64: return SIR_STR("u64");
-    case TokenKind_I8: return SIR_STR("i8");
-    case TokenKind_I16: return SIR_STR("i16");
-    case TokenKind_I32: return SIR_STR("i32");
-    case TokenKind_I64: return SIR_STR("i64");
-    case TokenKind_F32: return SIR_STR("f32");
-    case TokenKind_F64: return SIR_STR("f64");
-    case TokenKind_Identifier: return SIR_STR("<identifier>");
-    case TokenKind_BuiltinIdentifier: return SIR_STR("<builtin identifier>");
-    case TokenKind_StringLiteral: return SIR_STR("<string literal>");
-    case TokenKind_CharLiteral: return SIR_STR("<character literal>");
-    case TokenKind_IntLiteral: return SIR_STR("<integer literal>");
-    case TokenKind_FloatLiteral: return SIR_STR("<float literal>");
+    case TokenKind_Const: return "const";
+    case TokenKind_Extern: return "extern";
+    case TokenKind_Export: return "export";
+    case TokenKind_VarArg: return "vararg";
+    case TokenKind_Global: return "global";
+    case TokenKind_Inline: return "inline";
+    case TokenKind_Macro: return "macro";
+    case TokenKind_Def: return "def";
+    case TokenKind_Type: return "type";
+    case TokenKind_Struct: return "struct";
+    case TokenKind_Union: return "union";
+    case TokenKind_If: return "if";
+    case TokenKind_Else: return "else";
+    case TokenKind_While: return "while";
+    case TokenKind_Break: return "break";
+    case TokenKind_Continue: return "continue";
+    case TokenKind_Return: return "return";
+    case TokenKind_Void: return "void";
+    case TokenKind_Bool: return "bool";
+    case TokenKind_True: return "true";
+    case TokenKind_False: return "false";
+    case TokenKind_Null: return "null";
+    case TokenKind_U8: return "u8";
+    case TokenKind_U16: return "u16";
+    case TokenKind_U32: return "u32";
+    case TokenKind_U64: return "u64";
+    case TokenKind_I8: return "i8";
+    case TokenKind_I16: return "i16";
+    case TokenKind_I32: return "i32";
+    case TokenKind_I64: return "i64";
+    case TokenKind_F32: return "f32";
+    case TokenKind_F64: return "f64";
+    case TokenKind_Identifier: return "<identifier>";
+    case TokenKind_BuiltinIdentifier: return "<builtin identifier>";
+    case TokenKind_StringLiteral: return "<string literal>";
+    case TokenKind_CharLiteral: return "<character literal>";
+    case TokenKind_IntLiteral: return "<integer literal>";
+    case TokenKind_FloatLiteral: return "<float literal>";
 
-    case TokenKind_EOF: return SIR_STR("<eof>");
+    case TokenKind_EOF: return "<eof>";
     }
 
-    return SIR_STR("<unknown>");
+    return "<unknown>";
 }
 
-static SIRString token_to_string(Compiler *compiler, const Token &token)
+static String token_to_string(Compiler *compiler, const Token &token)
 {
     switch (token.kind) {
     case TokenKind_Error:
-        return SIRAllocSprintf(
-            compiler->arena, "error: %.*s", (int)token.str.len, token.str.ptr);
+        return compiler->arena->sprintf(
+            "error: %.*s", (int)token.str.len, token.str.ptr);
     case TokenKind_StringLiteral:
-        return SIRAllocSprintf(
-            compiler->arena,
-            "string literal: \"%.*s\"",
-            (int)token.str.len,
-            token.str.ptr);
+        return compiler->arena->sprintf(
+            "string literal: \"%.*s\"", (int)token.str.len, token.str.ptr);
     case TokenKind_Identifier:
-        return SIRAllocSprintf(
-            compiler->arena,
-            "identifier: \"%.*s\"",
-            (int)token.str.len,
-            token.str.ptr);
+        return compiler->arena->sprintf(
+            "identifier: \"%.*s\"", (int)token.str.len, token.str.ptr);
     default: return token_kind_to_string(token.kind);
     }
 
-    SIR_ASSERT(0);
-    return SIR_STR("");
+    LANG_ASSERT(0);
+    return "";
 }
 
-SIR_INLINE static bool is_whitespace(char c)
+LANG_INLINE static bool is_whitespace(char c)
 {
     return c == ' ' || c == '\t' || c == '\r' || c == '\n';
 }
 
-SIR_INLINE static bool is_alpha(char c)
+LANG_INLINE static bool is_alpha(char c)
 {
     return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c == '_');
 }
 
-SIR_INLINE static bool is_alpha_num(char c)
+LANG_INLINE static bool is_alpha_num(char c)
 {
     return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c == '_') ||
            (c >= '0' && c <= '9');
 }
 
-SIR_INLINE static bool is_hex(char c)
+LANG_INLINE static bool is_hex(char c)
 {
     return (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F') ||
            (c >= '0' && c <= '9');
 }
 
-SIR_INLINE static bool is_num(char c)
+LANG_INLINE static bool is_num(char c)
 {
     return (c >= '0' && c <= '9');
 }
@@ -350,7 +344,7 @@ struct TokenizerState {
         Token token = {};
         *this = this->next_token(compiler, &token);
         if (token.kind != token_kind) {
-            SIRString token_string = token_to_string(compiler, token);
+            String token_string = token_to_string(compiler, token);
             if (token.kind == TokenKind_Error) {
                 compiler->add_error(
                     token.loc,
@@ -360,7 +354,7 @@ struct TokenizerState {
                 compiler->halt_compilation();
             }
 
-            SIRString expected_token_string = token_kind_to_string(token_kind);
+            String expected_token_string = token_kind_to_string(token_kind);
 
             compiler->add_error(
                 token.loc,
@@ -380,7 +374,7 @@ struct TokenizerState {
         ZoneScoped;
 
         TokenizerState state = *this;
-        SIRAllocator *allocator = (SIRAllocator *)compiler->arena;
+        Allocator *allocator = compiler->arena;
 
         State mstate = State_WhitespaceStart;
 
@@ -421,32 +415,31 @@ struct TokenizerState {
 
         switch (token->kind) {
         case TokenKind_Identifier: {
-            SIRString ident_str =
-                SIRString{&state.text[token->loc.offset], token->loc.len};
-            uintptr_t token_kind = TokenKind_Identifier;
-            if (!SIRStringMapGet(
-                    &compiler->keyword_map, ident_str, &token_kind)) {
+            String ident_str =
+                String{&state.text[token->loc.offset], token->loc.len};
+            TokenKind token_kind = TokenKind_Identifier;
+            if (!compiler->keyword_map.get(ident_str, &token_kind)) {
                 token->str = ident_str;
             }
             token->kind = (TokenKind)token_kind;
             break;
         }
         case TokenKind_BuiltinIdentifier: {
-            SIRString ident_str = SIRString{
-                &state.text[token->loc.offset + 1], token->loc.len - 1};
+            String ident_str =
+                String{&state.text[token->loc.offset + 1], token->loc.len - 1};
             token->str = ident_str;
             break;
         }
         case TokenKind_StringLiteral: {
-            SIRString ident_str = SIRString{
-                &state.text[token->loc.offset + 1], token->loc.len - 2};
+            String ident_str =
+                String{&state.text[token->loc.offset + 1], token->loc.len - 2};
 
             compiler->sb.reset();
             for (size_t i = 0; i < ident_str.len; ++i) {
                 if (ident_str.ptr[i] == '\\') {
                     if (i + 1 >= ident_str.len) {
                         token->kind = TokenKind_Error;
-                        token->str = SIR_STR("invalid string literal");
+                        token->str = "invalid string literal";
                         goto end;
                     }
                     ++i;
@@ -473,21 +466,20 @@ struct TokenizerState {
                 compiler->sb.append(ident_str.ptr[i]);
             }
 
-            token->str = compiler->sb.build_null_terminated(
-                (SIRAllocator *)compiler->arena);
+            token->str = compiler->sb.build_null_terminated(compiler->arena);
             break;
         }
         case TokenKind_FloatLiteral: {
-            SIRString ident_str =
-                SIRString{&state.text[token->loc.offset], token->loc.len};
-            const char *strz = SIRAllocNullTerminate(allocator, ident_str);
+            String ident_str =
+                String{&state.text[token->loc.offset], token->loc.len};
+            const char *strz = allocator->null_terminate(ident_str);
             token->float_ = strtod(strz, NULL);
             break;
         }
         case TokenKind_IntLiteral: {
-            SIRString ident_str =
-                SIRString{&state.text[token->loc.offset], token->loc.len};
-            const char *strz = SIRAllocNullTerminate(allocator, ident_str);
+            String ident_str =
+                String{&state.text[token->loc.offset], token->loc.len};
+            const char *strz = allocator->null_terminate(ident_str);
             token->int_ = strtol(strz, NULL, 10);
             break;
         }
@@ -639,7 +631,7 @@ static Expr parse_primary_expr(Compiler *compiler, TokenizerState *state)
         case TokenKind_U16: expr.int_type.bits = 16; break;
         case TokenKind_U32: expr.int_type.bits = 32; break;
         case TokenKind_U64: expr.int_type.bits = 64; break;
-        default: SIR_ASSERT(0);
+        default: LANG_ASSERT(0);
         }
 
         break;
@@ -659,7 +651,7 @@ static Expr parse_primary_expr(Compiler *compiler, TokenizerState *state)
         case TokenKind_I16: expr.int_type.bits = 16; break;
         case TokenKind_I32: expr.int_type.bits = 32; break;
         case TokenKind_I64: expr.int_type.bits = 64; break;
-        default: SIR_ASSERT(0);
+        default: LANG_ASSERT(0);
         }
 
         break;
@@ -674,7 +666,7 @@ static Expr parse_primary_expr(Compiler *compiler, TokenizerState *state)
         switch (next_token.kind) {
         case TokenKind_F32: expr.float_type.bits = 32; break;
         case TokenKind_F64: expr.float_type.bits = 64; break;
-        default: SIR_ASSERT(0);
+        default: LANG_ASSERT(0);
         }
 
         break;
@@ -685,11 +677,9 @@ static Expr parse_primary_expr(Compiler *compiler, TokenizerState *state)
 
         state->consume_token(compiler, TokenKind_LParen);
 
-        uintptr_t builtin_func_id = BuiltinFunction_Unknown;
-        if (!SIRStringMapGet(
-                &compiler->builtin_function_map,
-                ident_token.str,
-                &builtin_func_id)) {
+        BuiltinFunction builtin_func_id = BuiltinFunction_Unknown;
+        if (!compiler->builtin_function_map.get(
+                ident_token.str, &builtin_func_id)) {
             compiler->add_error(
                 next_token.loc,
                 "invalid builtin function: '@%.*s'",
@@ -702,8 +692,7 @@ static Expr parse_primary_expr(Compiler *compiler, TokenizerState *state)
         expr.kind = ExprKind_BuiltinCall;
         expr.loc = ident_token.loc;
         expr.builtin_call.builtin = builtin_func;
-        expr.builtin_call.param_refs =
-            SIRArray<ExprRef>::create((SIRAllocator *)compiler->arena);
+        expr.builtin_call.param_refs = Array<ExprRef>::create(compiler->arena);
 
         state->next_token(compiler, &next_token);
         while (next_token.kind != TokenKind_RParen) {
@@ -728,10 +717,9 @@ static Expr parse_primary_expr(Compiler *compiler, TokenizerState *state)
 
         expr.kind = ExprKind_StructType;
         expr.loc = struct_token.loc;
-        expr.struct_type.field_names =
-            SIRArray<SIRString>::create((SIRAllocator *)compiler->arena);
+        expr.struct_type.field_names = Array<String>::create(compiler->arena);
         expr.struct_type.field_type_expr_refs =
-            SIRArray<ExprRef>::create((SIRAllocator *)compiler->arena);
+            Array<ExprRef>::create(compiler->arena);
 
         state->consume_token(compiler, TokenKind_LCurly);
 
@@ -760,7 +748,7 @@ static Expr parse_primary_expr(Compiler *compiler, TokenizerState *state)
         break;
     }
     default: {
-        SIRString token_string = token_to_string(compiler, next_token);
+        String token_string = token_to_string(compiler, next_token);
         compiler->add_error(
             next_token.loc,
             "unexpected token: '%.*s', expecting primary expression",
@@ -786,10 +774,8 @@ static Expr parse_func_expr(Compiler *compiler, TokenizerState *state)
     expr.loc = next_token.loc;
     expr.func = {};
 
-    expr.func.param_decl_refs =
-        SIRArray<DeclRef>::create((SIRAllocator *)compiler->arena);
-    expr.func.return_type_expr_refs =
-        SIRArray<ExprRef>::create((SIRAllocator *)compiler->arena);
+    expr.func.param_decl_refs = Array<DeclRef>::create(compiler->arena);
+    expr.func.return_type_expr_refs = Array<ExprRef>::create(compiler->arena);
 
     switch (next_token.kind) {
     case TokenKind_Inline: {
@@ -798,7 +784,7 @@ static Expr parse_func_expr(Compiler *compiler, TokenizerState *state)
         break;
     }
     default: {
-        SIRString token_string = token_to_string(compiler, next_token);
+        String token_string = token_to_string(compiler, next_token);
         compiler->add_error(
             next_token.loc,
             "unexpected token: '%.*s', expecting function literal",
@@ -919,8 +905,7 @@ static Expr parse_func_call_expr(Compiler *compiler, TokenizerState *state)
             expr.loc = func_expr.loc;
             expr.kind = ExprKind_FunctionCall;
             expr.func_call.func_expr_ref = func_expr_ref;
-            expr.func_call.param_refs =
-                SIRArray<ExprRef>::create((SIRAllocator *)compiler->arena);
+            expr.func_call.param_refs = Array<ExprRef>::create(compiler->arena);
 
             state->next_token(compiler, &next_token);
             while (next_token.kind != TokenKind_RParen) {
@@ -1007,7 +992,7 @@ static Expr parse_unary_expr(Compiler *compiler, TokenizerState *state)
         case TokenKind_Sub: op = UnaryOp_Negate; break;
         case TokenKind_Not: op = UnaryOp_Not; break;
         case TokenKind_BitAnd: op = UnaryOp_AddressOf; break;
-        default: SIR_ASSERT(0); break;
+        default: LANG_ASSERT(0); break;
         }
 
         Expr expr = {};
@@ -1070,10 +1055,10 @@ static Expr parse_binary_expr(Compiler *compiler, TokenizerState *state)
     default: return expr;
     }
 
-    SIRArray<BinaryOp> op_stack =
-        SIRArray<BinaryOp>::create(&SIR_MALLOC_ALLOCATOR);
-    SIRArray<BinaryOpSymbol> symbol_queue =
-        SIRArray<BinaryOpSymbol>::create(&SIR_MALLOC_ALLOCATOR);
+    Array<BinaryOp> op_stack =
+        Array<BinaryOp>::create(MallocAllocator::get_instance());
+    Array<BinaryOpSymbol> symbol_queue =
+        Array<BinaryOpSymbol>::create(MallocAllocator::get_instance());
 
     static uint8_t precedences[BinaryOp_MAX] = {
         0,  // BinaryOp_Unknown,
@@ -1163,12 +1148,13 @@ static Expr parse_binary_expr(Compiler *compiler, TokenizerState *state)
         symbol_queue.push_back(op_symbol);
     }
 
-    SIRArray<Expr> expr_stack = SIRArray<Expr>::create(&SIR_MALLOC_ALLOCATOR);
+    Array<Expr> expr_stack =
+        Array<Expr>::create(MallocAllocator::get_instance());
 
     for (size_t i = 0; i < symbol_queue.len; ++i) {
         BinaryOpSymbol symbol = symbol_queue[i];
         if (symbol.kind == BinaryOpSymbol_Operator) {
-            SIR_ASSERT(expr_stack.len >= 2);
+            LANG_ASSERT(expr_stack.len >= 2);
             Expr right_expr = expr_stack[expr_stack.len - 1];
             Expr left_expr = expr_stack[expr_stack.len - 2];
             expr_stack.pop();
@@ -1187,7 +1173,7 @@ static Expr parse_binary_expr(Compiler *compiler, TokenizerState *state)
         }
     }
 
-    SIR_ASSERT(expr_stack.len == 1);
+    LANG_ASSERT(expr_stack.len == 1);
 
     Expr result_expr = expr_stack[0];
 
@@ -1278,8 +1264,7 @@ static Stmt parse_stmt(Compiler *compiler, TokenizerState *state)
 
         stmt.kind = StmtKind_Block;
         stmt.loc = lcurly_token.loc;
-        stmt.block.stmt_refs =
-            SIRArray<StmtRef>::create((SIRAllocator *)compiler->arena);
+        stmt.block.stmt_refs = Array<StmtRef>::create(compiler->arena);
 
         state->next_token(compiler, &next_token);
         while (next_token.kind != TokenKind_RCurly) {
@@ -1321,7 +1306,7 @@ static Stmt parse_stmt(Compiler *compiler, TokenizerState *state)
             value_expr_ref = compiler->add_expr(parse_expr(compiler, state));
         }
 
-        SIR_ASSERT(type_expr_ref.id > 0 || value_expr_ref.id > 0);
+        LANG_ASSERT(type_expr_ref.id > 0 || value_expr_ref.id > 0);
 
         Decl var_decl = {};
         var_decl.kind = DeclKind_GlobalVarDecl;
@@ -1391,7 +1376,7 @@ static Stmt parse_stmt(Compiler *compiler, TokenizerState *state)
                     compiler->add_expr(parse_expr(compiler, state));
             }
 
-            SIR_ASSERT(type_expr_ref.id > 0 || value_expr_ref.id > 0);
+            LANG_ASSERT(type_expr_ref.id > 0 || value_expr_ref.id > 0);
 
             Decl var_decl = {};
             var_decl.kind = DeclKind_LocalVarDecl;
@@ -1429,14 +1414,12 @@ static Stmt parse_stmt(Compiler *compiler, TokenizerState *state)
     }
     }
 
-    SIR_ASSERT(stmt.kind != StmtKind_Unknown);
+    LANG_ASSERT(stmt.kind != StmtKind_Unknown);
     return stmt;
 }
 
 static void parse_top_level_decl(
-    Compiler *compiler,
-    TokenizerState *state,
-    SIRArray<DeclRef> *top_level_decls)
+    Compiler *compiler, TokenizerState *state, Array<DeclRef> *top_level_decls)
 {
     ZoneScoped;
 
@@ -1452,11 +1435,10 @@ static void parse_top_level_decl(
         func_decl.func = {};
 
         func_decl.func.param_decl_refs =
-            SIRArray<DeclRef>::create((SIRAllocator *)compiler->arena);
+            Array<DeclRef>::create(compiler->arena);
         func_decl.func.return_type_expr_refs =
-            SIRArray<ExprRef>::create((SIRAllocator *)compiler->arena);
-        func_decl.func.body_stmts =
-            SIRArray<StmtRef>::create((SIRAllocator *)compiler->arena);
+            Array<ExprRef>::create(compiler->arena);
+        func_decl.func.body_stmts = Array<StmtRef>::create(compiler->arena);
 
         state->next_token(compiler, &next_token);
         switch (next_token.kind) {
@@ -1594,7 +1576,7 @@ static void parse_top_level_decl(
             value_expr_ref = compiler->add_expr(parse_expr(compiler, state));
         }
 
-        SIR_ASSERT(type_expr_ref.id > 0 || value_expr_ref.id > 0);
+        LANG_ASSERT(type_expr_ref.id > 0 || value_expr_ref.id > 0);
 
         Decl var_decl = {};
         var_decl.kind = DeclKind_GlobalVarDecl;
@@ -1630,7 +1612,7 @@ static void parse_top_level_decl(
         break;
     }
     default: {
-        SIRString token_string = token_to_string(compiler, next_token);
+        String token_string = token_to_string(compiler, next_token);
         compiler->add_error(
             next_token.loc,
             "unexpected token: '%.*s', expecting top level declaration",
@@ -1908,7 +1890,7 @@ void parse_file(Compiler *compiler, FileRef file_ref)
         Token token = {};
         state.next_token(compiler, &token);
         if (token.kind == TokenKind_Error) {
-            SIRString token_string = token_to_string(compiler, token);
+            String token_string = token_to_string(compiler, token);
             compiler->add_error(
                 token.loc,
                 "unexpected token: '%.*s'",

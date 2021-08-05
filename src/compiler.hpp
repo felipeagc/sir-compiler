@@ -1,6 +1,6 @@
 #pragma once
 
-#include <sir_base.hpp>
+#include "base.hpp"
 
 struct Compiler;
 struct File;
@@ -44,21 +44,21 @@ struct TypeRef {
 struct Scope {
     FileRef file_ref;
     Scope *parent;
-    SIRStringMap decl_refs;
+    StringMap<DeclRef> decl_refs;
 
     static Scope *
     create(Compiler *compiler, FileRef file_ref, Scope *parent = nullptr);
     void add(Compiler *compiler, DeclRef decl_ref);
-    DeclRef lookup(const SIRString &name);
+    DeclRef lookup(const String &name);
 };
 
 struct File {
-    SIRString path;
-    SIRString text;
+    String path;
+    String text;
     size_t line_count;
 
     Scope *scope;
-    SIRArray<DeclRef> top_level_decls;
+    Array<DeclRef> top_level_decls;
 };
 
 struct Location {
@@ -71,7 +71,7 @@ struct Location {
 
 struct Error {
     Location loc;
-    SIRString message;
+    String message;
 };
 
 enum TokenKind {
@@ -177,7 +177,7 @@ struct Token {
     TokenKind kind;
     Location loc;
     union {
-        SIRString str;
+        String str;
         int64_t int_;
         double float_;
     };
@@ -209,7 +209,7 @@ enum TypeKind {
 
 struct Type {
     TypeKind kind;
-    SIRString str;
+    String str;
     union {
         struct {
             uint32_t bits;
@@ -219,12 +219,12 @@ struct Type {
             uint32_t bits;
         } float_;
         struct {
-            SIRSlice<TypeRef> field_types;
-            SIRSlice<SIRString> field_names;
-            SIRStringMap field_map;
+            Slice<TypeRef> field_types;
+            Slice<String> field_names;
+            StringMap<uint32_t> field_map;
         } struct_;
         struct {
-            SIRSlice<TypeRef> field_types;
+            Slice<TypeRef> field_types;
         } tuple;
         struct {
             TypeRef sub_type;
@@ -238,12 +238,12 @@ struct Type {
         } slice;
         struct {
             TypeRef return_type;
-            SIRSlice<TypeRef> param_types;
+            Slice<TypeRef> param_types;
             bool vararg;
         } func;
     };
 
-    SIRString to_string(Compiler *compiler);
+    String to_string(Compiler *compiler);
     uint32_t align_of(Compiler *compiler);
     uint32_t size_of(Compiler *compiler);
 };
@@ -335,11 +335,11 @@ struct Expr {
     Location loc;
     union {
         struct {
-            SIRString str;
+            String str;
             DeclRef decl_ref;
         } ident;
         struct {
-            SIRString str;
+            String str;
         } str_literal;
         struct {
             int64_t i64;
@@ -352,17 +352,17 @@ struct Expr {
         } bool_literal;
         struct {
             uint32_t flags;
-            SIRArray<ExprRef> return_type_expr_refs;
-            SIRArray<DeclRef> param_decl_refs;
-            SIRArray<StmtRef> body_stmts;
+            Array<ExprRef> return_type_expr_refs;
+            Array<DeclRef> param_decl_refs;
+            Array<StmtRef> body_stmts;
         } func;
         struct {
             ExprRef func_expr_ref;
-            SIRArray<ExprRef> param_refs;
+            Array<ExprRef> param_refs;
         } func_call;
         struct {
             BuiltinFunction builtin;
-            SIRArray<ExprRef> param_refs;
+            Array<ExprRef> param_refs;
         } builtin_call;
         struct {
             ExprRef sub_expr_ref;
@@ -382,8 +382,8 @@ struct Expr {
             ExprRef size_expr_ref;
         } array_type;
         struct {
-            SIRArray<SIRString> field_names;
-            SIRArray<ExprRef> field_type_expr_refs;
+            Array<String> field_names;
+            Array<ExprRef> field_type_expr_refs;
         } struct_type;
         struct {
             ExprRef left_ref;
@@ -421,7 +421,7 @@ struct Stmt {
     Location loc;
     union {
         struct {
-            SIRArray<StmtRef> stmt_refs;
+            Array<StmtRef> stmt_refs;
         } block;
         struct {
             ExprRef expr_ref;
@@ -463,14 +463,14 @@ struct Decl {
     TypeRef decl_type_ref;
     TypeRef as_type_ref;
     Location loc;
-    SIRString name;
+    String name;
     union {
         struct {
             Scope *scope;
             uint32_t flags;
-            SIRArray<ExprRef> return_type_expr_refs;
-            SIRArray<DeclRef> param_decl_refs;
-            SIRArray<StmtRef> body_stmts;
+            Array<ExprRef> return_type_expr_refs;
+            Array<DeclRef> param_decl_refs;
+            Array<StmtRef> body_stmts;
         } func;
         struct {
             ExprRef type_expr;
@@ -494,18 +494,18 @@ struct Decl {
 };
 
 struct Compiler {
-    SIRArenaAllocator *arena;
-    SIRStringMap keyword_map;
-    SIRStringMap builtin_function_map;
-    SIRArray<Error> errors;
-    SIRStringBuilder sb;
+    ArenaAllocator *arena;
+    StringMap<TokenKind> keyword_map;
+    StringMap<BuiltinFunction> builtin_function_map;
+    Array<Error> errors;
+    StringBuilder sb;
 
-    SIRArray<File> files;
-    SIRStringMap type_map;
-    SIRArray<Type> types;
-    SIRArray<Decl> decls;
-    SIRArray<Stmt> stmts;
-    SIRArray<Expr> exprs;
+    Array<File> files;
+    StringMap<TypeRef> type_map;
+    Array<Type> types;
+    Array<Decl> decls;
+    Array<Stmt> stmts;
+    Array<Expr> exprs;
 
     TypeRef void_type;
     TypeRef type_type;
@@ -528,22 +528,22 @@ struct Compiler {
 
     TypeRef get_cached_type(Type &type);
     TypeRef create_pointer_type(TypeRef sub);
-    TypeRef create_struct_type(
-        SIRSlice<TypeRef> fields, SIRSlice<SIRString> field_names);
-    TypeRef create_tuple_type(SIRSlice<TypeRef> fields);
+    TypeRef
+    create_struct_type(Slice<TypeRef> fields, Slice<String> field_names);
+    TypeRef create_tuple_type(Slice<TypeRef> fields);
     TypeRef create_array_type(TypeRef sub, size_t size);
     TypeRef create_slice_type(TypeRef sub);
     TypeRef create_func_type(
-        TypeRef return_type, SIRSlice<TypeRef> param_types, bool vararg);
+        TypeRef return_type, Slice<TypeRef> param_types, bool vararg);
 
     size_t get_error_checkpoint();
     void restore_error_checkpoint(size_t checkpoint);
-    SIR_PRINTF_FORMATTING(3, 4)
+    LANG_PRINTF_FORMATTING(3, 4)
     void add_error(const Location &loc, const char *fmt, ...);
     void halt_compilation();
     void print_errors();
 
-    SIR_INLINE
+    LANG_INLINE
     FileRef add_file(const File &file)
     {
         FileRef ref = {(uint32_t)this->files.len};
@@ -551,52 +551,52 @@ struct Compiler {
         return ref;
     }
 
-    SIR_INLINE
+    LANG_INLINE
     ExprRef add_expr(const Expr &expr)
     {
-        SIR_ASSERT(expr.kind != ExprKind_Unknown);
+        LANG_ASSERT(expr.kind != ExprKind_Unknown);
         ExprRef ref = {(uint32_t)this->exprs.len};
         this->exprs.push_back(expr);
         return ref;
     }
 
-    SIR_INLINE
+    LANG_INLINE
     StmtRef add_stmt(const Stmt &stmt)
     {
-        SIR_ASSERT(stmt.kind != StmtKind_Unknown);
+        LANG_ASSERT(stmt.kind != StmtKind_Unknown);
         StmtRef ref = {(uint32_t)this->stmts.len};
         this->stmts.push_back(stmt);
         return ref;
     }
 
-    SIR_INLINE
+    LANG_INLINE
     DeclRef add_decl(const Decl &decl)
     {
-        SIR_ASSERT(decl.kind != DeclKind_Unknown);
+        LANG_ASSERT(decl.kind != DeclKind_Unknown);
         DeclRef ref = {(uint32_t)this->decls.len};
         this->decls.push_back(decl);
         return ref;
     }
 
-    SIR_INLINE
+    LANG_INLINE
     Expr *get_expr(ExprRef ref)
     {
         return &this->exprs[ref.id];
     }
 
-    SIR_INLINE
+    LANG_INLINE
     Stmt *get_stmt(StmtRef ref)
     {
         return &this->stmts[ref.id];
     }
 
-    SIR_INLINE
+    LANG_INLINE
     Decl *get_decl(DeclRef ref)
     {
         return &this->decls[ref.id];
     }
 
-    void compile(SIRString path);
+    void compile(String path);
 };
 
 void init_parser_tables();

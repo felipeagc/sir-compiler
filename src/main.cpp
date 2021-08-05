@@ -10,7 +10,7 @@ int main(int argc, const char *argv[])
 
     Compiler compiler = Compiler::create();
 
-    compiler.compile(SIR_CSTR(argv[1]));
+    compiler.compile(argv[1]);
 
     compiler.destroy();
     return 0;

@@ -1054,7 +1054,7 @@ void codegen_file(Compiler *compiler, FileRef file_ref)
     }
 #endif
 
-    SIRObjectBuilder *obj_builder = SIRCreateELF64Bbuilder(ctx.module);
+    SIRObjectBuilder *obj_builder = SIRCreateELF64Builder(ctx.module);
     SIRAsmBuilder *asm_builder =
         SIRCreateX86_64Builder(ctx.module, obj_builder);
 

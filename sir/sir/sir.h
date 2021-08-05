@@ -247,7 +247,7 @@ void SIRBuilderInsertReturnVoid(SIRBuilder *builder);
  * Code generation functions
  */
 
-SIRObjectBuilder *SIRCreateELF64Bbuilder(SIRModule *module);
+SIRObjectBuilder *SIRCreateELF64Builder(SIRModule *module);
 void SIRObjectBuilderDestroy(SIRObjectBuilder *obj_builder);
 void SIRObjectBuilderOutputToFile(
     SIRObjectBuilder *obj_builder, const char *path, size_t path_len);

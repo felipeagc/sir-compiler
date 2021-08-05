@@ -528,7 +528,7 @@ static void set_symbol_region(
     symbol->size = size;
 }
 
-SIRObjectBuilder *SIRCreateELF64Bbuilder(SIRModule *module)
+SIRObjectBuilder *SIRCreateELF64Builder(SIRModule *module)
 {
     ZoneScoped;
 

@@ -60,14 +60,23 @@ get_ir_type(Compiler *compiler, SIRModule *module, const Type &type)
         return SIRModuleGetVoidType(module);
     }
     case TypeKind_Bool: {
-        return SIRModuleGetI8Type(module);
+        return SIRModuleGetU8Type(module);
     }
     case TypeKind_Int: {
-        switch (type.int_.bits) {
-        case 8: return SIRModuleGetI8Type(module);
-        case 16: return SIRModuleGetI16Type(module);
-        case 32: return SIRModuleGetI32Type(module);
-        case 64: return SIRModuleGetI64Type(module);
+        if (type.int_.is_signed) {
+            switch (type.int_.bits) {
+            case 8: return SIRModuleGetI8Type(module);
+            case 16: return SIRModuleGetI16Type(module);
+            case 32: return SIRModuleGetI32Type(module);
+            case 64: return SIRModuleGetI64Type(module);
+            }
+        } else {
+            switch (type.int_.bits) {
+            case 8: return SIRModuleGetU8Type(module);
+            case 16: return SIRModuleGetU16Type(module);
+            case 32: return SIRModuleGetU32Type(module);
+            case 64: return SIRModuleGetU64Type(module);
+            }
         }
         break;
     }

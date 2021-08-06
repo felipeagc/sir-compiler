@@ -138,6 +138,10 @@ SIRType *SIRModuleGetI8Type(SIRModule *module);
 SIRType *SIRModuleGetI16Type(SIRModule *module);
 SIRType *SIRModuleGetI32Type(SIRModule *module);
 SIRType *SIRModuleGetI64Type(SIRModule *module);
+SIRType *SIRModuleGetU8Type(SIRModule *module);
+SIRType *SIRModuleGetU16Type(SIRModule *module);
+SIRType *SIRModuleGetU32Type(SIRModule *module);
+SIRType *SIRModuleGetU64Type(SIRModule *module);
 SIRType *SIRModuleGetF32Type(SIRModule *module);
 SIRType *SIRModuleGetF64Type(SIRModule *module);
 

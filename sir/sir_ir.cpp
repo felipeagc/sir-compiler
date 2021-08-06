@@ -410,6 +410,10 @@ SIRModule *SIRModuleCreate(SIRTargetArch target_arch, SIREndianness endianness)
         .i16_type = nullptr,
         .i32_type = nullptr,
         .i64_type = nullptr,
+        .u8_type = nullptr,
+        .u16_type = nullptr,
+        .u32_type = nullptr,
+        .u64_type = nullptr,
         .f32_type = nullptr,
         .f64_type = nullptr,
     };
@@ -430,6 +434,7 @@ SIRModule *SIRModuleCreate(SIRTargetArch target_arch, SIREndianness endianness)
         SIRType *i8_type = SIRAllocInit(module->arena, SIRType);
         i8_type->kind = SIRTypeKind_Int;
         i8_type->int_.bits = 8;
+        i8_type->int_.is_signed = true;
         module->i8_type = SIRModuleGetCachedType(module, i8_type);
     }
 
@@ -437,6 +442,7 @@ SIRModule *SIRModuleCreate(SIRTargetArch target_arch, SIREndianness endianness)
         SIRType *i16_type = SIRAllocInit(module->arena, SIRType);
         i16_type->kind = SIRTypeKind_Int;
         i16_type->int_.bits = 16;
+        i16_type->int_.is_signed = true;
         module->i16_type = SIRModuleGetCachedType(module, i16_type);
     }
 
@@ -444,6 +450,7 @@ SIRModule *SIRModuleCreate(SIRTargetArch target_arch, SIREndianness endianness)
         SIRType *i32_type = SIRAllocInit(module->arena, SIRType);
         i32_type->kind = SIRTypeKind_Int;
         i32_type->int_.bits = 32;
+        i32_type->int_.is_signed = true;
         module->i32_type = SIRModuleGetCachedType(module, i32_type);
     }
 
@@ -451,7 +458,40 @@ SIRModule *SIRModuleCreate(SIRTargetArch target_arch, SIREndianness endianness)
         SIRType *i64_type = SIRAllocInit(module->arena, SIRType);
         i64_type->kind = SIRTypeKind_Int;
         i64_type->int_.bits = 64;
+        i64_type->int_.is_signed = true;
         module->i64_type = SIRModuleGetCachedType(module, i64_type);
+    }
+
+    {
+        SIRType *u8_type = SIRAllocInit(module->arena, SIRType);
+        u8_type->kind = SIRTypeKind_Int;
+        u8_type->int_.bits = 8;
+        u8_type->int_.is_signed = false;
+        module->u8_type = SIRModuleGetCachedType(module, u8_type);
+    }
+
+    {
+        SIRType *u16_type = SIRAllocInit(module->arena, SIRType);
+        u16_type->kind = SIRTypeKind_Int;
+        u16_type->int_.bits = 16;
+        u16_type->int_.is_signed = false;
+        module->u16_type = SIRModuleGetCachedType(module, u16_type);
+    }
+
+    {
+        SIRType *u32_type = SIRAllocInit(module->arena, SIRType);
+        u32_type->kind = SIRTypeKind_Int;
+        u32_type->int_.bits = 32;
+        u32_type->int_.is_signed = false;
+        module->u32_type = SIRModuleGetCachedType(module, u32_type);
+    }
+
+    {
+        SIRType *u64_type = SIRAllocInit(module->arena, SIRType);
+        u64_type->kind = SIRTypeKind_Int;
+        u64_type->int_.bits = 64;
+        u64_type->int_.is_signed = false;
+        module->u64_type = SIRModuleGetCachedType(module, u64_type);
     }
 
     {
@@ -535,6 +575,26 @@ SIRType *SIRModuleGetI32Type(SIRModule *module)
 SIRType *SIRModuleGetI64Type(SIRModule *module)
 {
     return module->i64_type;
+}
+
+SIRType *SIRModuleGetU8Type(SIRModule *module)
+{
+    return module->u8_type;
+}
+
+SIRType *SIRModuleGetU16Type(SIRModule *module)
+{
+    return module->u16_type;
+}
+
+SIRType *SIRModuleGetU32Type(SIRModule *module)
+{
+    return module->u32_type;
+}
+
+SIRType *SIRModuleGetU64Type(SIRModule *module)
+{
+    return module->u64_type;
 }
 
 SIRType *SIRModuleGetF32Type(SIRModule *module)
@@ -708,7 +768,7 @@ SIRModuleAddGlobalString(SIRModule *module, const char *str, size_t str_len)
 
     SIRInst global = {};
     global.kind = SIRInstKind_Global;
-    global.type = SIRModuleCreatePointerType(module, module->i8_type);
+    global.type = SIRModuleCreatePointerType(module, module->u8_type);
     global.global.data =
         (uint8_t *)SIRAllocNullTerminate(module->arena, sir_str);
     global.global.data_len = sir_str.len + 1;
@@ -1231,7 +1291,13 @@ SIRString SIRTypeToString(SIRModule *module, SIRType *type)
         break;
     }
     case SIRTypeKind_Int: {
-        type->str = SIRAllocSprintf(module->arena, "@int(%u)", type->int_.bits);
+        if (type->int_.is_signed) {
+            type->str =
+                SIRAllocSprintf(module->arena, "@int(%u)", type->int_.bits);
+        } else {
+            type->str =
+                SIRAllocSprintf(module->arena, "@uint(%u)", type->int_.bits);
+        }
         break;
     }
     case SIRTypeKind_Float: {

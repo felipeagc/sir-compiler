@@ -13,6 +13,7 @@ struct SIRType {
     union {
         struct {
             uint32_t bits;
+            bool is_signed;
         } int_;
         struct {
             uint32_t bits;
@@ -161,6 +162,10 @@ struct SIRModule {
     SIRType *i16_type;
     SIRType *i32_type;
     SIRType *i64_type;
+    SIRType *u8_type;
+    SIRType *u16_type;
+    SIRType *u32_type;
+    SIRType *u64_type;
     SIRType *f32_type;
     SIRType *f64_type;
 };

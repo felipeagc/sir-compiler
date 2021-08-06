@@ -76,9 +76,12 @@ enum OperandKind : uint8_t {
 enum Mnem : uint8_t {
     Mnem_Unknown = 0,
     Mnem_MOV,
+    Mnem_MOVSX,
+    Mnem_MOVZX,
     Mnem_LEA,
     Mnem_ADD,
     Mnem_SUB,
+    Mnem_MUL,
     Mnem_COUNT,
 };
 
@@ -247,6 +250,7 @@ struct X64AsmBuilder {
         FeOp op3 = 0);
 
     void encode_mnem(Mnem mnem, const MetaValue *source, const MetaValue *dest);
+    void encode_lea(const MetaValue *source, const MetaValue *dest);
 
     size_t encode_direct_call(SIRInstRef func_ref);
     void encode_function_ending(SIRInstRef func_ref);
@@ -500,7 +504,35 @@ void X64AsmBuilder::encode_mnem(
     if (source_opkind == OperandKind_Memory &&
         dest_opkind == OperandKind_Memory) {
         int64_t encoding1 =
-            ENCODING_ENTRIES[mnem][OperandKind_Reg][dest->size_class]
+            ENCODING_ENTRIES[Mnem_MOV][OperandKind_Reg][dest->size_class]
+                            [OperandKind_Memory][source->size_class];
+        int64_t encoding2 =
+            ENCODING_ENTRIES[mnem][OperandKind_Memory][dest->size_class]
+                            [OperandKind_Reg][dest->size_class];
+        this->encode(encoding1, FE_AX, source->into_operand());
+        source->add_relocation(this);
+        this->encode(encoding2, dest->into_operand(), FE_AX);
+        dest->add_relocation(this);
+    } else {
+        int64_t encoding = ENCODING_ENTRIES[mnem][dest_opkind][dest->size_class]
+                                           [source_opkind][source->size_class];
+        this->encode(encoding, dest->into_operand(), source->into_operand());
+        source->add_relocation(this, dest_opkind, dest->size_class);
+        dest->add_relocation(this, source_opkind, source->size_class);
+    }
+}
+
+void X64AsmBuilder::encode_lea(const MetaValue *source, const MetaValue *dest)
+{
+    ZoneScoped;
+
+    OperandKind source_opkind = OPERAND_KINDS[source->kind];
+    OperandKind dest_opkind = OPERAND_KINDS[dest->kind];
+
+    if (source_opkind == OperandKind_Memory &&
+        dest_opkind == OperandKind_Memory) {
+        int64_t encoding1 =
+            ENCODING_ENTRIES[Mnem_LEA][OperandKind_Reg][dest->size_class]
                             [OperandKind_Memory][source->size_class];
         int64_t encoding2 =
             ENCODING_ENTRIES[Mnem_MOV][OperandKind_Memory][dest->size_class]
@@ -510,8 +542,9 @@ void X64AsmBuilder::encode_mnem(
         this->encode(encoding2, dest->into_operand(), FE_AX);
         dest->add_relocation(this);
     } else {
-        int64_t encoding = ENCODING_ENTRIES[mnem][dest_opkind][dest->size_class]
-                                           [source_opkind][source->size_class];
+        int64_t encoding =
+            ENCODING_ENTRIES[Mnem_LEA][dest_opkind][dest->size_class]
+                            [source_opkind][source->size_class];
         this->encode(encoding, dest->into_operand(), source->into_operand());
         source->add_relocation(this, dest_opkind, dest->size_class);
         dest->add_relocation(this, source_opkind, source->size_class);
@@ -740,11 +773,11 @@ void X64AsmBuilder::move_inst_rvalue(
     SIRInst inst = SIRModuleGetInst(this->module, inst_ref);
     switch (inst.kind) {
     case SIRInstKind_StackSlot: {
-        this->encode_mnem(Mnem_LEA, &this->meta_insts[inst_ref.id], dest_value);
+        this->encode_lea(&this->meta_insts[inst_ref.id], dest_value);
         break;
     }
     case SIRInstKind_Global: {
-        this->encode_mnem(Mnem_LEA, &this->meta_insts[inst_ref.id], dest_value);
+        this->encode_lea(&this->meta_insts[inst_ref.id], dest_value);
         break;
     }
     case SIRInstKind_PtrCast: {
@@ -976,7 +1009,6 @@ void X64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
     case SIRInstKind_Binop: {
         MetaValue dest_value = this->meta_insts[inst_ref.id];
 
-        size_t size = SIRTypeSizeOf(this->module, inst.type);
         size_t operand_size = SIRTypeSizeOf(
             this->module,
             SIRModuleGetInst(this->module, inst.binop.left_ref).type);
@@ -1007,25 +1039,46 @@ void X64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
             MetaValue dx_value =
                 create_int_register_value(operand_size, RegisterIndex_RDX);
 
-            int64_t x86_inst = 0;
             switch (operand_size) {
-            case 1: x86_inst = FE_IMUL8r; break;
-            case 2: x86_inst = FE_IMUL16rr; break;
-            case 4: x86_inst = FE_IMUL32rr; break;
-            case 8: x86_inst = FE_IMUL64rr; break;
-            default: SIR_ASSERT(0); break;
+            case 1:
+            case 2: {
+                MetaValue ext_ax_value =
+                    create_int_register_value(4, RegisterIndex_RAX);
+                MetaValue ext_dx_value =
+                    create_int_register_value(4, RegisterIndex_RDX);
+
+                Mnem ext_mnem =
+                    inst.type->int_.is_signed ? Mnem_MOVSX : Mnem_MOVZX;
+
+                if (left_val.kind == MetaValueKind_ImmInt) {
+                    left_val.size_class = SizeClass_4;
+                    this->encode_mnem(Mnem_MOV, &left_val, &ext_ax_value);
+                } else {
+                    this->encode_mnem(ext_mnem, &left_val, &ext_ax_value);
+                }
+
+                if (right_val.kind == MetaValueKind_ImmInt) {
+                    right_val.size_class = SizeClass_4;
+                    this->encode_mnem(Mnem_MOV, &right_val, &ext_dx_value);
+                } else {
+                    this->encode_mnem(ext_mnem, &right_val, &ext_dx_value);
+                }
+
+                this->encode_mnem(Mnem_MUL, &ext_dx_value, &ext_ax_value);
+
+                break;
+            }
+            default: {
+                this->encode_mnem(Mnem_MOV, &left_val, &ax_value);
+                this->encode_mnem(Mnem_MOV, &right_val, &dx_value);
+
+                this->encode_mnem(Mnem_MUL, &dx_value, &ax_value);
+
+                break;
+            }
             }
 
-            this->move_inst_rvalue(inst.binop.left_ref, &ax_value);
-            this->move_inst_rvalue(inst.binop.right_ref, &dx_value);
-
-            if (size == 1) {
-                this->encode(x86_inst, FE_DX);
-                this->encode_mnem(Mnem_MOV, &dx_value, &dest_value);
-            } else {
-                this->encode(x86_inst, FE_AX, FE_DX);
-                this->encode_mnem(Mnem_MOV, &ax_value, &dest_value);
-            }
+            this->encode_mnem(Mnem_MOV, &ax_value, &dest_value);
 
             break;
         }
@@ -1526,6 +1579,7 @@ void X64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
             break;
         }
         }
+
         break;
     }
 
@@ -1549,8 +1603,7 @@ void X64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
         MetaValue value_addr = create_int_register_memory_value(
             8, RegisterIndex_RAX, scale, RegisterIndex_RCX, 0);
 
-        this->encode_mnem(
-            Mnem_LEA, &value_addr, &this->meta_insts[inst_ref.id]);
+        this->encode_lea(&value_addr, &this->meta_insts[inst_ref.id]);
 
         break;
     }
@@ -1588,8 +1641,7 @@ void X64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
         SIR_ASSERT(ptr_mem_value.kind == MetaValueKind_IRegisterMemory);
         ptr_mem_value.regmem.offset += field_offset;
 
-        this->encode_mnem(
-            Mnem_LEA, &ptr_mem_value, &this->meta_insts[inst_ref.id]);
+        this->encode_lea(&ptr_mem_value, &this->meta_insts[inst_ref.id]);
         break;
     }
 
@@ -1600,7 +1652,7 @@ void X64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
             this->meta_insts[inst.extract_array_elem.accessed_ref.id];
         SIR_ASSERT(accessed_value.kind == MetaValueKind_IRegisterMemory);
         MetaValue ptr_value = create_int_register_value(8, RegisterIndex_RAX);
-        this->encode_mnem(Mnem_LEA, &accessed_value, &ptr_value);
+        this->encode_lea(&accessed_value, &ptr_value);
 
         size_t index_size = SIRTypeSizeOf(
             this->module,
@@ -1733,8 +1785,7 @@ void X64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
             if (source_ptr_mem_value.kind != MetaValueKind_IRegisterMemory) {
                 MetaValue source_ptr_value =
                     create_int_register_value(8, RegisterIndex_RDX);
-                this->encode_mnem(
-                    Mnem_LEA,
+                this->encode_lea(
                     &this->meta_insts[inst.store.value_ref.id],
                     &source_ptr_value);
                 source_ptr_mem_value = create_int_register_memory_value(
@@ -1744,10 +1795,8 @@ void X64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
             if (dest_ptr_mem_value.kind != MetaValueKind_IRegisterMemory) {
                 MetaValue dest_ptr_value =
                     create_int_register_value(8, RegisterIndex_RCX);
-                this->encode_mnem(
-                    Mnem_LEA,
-                    &this->meta_insts[inst.store.ptr_ref.id],
-                    &dest_ptr_value);
+                this->encode_lea(
+                    &this->meta_insts[inst.store.ptr_ref.id], &dest_ptr_value);
                 dest_ptr_mem_value = create_int_register_memory_value(
                     0, RegisterIndex_RCX, 0, RegisterIndex_None, 0);
             }
@@ -1799,10 +1848,8 @@ void X64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
             if (source_ptr_mem_value.kind != MetaValueKind_IRegisterMemory) {
                 MetaValue source_ptr_value =
                     create_int_register_value(8, RegisterIndex_RDX);
-                this->encode_mnem(
-                    Mnem_LEA,
-                    &this->meta_insts[inst.load.ptr_ref.id],
-                    &source_ptr_value);
+                this->encode_lea(
+                    &this->meta_insts[inst.load.ptr_ref.id], &source_ptr_value);
                 source_ptr_mem_value = create_int_register_memory_value(
                     0, RegisterIndex_RDX, 0, RegisterIndex_None, 0);
             }
@@ -1811,8 +1858,8 @@ void X64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
             if (dest_ptr_mem_value.kind != MetaValueKind_IRegisterMemory) {
                 MetaValue dest_ptr_value =
                     create_int_register_value(8, RegisterIndex_RCX);
-                this->encode_mnem(
-                    Mnem_LEA, &this->meta_insts[inst_ref.id], &dest_ptr_value);
+                this->encode_lea(
+                    &this->meta_insts[inst_ref.id], &dest_ptr_value);
                 dest_ptr_mem_value = create_int_register_memory_value(
                     0, RegisterIndex_RCX, 0, RegisterIndex_None, 0);
             }
@@ -2860,6 +2907,30 @@ SIRCreateX64Builder(SIRModule *module, SIRObjectBuilder *obj_builder)
     ENCODING_ENTRIES[Mnem_MOV][OperandKind_Memory][SizeClass_1][OperandKind_Reg]
                     [SizeClass_1] = FE_MOV8mr;
 
+    // MOVSX
+
+    ENCODING_ENTRIES[Mnem_MOVSX][OperandKind_Reg][SizeClass_4][OperandKind_Reg]
+                    [SizeClass_1] = FE_MOVSXr32r8;
+    ENCODING_ENTRIES[Mnem_MOVSX][OperandKind_Reg][SizeClass_4][OperandKind_Reg]
+                    [SizeClass_2] = FE_MOVSXr32r16;
+
+    ENCODING_ENTRIES[Mnem_MOVSX][OperandKind_Reg][SizeClass_4]
+                    [OperandKind_Memory][SizeClass_1] = FE_MOVSXr32m8;
+    ENCODING_ENTRIES[Mnem_MOVSX][OperandKind_Reg][SizeClass_4]
+                    [OperandKind_Memory][SizeClass_2] = FE_MOVSXr32m16;
+
+    // MOVZX
+
+    ENCODING_ENTRIES[Mnem_MOVZX][OperandKind_Reg][SizeClass_4][OperandKind_Reg]
+                    [SizeClass_1] = FE_MOVZXr32r8;
+    ENCODING_ENTRIES[Mnem_MOVZX][OperandKind_Reg][SizeClass_4][OperandKind_Reg]
+                    [SizeClass_2] = FE_MOVZXr32r16;
+
+    ENCODING_ENTRIES[Mnem_MOVZX][OperandKind_Reg][SizeClass_4]
+                    [OperandKind_Memory][SizeClass_1] = FE_MOVZXr32m8;
+    ENCODING_ENTRIES[Mnem_MOVZX][OperandKind_Reg][SizeClass_4]
+                    [OperandKind_Memory][SizeClass_2] = FE_MOVZXr32m16;
+
     // MOVS
 
     ENCODING_ENTRIES[Mnem_MOV][OperandKind_FReg][SizeClass_4][OperandKind_FReg]
@@ -2994,6 +3065,13 @@ SIRCreateX64Builder(SIRModule *module, SIRObjectBuilder *obj_builder)
                     [SizeClass_2] = FE_SUB16mi;
     ENCODING_ENTRIES[Mnem_SUB][OperandKind_Memory][SizeClass_1][OperandKind_Imm]
                     [SizeClass_1] = FE_SUB8mi;
+
+    // MUL
+
+    ENCODING_ENTRIES[Mnem_MUL][OperandKind_Reg][SizeClass_8][OperandKind_Reg]
+                    [SizeClass_8] = FE_IMUL64rr;
+    ENCODING_ENTRIES[Mnem_MUL][OperandKind_Reg][SizeClass_4][OperandKind_Reg]
+                    [SizeClass_4] = FE_IMUL32rr;
 
     return &asm_builder->vt;
 }

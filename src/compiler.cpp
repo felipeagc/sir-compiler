@@ -463,6 +463,7 @@ void Compiler::compile(String path)
             double total_line_count = (double)file->line_count;
 
             printf("Compilation time: %.3lf seconds\n", time);
+            printf("Line count: %zu seconds\n", file->line_count);
             printf(
                 "Lines per second: %.3lf lines/s\n", total_line_count / time);
         }

@@ -418,7 +418,7 @@ template <typename T> struct Array {
         }
     }
 
-    LANG_INLINE T &operator[](size_t index)
+    LANG_INLINE T &operator[](size_t index) const
     {
         LANG_ASSERT(index < this->len);
         return this->ptr[index];

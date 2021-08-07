@@ -307,7 +307,6 @@ enum State : uint8_t {
 
 static EqClass EQ_CLASSES[255];
 static State TRANSITION[State_COUNT][EqClass_COUNT];
-static uint32_t EQ_CLASS_LINE_INC[EqClass_COUNT];
 static uint32_t EQ_CLASS_COLCOUNT_AND_MASK[EqClass_COUNT];
 static uint32_t EQ_CLASS_COLCOUNT_OR_MASK[EqClass_COUNT];
 static TokenKind STATE_TOKENS[State_COUNT];
@@ -340,11 +339,6 @@ struct TokenizerState {
         return state;
     }
 
-    int64_t length_left(File *file, size_t offset = 0)
-    {
-        return ((int64_t)file->text.len) - (int64_t)(this->pos + offset);
-    }
-
     Token consume_token(Compiler *compiler, TokenKind token_kind)
     {
         Token token = {};
@@ -375,7 +369,8 @@ struct TokenizerState {
         return token;
     }
 
-    TokenizerState next_token(Compiler *compiler, Token *token) const
+    LANG_INLINE TokenizerState
+    next_token(Compiler *compiler, Token *token) const
     {
         ZoneScoped;
 
@@ -390,13 +385,14 @@ struct TokenizerState {
         token->loc.line = state.line;
 
         State mstate = State_Start;
+        EqClass eq_class;
 
         do {
             char c = state.text[state.pos++];
-            EqClass eq_class = EQ_CLASSES[(int)c];
+            eq_class = EQ_CLASSES[(int)c];
             mstate = TRANSITION[mstate][eq_class];
 
-            state.line += EQ_CLASS_LINE_INC[eq_class];
+            state.line += (eq_class == EqClass_LineFeed);
             state.col++;
             state.col &= EQ_CLASS_COLCOUNT_AND_MASK[eq_class];
             state.col |= EQ_CLASS_COLCOUNT_OR_MASK[eq_class];
@@ -404,6 +400,7 @@ struct TokenizerState {
 
         state.pos--;
         state.col--;
+        state.line -= (eq_class == EqClass_LineFeed);
 
         if (mstate == State_Whitespace) {
             goto start;
@@ -491,58 +488,97 @@ struct TokenizerState {
     }
 };
 
-static Expr parse_expr(Compiler *compiler, TokenizerState *state);
-static Stmt parse_stmt(Compiler *compiler, TokenizerState *state);
+struct ParserState {
+    Array<Token> tokens;
+    size_t pos;
 
-static Expr parse_primary_expr(Compiler *compiler, TokenizerState *state)
+    LANG_INLINE Token peek_token() const
+    {
+        return this->tokens[this->pos];
+    }
+
+    LANG_INLINE Token next_token()
+    {
+        return this->tokens[this->pos++];
+    }
+
+    Token consume_token(Compiler *compiler, TokenKind token_kind)
+    {
+        Token token = this->peek_token();
+        if (token.kind != token_kind) {
+            String token_string = token_to_string(compiler, token);
+            if (token.kind == TokenKind_Error) {
+                compiler->add_error(
+                    token.loc,
+                    "unexpected token: '%.*s'",
+                    (int)token_string.len,
+                    token_string.ptr);
+                compiler->halt_compilation();
+            }
+
+            String expected_token_string = token_kind_to_string(token_kind);
+
+            compiler->add_error(
+                token.loc,
+                "unexpected token: '%.*s', expecting '%.*s'",
+                (int)token_string.len,
+                token_string.ptr,
+                (int)expected_token_string.len,
+                expected_token_string.ptr);
+            compiler->halt_compilation();
+        }
+
+        return this->tokens[this->pos++];
+    }
+};
+
+static Expr parse_expr(Compiler *compiler, ParserState *state);
+static Stmt parse_stmt(Compiler *compiler, ParserState *state);
+
+static Expr parse_primary_expr(Compiler *compiler, ParserState *state)
 {
     ZoneScoped;
 
     Expr expr = {};
 
-    Token next_token = {};
-    state->next_token(compiler, &next_token);
-
+    Token next_token = state->peek_token();
     switch (next_token.kind) {
     case TokenKind_LParen: {
-        state->consume_token(compiler, TokenKind_LParen);
+        state->next_token();
         expr = parse_expr(compiler, state);
         state->consume_token(compiler, TokenKind_RParen);
         break;
     }
     case TokenKind_Identifier: {
-        Token ident_token =
-            state->consume_token(compiler, TokenKind_Identifier);
+        Token ident_token = state->next_token();
         expr.kind = ExprKind_Identifier;
         expr.loc = ident_token.loc;
         expr.ident.str = ident_token.str;
         break;
     }
     case TokenKind_StringLiteral: {
-        Token str_token =
-            state->consume_token(compiler, TokenKind_StringLiteral);
+        Token str_token = state->next_token();
         expr.kind = ExprKind_StringLiteral;
         expr.loc = str_token.loc;
         expr.str_literal.str = str_token.str;
         break;
     }
     case TokenKind_IntLiteral: {
-        Token int_token = state->consume_token(compiler, TokenKind_IntLiteral);
+        Token int_token = state->next_token();
         expr.kind = ExprKind_IntLiteral;
         expr.loc = int_token.loc;
         expr.int_literal.i64 = int_token.int_;
         break;
     }
     case TokenKind_FloatLiteral: {
-        Token float_token =
-            state->consume_token(compiler, TokenKind_FloatLiteral);
+        Token float_token = state->next_token();
         expr.kind = ExprKind_FloatLiteral;
         expr.loc = float_token.loc;
         expr.float_literal.f64 = float_token.float_;
         break;
     }
     case TokenKind_True: {
-        *state = state->next_token(compiler, &next_token);
+        state->next_token();
 
         expr.kind = ExprKind_BoolLiteral;
         expr.loc = next_token.loc;
@@ -550,7 +586,7 @@ static Expr parse_primary_expr(Compiler *compiler, TokenizerState *state)
         break;
     }
     case TokenKind_False: {
-        *state = state->next_token(compiler, &next_token);
+        state->next_token();
 
         expr.kind = ExprKind_BoolLiteral;
         expr.loc = next_token.loc;
@@ -558,14 +594,14 @@ static Expr parse_primary_expr(Compiler *compiler, TokenizerState *state)
         break;
     }
     case TokenKind_Null: {
-        *state = state->next_token(compiler, &next_token);
+        state->next_token();
 
         expr.kind = ExprKind_NullLiteral;
         expr.loc = next_token.loc;
         break;
     }
     case TokenKind_Mul: {
-        Token asterisk_token = state->consume_token(compiler, TokenKind_Mul);
+        Token asterisk_token = state->next_token();
 
         Expr sub_expr = parse_expr(compiler, state);
         ExprRef sub_expr_ref = compiler->add_expr(sub_expr);
@@ -576,10 +612,9 @@ static Expr parse_primary_expr(Compiler *compiler, TokenizerState *state)
         break;
     }
     case TokenKind_LBracket: {
-        Token lbracket_token =
-            state->consume_token(compiler, TokenKind_LBracket);
+        Token lbracket_token = state->next_token();
 
-        state->next_token(compiler, &next_token);
+        Token next_token = state->peek_token();
         if (next_token.kind != TokenKind_RBracket) {
             Expr size_expr = parse_expr(compiler, state);
             state->consume_token(compiler, TokenKind_RBracket);
@@ -602,14 +637,14 @@ static Expr parse_primary_expr(Compiler *compiler, TokenizerState *state)
         break;
     }
     case TokenKind_Void: {
-        *state = state->next_token(compiler, &next_token);
+        state->next_token();
 
         expr.kind = ExprKind_VoidType;
         expr.loc = next_token.loc;
         break;
     }
     case TokenKind_Bool: {
-        *state = state->next_token(compiler, &next_token);
+        state->next_token();
 
         expr.kind = ExprKind_BoolType;
         expr.loc = next_token.loc;
@@ -619,7 +654,7 @@ static Expr parse_primary_expr(Compiler *compiler, TokenizerState *state)
     case TokenKind_U16:
     case TokenKind_U32:
     case TokenKind_U64: {
-        *state = state->next_token(compiler, &next_token);
+        state->next_token();
 
         expr.kind = ExprKind_IntType;
         expr.loc = next_token.loc;
@@ -639,7 +674,7 @@ static Expr parse_primary_expr(Compiler *compiler, TokenizerState *state)
     case TokenKind_I16:
     case TokenKind_I32:
     case TokenKind_I64: {
-        *state = state->next_token(compiler, &next_token);
+        state->next_token();
 
         expr.kind = ExprKind_IntType;
         expr.loc = next_token.loc;
@@ -657,7 +692,7 @@ static Expr parse_primary_expr(Compiler *compiler, TokenizerState *state)
     }
     case TokenKind_F32:
     case TokenKind_F64: {
-        *state = state->next_token(compiler, &next_token);
+        state->next_token();
 
         expr.kind = ExprKind_FloatType;
         expr.loc = next_token.loc;
@@ -693,26 +728,26 @@ static Expr parse_primary_expr(Compiler *compiler, TokenizerState *state)
         expr.builtin_call.builtin = builtin_func;
         expr.builtin_call.param_refs = Array<ExprRef>::create(compiler->arena);
 
-        state->next_token(compiler, &next_token);
+        next_token = state->peek_token();
         while (next_token.kind != TokenKind_RParen) {
             Expr param_expr = parse_expr(compiler, state);
             ExprRef param_expr_ref = compiler->add_expr(param_expr);
 
             expr.builtin_call.param_refs.push_back(param_expr_ref);
 
-            state->next_token(compiler, &next_token);
+            next_token = state->peek_token();
             if (next_token.kind != TokenKind_RParen) {
                 state->consume_token(compiler, TokenKind_Comma);
             }
 
-            state->next_token(compiler, &next_token);
+            next_token = state->peek_token();
         }
 
         state->consume_token(compiler, TokenKind_RParen);
         break;
     }
     case TokenKind_Struct: {
-        Token struct_token = state->consume_token(compiler, TokenKind_Struct);
+        Token struct_token = state->next_token();
 
         expr.kind = ExprKind_StructType;
         expr.loc = struct_token.loc;
@@ -722,7 +757,7 @@ static Expr parse_primary_expr(Compiler *compiler, TokenizerState *state)
 
         state->consume_token(compiler, TokenKind_LCurly);
 
-        state->next_token(compiler, &next_token);
+        next_token = state->peek_token();
         while (next_token.kind != TokenKind_RCurly) {
             Token field_ident_token =
                 state->consume_token(compiler, TokenKind_Identifier);
@@ -735,12 +770,12 @@ static Expr parse_primary_expr(Compiler *compiler, TokenizerState *state)
             expr.struct_type.field_type_expr_refs.push_back(
                 compiler->add_expr(field_type_expr));
 
-            state->next_token(compiler, &next_token);
+            next_token = state->peek_token();
             if (next_token.kind != TokenKind_RCurly) {
                 state->consume_token(compiler, TokenKind_Comma);
             }
 
-            state->next_token(compiler, &next_token);
+            next_token = state->peek_token();
         }
 
         state->consume_token(compiler, TokenKind_RCurly);
@@ -761,6 +796,7 @@ static Expr parse_primary_expr(Compiler *compiler, TokenizerState *state)
     return expr;
 }
 
+#if 0
 static Expr parse_func_expr(Compiler *compiler, TokenizerState *state)
 {
     ZoneScoped;
@@ -867,19 +903,19 @@ static Expr parse_func_expr(Compiler *compiler, TokenizerState *state)
 
     return expr;
 }
+#endif
 
-static Expr parse_func_call_expr(Compiler *compiler, TokenizerState *state)
+static Expr parse_func_call_expr(Compiler *compiler, ParserState *state)
 {
     ZoneScoped;
 
     Expr expr = parse_primary_expr(compiler, state);
 
-    Token next_token = {};
-    state->next_token(compiler, &next_token);
+    Token next_token = state->peek_token();
     while (1) {
         switch (next_token.kind) {
         case TokenKind_LBracket: {
-            state->consume_token(compiler, TokenKind_LBracket);
+            state->next_token();
 
             Expr indexed_expr = expr;
             ExprRef indexed_expr_ref = compiler->add_expr(indexed_expr);
@@ -895,7 +931,7 @@ static Expr parse_func_call_expr(Compiler *compiler, TokenizerState *state)
             break;
         }
         case TokenKind_LParen: {
-            state->consume_token(compiler, TokenKind_LParen);
+            state->next_token();
 
             Expr func_expr = expr;
             ExprRef func_expr_ref = compiler->add_expr(func_expr);
@@ -906,28 +942,28 @@ static Expr parse_func_call_expr(Compiler *compiler, TokenizerState *state)
             expr.func_call.func_expr_ref = func_expr_ref;
             expr.func_call.param_refs = Array<ExprRef>::create(compiler->arena);
 
-            state->next_token(compiler, &next_token);
+            next_token = state->peek_token();
             while (next_token.kind != TokenKind_RParen) {
                 Expr param_expr = parse_expr(compiler, state);
                 ExprRef param_expr_ref = compiler->add_expr(param_expr);
 
                 expr.func_call.param_refs.push_back(param_expr_ref);
 
-                state->next_token(compiler, &next_token);
+                next_token = state->peek_token();
                 if (next_token.kind != TokenKind_RParen) {
                     state->consume_token(compiler, TokenKind_Comma);
                 }
 
-                state->next_token(compiler, &next_token);
+                next_token = state->peek_token();
             }
 
             state->consume_token(compiler, TokenKind_RParen);
             break;
         }
         case TokenKind_Dot: {
-            Token dot_tok = state->consume_token(compiler, TokenKind_Dot);
+            Token dot_tok = state->next_token();
 
-            state->next_token(compiler, &next_token);
+            next_token = state->peek_token();
             if (next_token.kind == TokenKind_Mul) {
                 state->consume_token(compiler, TokenKind_Mul);
 
@@ -965,7 +1001,7 @@ static Expr parse_func_call_expr(Compiler *compiler, TokenizerState *state)
         default: goto end;
         }
 
-        state->next_token(compiler, &next_token);
+        next_token = state->peek_token();
     }
 
 end:
@@ -973,17 +1009,16 @@ end:
     return expr;
 }
 
-static Expr parse_unary_expr(Compiler *compiler, TokenizerState *state)
+static Expr parse_unary_expr(Compiler *compiler, ParserState *state)
 {
     ZoneScoped;
 
-    Token next_token = {};
-    state->next_token(compiler, &next_token);
+    Token next_token = state->peek_token();
     switch (next_token.kind) {
     case TokenKind_Sub:
     case TokenKind_Not:
     case TokenKind_BitAnd: {
-        *state = state->next_token(compiler, &next_token);
+        state->next_token();
 
         UnaryOp op = {};
 
@@ -1023,14 +1058,13 @@ struct BinaryOpSymbol {
     };
 };
 
-static Expr parse_binary_expr(Compiler *compiler, TokenizerState *state)
+static Expr parse_binary_expr(Compiler *compiler, ParserState *state)
 {
     ZoneScoped;
 
     Expr expr = parse_unary_expr(compiler, state);
 
-    Token next_token = {};
-    state->next_token(compiler, &next_token);
+    Token next_token = state->peek_token();
     switch (next_token.kind) {
     case TokenKind_Add:
     case TokenKind_Sub:
@@ -1134,7 +1168,7 @@ static Expr parse_binary_expr(Compiler *compiler, TokenizerState *state)
             symbol_queue.push_back(expr_symbol);
         }
 
-        state->next_token(compiler, &next_token);
+        next_token = state->peek_token();
     }
 
     while (op_stack.len > 0) {
@@ -1183,21 +1217,20 @@ static Expr parse_binary_expr(Compiler *compiler, TokenizerState *state)
     return result_expr;
 }
 
-static Expr parse_expr(Compiler *compiler, TokenizerState *state)
+static Expr parse_expr(Compiler *compiler, ParserState *state)
 {
     ZoneScoped;
 
     return parse_binary_expr(compiler, state);
 }
 
-static Stmt parse_stmt(Compiler *compiler, TokenizerState *state)
+static Stmt parse_stmt(Compiler *compiler, ParserState *state)
 {
     ZoneScoped;
 
     Stmt stmt = {};
 
-    Token next_token = {};
-    state->next_token(compiler, &next_token);
+    Token next_token = state->peek_token();
 
     switch (next_token.kind) {
     case TokenKind_If: {
@@ -1216,7 +1249,7 @@ static Stmt parse_stmt(Compiler *compiler, TokenizerState *state)
         stmt.if_.true_stmt_ref =
             compiler->add_stmt(parse_stmt(compiler, state));
 
-        state->next_token(compiler, &next_token);
+        next_token = state->peek_token();
         if (next_token.kind == TokenKind_Else) {
             state->consume_token(compiler, TokenKind_Else);
 
@@ -1248,7 +1281,7 @@ static Stmt parse_stmt(Compiler *compiler, TokenizerState *state)
         stmt.loc = return_token.loc;
         stmt.return_ = {};
 
-        state->next_token(compiler, &next_token);
+        next_token = state->peek_token();
         if (next_token.kind != TokenKind_Semicolon) {
             stmt.return_.returned_expr_ref =
                 compiler->add_expr(parse_expr(compiler, state));
@@ -1265,21 +1298,21 @@ static Stmt parse_stmt(Compiler *compiler, TokenizerState *state)
         stmt.loc = lcurly_token.loc;
         stmt.block.stmt_refs = Array<StmtRef>::create(compiler->arena);
 
-        state->next_token(compiler, &next_token);
+        next_token = state->peek_token();
         while (next_token.kind != TokenKind_RCurly) {
             Stmt sub_stmt = parse_stmt(compiler, state);
             StmtRef sub_stmt_ref = compiler->add_stmt(sub_stmt);
 
             stmt.block.stmt_refs.push_back(sub_stmt_ref);
 
-            state->next_token(compiler, &next_token);
+            next_token = state->peek_token();
         }
 
         state->consume_token(compiler, TokenKind_RCurly);
         break;
     }
     case TokenKind_Global: {
-        state->consume_token(compiler, TokenKind_Global);
+        state->next_token();
 
         Token ident_tok = state->consume_token(compiler, TokenKind_Identifier);
 
@@ -1288,11 +1321,11 @@ static Stmt parse_stmt(Compiler *compiler, TokenizerState *state)
         ExprRef type_expr_ref = {0};
         ExprRef value_expr_ref = {0};
 
-        state->next_token(compiler, &next_token);
+        next_token = state->peek_token();
         if (next_token.kind != TokenKind_Equal) {
             type_expr_ref = compiler->add_expr(parse_expr(compiler, state));
 
-            state->next_token(compiler, &next_token);
+            next_token = state->peek_token();
             if (next_token.kind == TokenKind_Equal) {
                 state->consume_token(compiler, TokenKind_Equal);
 
@@ -1323,7 +1356,7 @@ static Stmt parse_stmt(Compiler *compiler, TokenizerState *state)
         break;
     }
     case TokenKind_Type: {
-        state->consume_token(compiler, TokenKind_Type);
+        state->next_token();
 
         Token ident_tok = state->consume_token(compiler, TokenKind_Identifier);
 
@@ -1344,10 +1377,9 @@ static Stmt parse_stmt(Compiler *compiler, TokenizerState *state)
         break;
     }
     default: {
-        Token ident_tok = {};
-        Token colon_tok = {};
-        TokenizerState temp_state = state->next_token(compiler, &ident_tok);
-        temp_state.next_token(compiler, &colon_tok);
+        ParserState temp_state = *state;
+        Token ident_tok = temp_state.next_token();
+        Token colon_tok = temp_state.next_token();
 
         if (ident_tok.kind == TokenKind_Identifier &&
             colon_tok.kind == TokenKind_Colon) {
@@ -1357,11 +1389,11 @@ static Stmt parse_stmt(Compiler *compiler, TokenizerState *state)
             ExprRef type_expr_ref = {0};
             ExprRef value_expr_ref = {0};
 
-            state->next_token(compiler, &next_token);
+            next_token = state->peek_token();
             if (next_token.kind != TokenKind_Equal) {
                 type_expr_ref = compiler->add_expr(parse_expr(compiler, state));
 
-                state->next_token(compiler, &next_token);
+                next_token = state->peek_token();
                 if (next_token.kind == TokenKind_Equal) {
                     state->consume_token(compiler, TokenKind_Equal);
 
@@ -1391,9 +1423,9 @@ static Stmt parse_stmt(Compiler *compiler, TokenizerState *state)
             Expr expr = parse_expr(compiler, state);
             ExprRef expr_ref = compiler->add_expr(expr);
 
-            state->next_token(compiler, &next_token);
+            next_token = state->peek_token();
             if (next_token.kind == TokenKind_Equal) {
-                *state = state->next_token(compiler, &next_token);
+                state->next_token();
 
                 stmt.kind = StmtKind_Assign;
                 stmt.loc = expr.loc;
@@ -1418,15 +1450,14 @@ static Stmt parse_stmt(Compiler *compiler, TokenizerState *state)
 }
 
 static void parse_top_level_decl(
-    Compiler *compiler, TokenizerState *state, Array<DeclRef> *top_level_decls)
+    Compiler *compiler, ParserState *state, Array<DeclRef> *top_level_decls)
 {
     ZoneScoped;
 
-    Token next_token = {};
-    state->next_token(compiler, &next_token);
+    Token next_token = state->peek_token();
     switch (next_token.kind) {
     case TokenKind_Def: {
-        Token func_token = state->consume_token(compiler, TokenKind_Def);
+        Token func_token = state->next_token();
 
         Decl func_decl = {};
         func_decl.kind = DeclKind_Function;
@@ -1439,7 +1470,7 @@ static void parse_top_level_decl(
             Array<ExprRef>::create(compiler->arena);
         func_decl.func.body_stmts = Array<StmtRef>::create(compiler->arena);
 
-        state->next_token(compiler, &next_token);
+        next_token = state->peek_token();
         switch (next_token.kind) {
         case TokenKind_Extern: {
             state->consume_token(compiler, TokenKind_Extern);
@@ -1459,7 +1490,7 @@ static void parse_top_level_decl(
         default: break;
         }
 
-        state->next_token(compiler, &next_token);
+        next_token = state->peek_token();
         if (next_token.kind == TokenKind_VarArg) {
             state->consume_token(compiler, TokenKind_VarArg);
             func_decl.func.flags |= FunctionFlags_VarArg;
@@ -1473,7 +1504,7 @@ static void parse_top_level_decl(
 
         // Parse params:
 
-        state->next_token(compiler, &next_token);
+        next_token = state->peek_token();
         while (next_token.kind == TokenKind_Identifier) {
             Token ident_token =
                 state->consume_token(compiler, TokenKind_Identifier);
@@ -1492,19 +1523,19 @@ static void parse_top_level_decl(
 
             func_decl.func.param_decl_refs.push_back(param_decl_ref);
 
-            state->next_token(compiler, &next_token);
+            next_token = state->peek_token();
             if (next_token.kind == TokenKind_Comma) {
-                *state = state->next_token(compiler, &next_token);
+                next_token = state->next_token();
             } else {
                 break;
             }
 
-            state->next_token(compiler, &next_token);
+            next_token = state->peek_token();
         }
 
         state->consume_token(compiler, TokenKind_RParen);
 
-        state->next_token(compiler, &next_token);
+        next_token = state->peek_token();
         if (next_token.kind == TokenKind_Colon) {
             state->consume_token(compiler, TokenKind_Colon);
 
@@ -1515,7 +1546,7 @@ static void parse_top_level_decl(
                 func_decl.func.return_type_expr_refs.push_back(
                     return_type_expr_ref);
 
-                state->next_token(compiler, &next_token);
+                next_token = state->peek_token();
                 if (next_token.kind == TokenKind_Comma) {
                     state->consume_token(compiler, TokenKind_Comma);
                     continue;
@@ -1530,14 +1561,14 @@ static void parse_top_level_decl(
         } else {
             state->consume_token(compiler, TokenKind_LCurly);
 
-            state->next_token(compiler, &next_token);
+            next_token = state->peek_token();
             while (next_token.kind != TokenKind_RCurly) {
                 Stmt stmt = parse_stmt(compiler, state);
                 StmtRef stmt_ref = compiler->add_stmt(stmt);
 
                 func_decl.func.body_stmts.push_back(stmt_ref);
 
-                state->next_token(compiler, &next_token);
+                next_token = state->peek_token();
             }
 
             state->consume_token(compiler, TokenKind_RCurly);
@@ -1558,11 +1589,11 @@ static void parse_top_level_decl(
         ExprRef type_expr_ref = {0};
         ExprRef value_expr_ref = {0};
 
-        state->next_token(compiler, &next_token);
+        next_token = state->peek_token();
         if (next_token.kind != TokenKind_Equal) {
             type_expr_ref = compiler->add_expr(parse_expr(compiler, state));
 
-            state->next_token(compiler, &next_token);
+            next_token = state->peek_token();
             if (next_token.kind == TokenKind_Equal) {
                 state->consume_token(compiler, TokenKind_Equal);
 
@@ -1675,7 +1706,6 @@ void init_parser_tables()
     }
     EQ_CLASS_COLCOUNT_AND_MASK[EqClass_LineFeed] = 0;
     EQ_CLASS_COLCOUNT_OR_MASK[EqClass_LineFeed] = 1;
-    EQ_CLASS_LINE_INC[EqClass_LineFeed] = 1;
 
     end_transition(State_UWhitespace, State_Whitespace);
     TRANSITION[State_Start][EqClass_Whitespace] = State_UWhitespace;
@@ -1880,40 +1910,36 @@ void parse_file(Compiler *compiler, FileRef file_ref)
 
     File file = compiler->files[file_ref.id];
 
-    TokenizerState state =
-        TokenizerState::create(file_ref, file.text.ptr, file.text.len);
+    ParserState parser_state = {};
+    parser_state.tokens = Array<Token>::create(MallocAllocator::get_instance());
 
-    /* Token token = {}; */
-    /* size_t token_count = 0; */
-    /* while (token.kind != TokenKind_EOF) { */
-    /*     state = state.next_token(compiler, &token); */
-    /*     token_count++; */
-    /* } */
-    /* printf("Got %zu tokens\n", token_count); */
+    {
+        TokenizerState state =
+            TokenizerState::create(file_ref, file.text.ptr, file.text.len);
 
-    /* exit(1); */
-
-    while (1) {
         Token token = {};
-        state.next_token(compiler, &token);
-        if (token.kind == TokenKind_Error) {
-            String token_string = token_to_string(compiler, token);
+        while (token.kind != TokenKind_EOF) {
+            state = state.next_token(compiler, &token);
+            parser_state.tokens.push_back(token);
+        }
+    }
+
+    while (parser_state.peek_token().kind != TokenKind_EOF) {
+        Token next_token = parser_state.peek_token();
+        if (next_token.kind == TokenKind_Error) {
+            String token_string = token_to_string(compiler, next_token);
             compiler->add_error(
-                token.loc,
+                next_token.loc,
                 "unexpected token: '%.*s'",
                 (int)token_string.len,
                 token_string.ptr);
             compiler->halt_compilation();
         }
 
-        if (token.kind == TokenKind_EOF) {
-            break;
-        }
-
-        parse_top_level_decl(compiler, &state, &file.top_level_decls);
+        parse_top_level_decl(compiler, &parser_state, &file.top_level_decls);
     }
 
-    file.line_count = state.line + 1;
+    file.line_count = parser_state.tokens[parser_state.tokens.len - 1].loc.line;
 
     compiler->files[file_ref.id] = file;
 

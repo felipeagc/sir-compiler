@@ -25,6 +25,8 @@ def export main() {
 	// p2 := func1(1, 2, 3, 4, 5, p);
 	// printf("%f\n", p2.b);
 
-	b := i8(321);
-	a := i8(123) - b;
+	b := u64(2);
+	c := &b;
+	a := u64(8) / b;
+	printf("%d\n", i32(a));
 }

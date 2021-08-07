@@ -195,12 +195,6 @@ enum State : uint8_t {
     State_Error = 0,
 
     State_Whitespace,
-    State_WhitespaceFinal,
-    State_WhitespaceStart,
-    State_UWhitespace,
-    State_UCommentSlash,
-    State_UCommentBody,
-
     State_Identifier,
     State_BuiltinIdentifier,
     State_StringLiteral,
@@ -255,6 +249,9 @@ enum State : uint8_t {
 
     State_Start,
 
+    State_UWhitespace,
+    State_UCommentBody,
+
     State_UIdentifier,
     State_UBuiltinIdentifier,
     State_UIntLiteral,
@@ -262,6 +259,16 @@ enum State : uint8_t {
     State_UOpenStringLiteral,
     State_UOpenStringLiteralSlashEscape,
     State_UClosedStringLiteral,
+    State_ULParen,
+    State_URParen,
+    State_ULBracket,
+    State_URBracket,
+    State_ULCurly,
+    State_URCurly,
+    State_UComma,
+    State_UColon,
+    State_USemicolon,
+    State_UQuestion,
     State_UDot,
     State_UNot,
     State_UBitAnd,
@@ -275,7 +282,7 @@ enum State : uint8_t {
     State_UMul,
     State_UAdd,
     State_USub,
-    State_UDiv,
+    State_UDivOrComment,
     State_UMod,
     State_UMulEqual,
     State_UAddEqual,
@@ -375,41 +382,34 @@ struct TokenizerState {
         TokenizerState state = *this;
         Allocator *allocator = compiler->arena;
 
-        State mstate = State_WhitespaceStart;
-
-        do {
-            char c = state.text[state.pos++];
-            EqClass eq_class = EQ_CLASSES[(int)c];
-            mstate = TRANSITION[mstate][eq_class];
-            state.line += EQ_CLASS_LINE_INC[eq_class];
-            state.col++;
-            state.col &= EQ_CLASS_COLCOUNT_AND_MASK[eq_class];
-            state.col |= EQ_CLASS_COLCOUNT_OR_MASK[eq_class];
-        } while (mstate > State_WhitespaceFinal);
-
-        state.col--;
-        state.pos--;
+    start:
 
         token->loc.file_ref = state.file_ref;
         token->loc.offset = state.pos;
         token->loc.col = state.col;
         token->loc.line = state.line;
 
-        mstate = State_Start;
+        State mstate = State_Start;
 
         do {
             char c = state.text[state.pos++];
             EqClass eq_class = EQ_CLASSES[(int)c];
             mstate = TRANSITION[mstate][eq_class];
+
+            state.line += EQ_CLASS_LINE_INC[eq_class];
+            state.col++;
+            state.col &= EQ_CLASS_COLCOUNT_AND_MASK[eq_class];
+            state.col |= EQ_CLASS_COLCOUNT_OR_MASK[eq_class];
         } while (mstate > State_Final);
 
-        token->loc.len = state.pos - token->loc.offset;
-        if (token->loc.len > 1) {
-            token->loc.len--;
-            state.pos--;
+        state.pos--;
+        state.col--;
+
+        if (mstate == State_Whitespace) {
+            goto start;
         }
 
-        state.col += token->loc.len;
+        token->loc.len = state.pos - token->loc.offset;
         token->kind = STATE_TOKENS[mstate];
 
         switch (token->kind) {
@@ -1678,28 +1678,35 @@ void init_parser_tables()
     EQ_CLASS_LINE_INC[EqClass_LineFeed] = 1;
 
     end_transition(State_UWhitespace, State_Whitespace);
-    TRANSITION[State_WhitespaceStart][EqClass_Whitespace] = State_UWhitespace;
-    TRANSITION[State_WhitespaceStart][EqClass_Slash] = State_UCommentSlash;
-    TRANSITION[State_UWhitespace][EqClass_Slash] = State_UCommentSlash;
-    TRANSITION[State_UCommentSlash][EqClass_Slash] = State_UCommentBody;
+    TRANSITION[State_Start][EqClass_Whitespace] = State_UWhitespace;
+    TRANSITION[State_Start][EqClass_LineFeed] = State_UWhitespace;
+    TRANSITION[State_Start][EqClass_CarriageReturn] = State_UWhitespace;
+
+    TRANSITION[State_UWhitespace][EqClass_Whitespace] = State_UWhitespace;
+    TRANSITION[State_UWhitespace][EqClass_LineFeed] = State_UWhitespace;
+    TRANSITION[State_UWhitespace][EqClass_CarriageReturn] = State_UWhitespace;
+
     for (size_t i = 0; i < EqClass_COUNT; ++i) {
         TRANSITION[State_UCommentBody][i] = State_UCommentBody;
     }
     TRANSITION[State_UCommentBody][EqClass_LineFeed] = State_UWhitespace;
     TRANSITION[State_UCommentBody][EqClass_CarriageReturn] = State_UWhitespace;
 
-    TRANSITION[State_WhitespaceStart][EqClass_LineFeed] = State_UWhitespace;
-    TRANSITION[State_WhitespaceStart][EqClass_CarriageReturn] =
-        State_UWhitespace;
-    TRANSITION[State_UWhitespace][EqClass_Whitespace] = State_UWhitespace;
-    TRANSITION[State_UWhitespace][EqClass_LineFeed] = State_UWhitespace;
-    TRANSITION[State_UWhitespace][EqClass_CarriageReturn] = State_UWhitespace;
-
     end_transition(State_UIdentifier, State_Identifier);
     end_transition(State_UBuiltinIdentifier, State_BuiltinIdentifier);
     end_transition(State_UIntLiteral, State_IntLiteral);
     end_transition(State_UFloatLiteral, State_FloatLiteral);
     end_transition(State_UClosedStringLiteral, State_StringLiteral);
+    end_transition(State_ULParen, State_LParen);
+    end_transition(State_URParen, State_RParen);
+    end_transition(State_ULBracket, State_LBracket);
+    end_transition(State_URBracket, State_RBracket);
+    end_transition(State_ULCurly, State_LCurly);
+    end_transition(State_URCurly, State_RCurly);
+    end_transition(State_UComma, State_Comma);
+    end_transition(State_UColon, State_Colon);
+    end_transition(State_USemicolon, State_Semicolon);
+    end_transition(State_UQuestion, State_Question);
     end_transition(State_UDot, State_Dot);
     end_transition(State_UNot, State_Not);
     end_transition(State_UEqualEqual, State_EqualEqual);
@@ -1721,7 +1728,7 @@ void init_parser_tables()
     end_transition(State_UAdd, State_Add);
     end_transition(State_USub, State_Sub);
     end_transition(State_UMul, State_Mul);
-    end_transition(State_UDiv, State_Div);
+    end_transition(State_UDivOrComment, State_Div);
     end_transition(State_UMod, State_Mod);
     end_transition(State_UAddEqual, State_AddEqual);
     end_transition(State_USubEqual, State_SubEqual);
@@ -1736,16 +1743,16 @@ void init_parser_tables()
     TRANSITION[State_Start][EqClass_EOF] = State_EOF;
 
     // Simple tokens
-    TRANSITION[State_Start][EqClass_LParen] = State_LParen;
-    TRANSITION[State_Start][EqClass_RParen] = State_RParen;
-    TRANSITION[State_Start][EqClass_LBracket] = State_LBracket;
-    TRANSITION[State_Start][EqClass_RBracket] = State_RBracket;
-    TRANSITION[State_Start][EqClass_LCurly] = State_LCurly;
-    TRANSITION[State_Start][EqClass_RCurly] = State_RCurly;
-    TRANSITION[State_Start][EqClass_Colon] = State_Colon;
-    TRANSITION[State_Start][EqClass_Comma] = State_Comma;
-    TRANSITION[State_Start][EqClass_Semicolon] = State_Semicolon;
-    TRANSITION[State_Start][EqClass_Question] = State_Question;
+    TRANSITION[State_Start][EqClass_LParen] = State_ULParen;
+    TRANSITION[State_Start][EqClass_RParen] = State_URParen;
+    TRANSITION[State_Start][EqClass_LBracket] = State_ULBracket;
+    TRANSITION[State_Start][EqClass_RBracket] = State_URBracket;
+    TRANSITION[State_Start][EqClass_LCurly] = State_ULCurly;
+    TRANSITION[State_Start][EqClass_RCurly] = State_URCurly;
+    TRANSITION[State_Start][EqClass_Colon] = State_UColon;
+    TRANSITION[State_Start][EqClass_Comma] = State_UComma;
+    TRANSITION[State_Start][EqClass_Semicolon] = State_USemicolon;
+    TRANSITION[State_Start][EqClass_Question] = State_UQuestion;
 
     TRANSITION[State_Start][EqClass_Exclam] = State_UNot;
     TRANSITION[State_Start][EqClass_Less] = State_ULess;
@@ -1758,7 +1765,7 @@ void init_parser_tables()
     TRANSITION[State_Start][EqClass_Asterisk] = State_UMul;
     TRANSITION[State_Start][EqClass_Plus] = State_UAdd;
     TRANSITION[State_Start][EqClass_Minus] = State_USub;
-    TRANSITION[State_Start][EqClass_Slash] = State_UDiv;
+    TRANSITION[State_Start][EqClass_Slash] = State_UDivOrComment;
     TRANSITION[State_Start][EqClass_Percent] = State_UMod;
 
     TRANSITION[State_UNot][EqClass_Equal] = State_UNotEqual;
@@ -1770,7 +1777,8 @@ void init_parser_tables()
     TRANSITION[State_UAdd][EqClass_Equal] = State_UAddEqual;
     TRANSITION[State_USub][EqClass_Equal] = State_USubEqual;
     TRANSITION[State_UMul][EqClass_Equal] = State_UMulEqual;
-    TRANSITION[State_UDiv][EqClass_Equal] = State_UDivEqual;
+    TRANSITION[State_UDivOrComment][EqClass_Equal] = State_UDivEqual;
+    TRANSITION[State_UDivOrComment][EqClass_Slash] = State_UCommentBody;
     TRANSITION[State_UMod][EqClass_Equal] = State_UModEqual;
     TRANSITION[State_UBitAnd][EqClass_Equal] = State_UBitAndEqual;
     TRANSITION[State_UBitOr][EqClass_Equal] = State_UBitOrEqual;

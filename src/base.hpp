@@ -225,12 +225,13 @@ struct Allocator {
         va_end(args);
 
         str.ptr = (char *)this->alloc_bytes(str.len + 1);
+        memset(str.ptr, 0, str.len + 1); // Needed because memory sanitizer
+                                         // was complaining about uninitialized
+                                         // memory
 
         va_start(args, fmt);
         stbsp_vsnprintf(str.ptr, str.len + 1, fmt, args);
         va_end(args);
-
-        str.ptr[str.len] = '\0';
 
         return str;
     }
@@ -247,10 +248,11 @@ struct Allocator {
         va_end(args_copy);
 
         str.ptr = (char *)this->alloc_bytes(str.len + 1);
+        memset(str.ptr, 0, str.len + 1); // Needed because memory sanitizer
+                                         // was complaining about uninitialized
+                                         // memory
 
         stbsp_vsnprintf(str.ptr, str.len + 1, fmt, args);
-
-        str.ptr[str.len] = '\0';
 
         return str;
     }
@@ -529,7 +531,8 @@ static const int LANG_LOG2_TAB64[64] = {
     63, 0,  58, 1,  59, 47, 53, 2,  60, 39, 48, 27, 54, 33, 42, 3,
     61, 51, 37, 40, 49, 18, 28, 20, 55, 30, 34, 11, 43, 14, 22, 4,
     62, 57, 46, 52, 38, 26, 32, 41, 50, 36, 17, 19, 29, 10, 13, 21,
-    56, 45, 25, 31, 35, 16, 9,  12, 44, 24, 15, 8,  23, 7,  6,  5};
+    56, 45, 25, 31, 35, 16, 9,  12, 44, 24, 15, 8,  23, 7,  6,  5,
+};
 
 LANG_INLINE static int log2_64(uint64_t value)
 {

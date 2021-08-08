@@ -2889,8 +2889,8 @@ SIRCreateX64Builder(SIRModule *module, SIRObjectBuilder *obj_builder)
     ENCODING_ENTRIES[Mnem_MOV][OperandKind_Reg][SizeClass_1][OperandKind_Imm]
                     [SizeClass_1] = FE_MOV8ri;
 
-    /* ENCODING_ENTRIES[Mnem_MOV][OperandKind_Memory][SizeClass_8] */
-    /*                 [OperandKind_Imm][SizeClass_8] = FE_MOV64mi; */
+    ENCODING_ENTRIES[Mnem_MOV][OperandKind_Memory][SizeClass_8]
+                    [OperandKind_Imm][SizeClass_8] = FE_MOV64mi;
     ENCODING_ENTRIES[Mnem_MOV][OperandKind_Memory][SizeClass_4][OperandKind_Imm]
                     [SizeClass_4] = FE_MOV32mi;
     ENCODING_ENTRIES[Mnem_MOV][OperandKind_Memory][SizeClass_2][OperandKind_Imm]

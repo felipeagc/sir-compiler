@@ -469,14 +469,14 @@ struct TokenizerState {
             String ident_str =
                 String{&state.text[token->loc.offset], token->loc.len};
             const char *strz = allocator->null_terminate(ident_str);
-            token->float_ = strtod(strz, NULL);
+            token->f64 = strtod(strz, NULL);
             break;
         }
         case TokenKind_IntLiteral: {
             String ident_str =
                 String{&state.text[token->loc.offset], token->loc.len};
             const char *strz = allocator->null_terminate(ident_str);
-            token->int_ = strtol(strz, NULL, 10);
+            token->u64 = strtoull(strz, NULL, 10);
             break;
         }
 
@@ -567,14 +567,14 @@ static Expr parse_primary_expr(Compiler *compiler, ParserState *state)
         Token int_token = state->next_token();
         expr.kind = ExprKind_IntLiteral;
         expr.loc = int_token.loc;
-        expr.int_literal.i64 = int_token.int_;
+        expr.int_literal.u64 = int_token.u64;
         break;
     }
     case TokenKind_FloatLiteral: {
         Token float_token = state->next_token();
         expr.kind = ExprKind_FloatLiteral;
         expr.loc = float_token.loc;
-        expr.float_literal.f64 = float_token.float_;
+        expr.float_literal.f64 = float_token.f64;
         break;
     }
     case TokenKind_True: {

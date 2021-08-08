@@ -1,5 +1,16 @@
 def extern vararg printf(arg: *u8);
 
+def print_int(x: u64) {
+	n := x;
+	i := i32(0);
+	while (i < i32(8)) {
+		printf("%02x", n & u64(255));
+		n = n >> u32(8);
+		i = i + 1;
+	}
+	printf("\n");
+}
+
 // type S struct {
 // 	a: i32,
 // 	b: f64,
@@ -25,8 +36,10 @@ def export main() {
 	// p2 := func1(1, 2, 3, 4, 5, p);
 	// printf("%f\n", p2.b);
 
-	b := u64(2);
-	c := &b;
-	a := u64(8) / b;
-	printf("%d\n", i32(a));
+	// b := u64(2);
+	// c := &b;
+	// a := u64(8) / b;
+	// printf("%d\n", i32(a));
+
+	print_int(18446744073709551615);
 }

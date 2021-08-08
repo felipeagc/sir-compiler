@@ -14,7 +14,7 @@ interp_expr(Compiler *compiler, ExprRef expr_ref, InterpValue *out_value)
     case ExprKind_IntLiteral: {
         InterpValue value = {};
         value.type_ref = compiler->untyped_int_type;
-        value.i64 = expr.int_literal.i64;
+        value.i64 = expr.int_literal.u64;
         *out_value = value;
         return true;
     }

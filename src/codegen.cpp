@@ -177,7 +177,7 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
                 SIRBuilderInsertImmInt(
                     ctx->builder,
                     ctx->type_values[expr.expr_type_ref.id],
-                    expr.int_literal.i64),
+                    expr.int_literal.u64),
             };
             break;
         }
@@ -187,7 +187,7 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
                 SIRBuilderInsertImmFloat(
                     ctx->builder,
                     ctx->type_values[expr.expr_type_ref.id],
-                    (double)expr.int_literal.i64),
+                    (double)expr.int_literal.u64),
             };
             break;
         }

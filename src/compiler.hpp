@@ -178,8 +178,8 @@ struct Token {
     Location loc;
     union {
         String str;
-        int64_t int_;
-        double float_;
+        uint64_t u64;
+        double f64;
     };
 };
 
@@ -342,7 +342,7 @@ struct Expr {
             String str;
         } str_literal;
         struct {
-            int64_t i64;
+            uint64_t u64;
         } int_literal;
         struct {
             double f64;

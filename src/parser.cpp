@@ -110,7 +110,7 @@ static String token_to_string(Compiler *compiler, const Token &token)
     switch (token.kind) {
     case TokenKind_Error:
         return compiler->arena->sprintf(
-            "error: %.*s", (int)token.str.len, token.str.ptr);
+            "error: \"%.*s\"", (int)token.str.len, token.str.ptr);
     case TokenKind_StringLiteral:
         return compiler->arena->sprintf(
             "string literal: \"%.*s\"", (int)token.str.len, token.str.ptr);
@@ -156,8 +156,11 @@ enum EqClass : uint8_t {
     EqClass_Whitespace,
     EqClass_LineFeed,       // \n
     EqClass_CarriageReturn, // \r
-    EqClass_Letter,         // a..z A..Z
-    EqClass_Digit,          // 0..9
+    EqClass_LetterX,        // x (lowercase)
+    EqClass_LetterHex,      // a..f A..F
+    EqClass_Letter,         // g..z g..Z (excluding x)
+    EqClass_DigitZero,      // 0
+    EqClass_Digit,          // 1..9
     EqClass_Dot,            // .
     EqClass_Comma,          // ,
     EqClass_Colon,          // :
@@ -199,6 +202,7 @@ enum State : uint8_t {
     State_BuiltinIdentifier,
     State_StringLiteral,
     State_IntLiteral,
+    State_HexIntLiteral,
     State_FloatLiteral,
     State_LParen,
     State_RParen,
@@ -255,6 +259,8 @@ enum State : uint8_t {
     State_UIdentifier,
     State_UBuiltinIdentifier,
     State_UIntLiteral,
+    State_UHexIntLiteral,
+    State_UZeroIntLiteral,
     State_UFloatLiteral,
     State_UOpenStringLiteral,
     State_UOpenStringLiteralSlashEscape,
@@ -379,6 +385,7 @@ struct TokenizerState {
 
     start:
 
+        *token = {};
         token->loc.file_ref = state.file_ref;
         token->loc.offset = state.pos;
         token->loc.col = state.col;
@@ -407,26 +414,26 @@ struct TokenizerState {
         }
 
         token->loc.len = state.pos - token->loc.offset;
-        token->kind = STATE_TOKENS[mstate];
 
-        switch (token->kind) {
-        case TokenKind_Identifier: {
+        switch (mstate) {
+        case State_Identifier: {
+            token->kind = TokenKind_Identifier;
             String ident_str =
                 String{&state.text[token->loc.offset], token->loc.len};
-            TokenKind token_kind = TokenKind_Identifier;
-            if (!compiler->keyword_map.get(ident_str, &token_kind)) {
+            if (!compiler->keyword_map.get(ident_str, &token->kind)) {
                 token->str = ident_str;
             }
-            token->kind = (TokenKind)token_kind;
             break;
         }
-        case TokenKind_BuiltinIdentifier: {
+        case State_BuiltinIdentifier: {
+            token->kind = TokenKind_BuiltinIdentifier;
             String ident_str =
                 String{&state.text[token->loc.offset + 1], token->loc.len - 1};
             token->str = ident_str;
             break;
         }
-        case TokenKind_StringLiteral: {
+        case State_StringLiteral: {
+            token->kind = TokenKind_StringLiteral;
             String ident_str =
                 String{&state.text[token->loc.offset + 1], token->loc.len - 2};
 
@@ -465,22 +472,36 @@ struct TokenizerState {
             token->str = compiler->sb.build_null_terminated(compiler->arena);
             break;
         }
-        case TokenKind_FloatLiteral: {
+        case State_FloatLiteral: {
+            token->kind = TokenKind_FloatLiteral;
             String ident_str =
                 String{&state.text[token->loc.offset], token->loc.len};
             const char *strz = allocator->null_terminate(ident_str);
             token->f64 = strtod(strz, NULL);
             break;
         }
-        case TokenKind_IntLiteral: {
+        case State_IntLiteral: {
+            token->kind = TokenKind_IntLiteral;
             String ident_str =
                 String{&state.text[token->loc.offset], token->loc.len};
             const char *strz = allocator->null_terminate(ident_str);
             token->u64 = strtoull(strz, NULL, 10);
             break;
         }
-
-        default: break;
+        case State_HexIntLiteral: {
+            token->kind = TokenKind_IntLiteral;
+            LANG_ASSERT(token->loc.len > 2);
+            String ident_str =
+                String{&state.text[token->loc.offset + 2], token->loc.len};
+            const char *strz = allocator->null_terminate(ident_str);
+            token->u64 = strtoull(strz, NULL, 16);
+            break;
+        }
+        case State_Error: {
+            token->str = String{&state.text[token->loc.offset], token->loc.len};
+            break;
+        }
+        default: token->kind = STATE_TOKENS[mstate]; break;
         }
 
     end:
@@ -1656,15 +1677,26 @@ static void parse_top_level_decl(
 
 void init_parser_tables()
 {
-    for (size_t i = 'a'; i <= 'z'; ++i) {
+    for (size_t i = 'a'; i <= 'g'; ++i) {
+        EQ_CLASSES[i] = EqClass_LetterHex;
+    }
+    for (size_t i = 'A'; i <= 'G'; ++i) {
+        EQ_CLASSES[i] = EqClass_LetterHex;
+    }
+
+    for (size_t i = 'g'; i <= 'z'; ++i) {
         EQ_CLASSES[i] = EqClass_Letter;
     }
-    for (size_t i = 'A'; i <= 'Z'; ++i) {
+    for (size_t i = 'G'; i <= 'Z'; ++i) {
         EQ_CLASSES[i] = EqClass_Letter;
     }
+
+    EQ_CLASSES[(int)'x'] = EqClass_LetterX;
+
     for (size_t i = '0'; i <= '9'; ++i) {
         EQ_CLASSES[i] = EqClass_Digit;
     }
+    EQ_CLASSES[(int)'0'] = EqClass_DigitZero;
 
     EQ_CLASSES[(int)'.'] = EqClass_Dot;
     EQ_CLASSES[(int)','] = EqClass_Comma;
@@ -1725,6 +1757,8 @@ void init_parser_tables()
     end_transition(State_UIdentifier, State_Identifier);
     end_transition(State_UBuiltinIdentifier, State_BuiltinIdentifier);
     end_transition(State_UIntLiteral, State_IntLiteral);
+    end_transition(State_UZeroIntLiteral, State_IntLiteral);
+    end_transition(State_UHexIntLiteral, State_HexIntLiteral);
     end_transition(State_UFloatLiteral, State_FloatLiteral);
     end_transition(State_UClosedStringLiteral, State_StringLiteral);
     end_transition(State_ULParen, State_LParen);
@@ -1819,14 +1853,23 @@ void init_parser_tables()
 
     // Identifier token
     TRANSITION[State_Start][EqClass_Letter] = State_UIdentifier;
+    TRANSITION[State_Start][EqClass_LetterX] = State_UIdentifier;
+    TRANSITION[State_Start][EqClass_LetterHex] = State_UIdentifier;
     TRANSITION[State_Start][EqClass_Underscore] = State_UIdentifier;
     TRANSITION[State_UIdentifier][EqClass_Letter] = State_UIdentifier;
+    TRANSITION[State_UIdentifier][EqClass_LetterX] = State_UIdentifier;
+    TRANSITION[State_UIdentifier][EqClass_LetterHex] = State_UIdentifier;
     TRANSITION[State_UIdentifier][EqClass_Digit] = State_UIdentifier;
+    TRANSITION[State_UIdentifier][EqClass_DigitZero] = State_UIdentifier;
     TRANSITION[State_UIdentifier][EqClass_Underscore] = State_UIdentifier;
 
     // Builtin identifier token
     TRANSITION[State_Start][EqClass_At] = State_UBuiltinIdentifier;
     TRANSITION[State_UBuiltinIdentifier][EqClass_Letter] =
+        State_UBuiltinIdentifier;
+    TRANSITION[State_UBuiltinIdentifier][EqClass_LetterX] =
+        State_UBuiltinIdentifier;
+    TRANSITION[State_UBuiltinIdentifier][EqClass_LetterHex] =
         State_UBuiltinIdentifier;
 
     // String literal token
@@ -1846,11 +1889,22 @@ void init_parser_tables()
 
     // Numeric literal tokens
     TRANSITION[State_Start][EqClass_Digit] = State_UIntLiteral;
+    TRANSITION[State_Start][EqClass_DigitZero] = State_UZeroIntLiteral;
     TRANSITION[State_UIntLiteral][EqClass_Digit] = State_UIntLiteral;
+    TRANSITION[State_UIntLiteral][EqClass_DigitZero] = State_UIntLiteral;
     TRANSITION[State_UIntLiteral][EqClass_Dot] = State_UFloatLiteral;
+    TRANSITION[State_UZeroIntLiteral][EqClass_LetterX] = State_UHexIntLiteral;
+    TRANSITION[State_UZeroIntLiteral][EqClass_Digit] = State_UIntLiteral;
+    TRANSITION[State_UZeroIntLiteral][EqClass_DigitZero] = State_UIntLiteral;
+    TRANSITION[State_UZeroIntLiteral][EqClass_Dot] = State_UFloatLiteral;
+    TRANSITION[State_UHexIntLiteral][EqClass_Digit] = State_UHexIntLiteral;
+    TRANSITION[State_UHexIntLiteral][EqClass_DigitZero] = State_UHexIntLiteral;
+    TRANSITION[State_UHexIntLiteral][EqClass_LetterHex] = State_UHexIntLiteral;
     TRANSITION[State_UFloatLiteral][EqClass_Digit] = State_UFloatLiteral;
+    TRANSITION[State_UFloatLiteral][EqClass_DigitZero] = State_UFloatLiteral;
     TRANSITION[State_UFloatLiteral][EqClass_Dot] = State_Error;
     TRANSITION[State_UDot][EqClass_Digit] = State_UFloatLiteral;
+    TRANSITION[State_UDot][EqClass_DigitZero] = State_UFloatLiteral;
     TRANSITION[State_Start][EqClass_Dot] = State_UDot;
 
     STATE_TOKENS[State_Error] = TokenKind_Error;

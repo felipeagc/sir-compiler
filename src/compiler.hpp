@@ -18,18 +18,30 @@ struct FileRef {
 struct DeclRef {
     uint32_t id;
 
+    operator uint32_t()
+    {
+        return this->id;
+    }
     Decl get(Compiler *compiler) const;
 };
 
 struct StmtRef {
     uint32_t id;
 
+    operator uint32_t()
+    {
+        return this->id;
+    }
     Stmt get(Compiler *compiler) const;
 };
 
 struct ExprRef {
     uint32_t id;
 
+    operator uint32_t()
+    {
+        return this->id;
+    }
     Expr get(Compiler *compiler) const;
     bool is_lvalue(Compiler *compiler);
 };
@@ -37,6 +49,10 @@ struct ExprRef {
 struct TypeRef {
     uint32_t id;
 
+    operator uint32_t()
+    {
+        return this->id;
+    }
     Type get(Compiler *compiler) const;
     bool is_runtime(Compiler *compiler);
 };
@@ -302,7 +318,7 @@ enum BinaryOp {
     BinaryOp_MAX,
 };
 
-enum ExprKind {
+enum ExprKind : uint8_t {
     ExprKind_Unknown = 0,
     ExprKind_Identifier,
     ExprKind_StringLiteral,
@@ -329,10 +345,6 @@ enum ExprKind {
 };
 
 struct Expr {
-    ExprKind kind;
-    TypeRef expr_type_ref;
-    TypeRef as_type_ref;
-    Location loc;
     union {
         struct {
             String str;
@@ -350,12 +362,6 @@ struct Expr {
         struct {
             bool bool_;
         } bool_literal;
-        struct {
-            uint32_t flags;
-            Array<ExprRef> return_type_expr_refs;
-            Array<DeclRef> param_decl_refs;
-            Array<StmtRef> body_stmts;
-        } func;
         struct {
             ExprRef func_expr_ref;
             Array<ExprRef> param_refs;
@@ -403,9 +409,10 @@ struct Expr {
             UnaryOp op;
         } unary;
     };
+    ExprKind kind;
 };
 
-enum StmtKind {
+enum StmtKind : uint8_t {
     StmtKind_Unknown = 0,
     StmtKind_Block,
     StmtKind_Expr,
@@ -417,8 +424,6 @@ enum StmtKind {
 };
 
 struct Stmt {
-    StmtKind kind;
-    Location loc;
     union {
         struct {
             Array<StmtRef> stmt_refs;
@@ -446,9 +451,10 @@ struct Stmt {
             ExprRef value_expr_ref;
         } assign;
     };
+    StmtKind kind;
 };
 
-enum DeclKind {
+enum DeclKind : uint8_t {
     DeclKind_Unknown = 0,
     DeclKind_Type,
     DeclKind_Function,
@@ -458,20 +464,17 @@ enum DeclKind {
     DeclKind_ConstDecl,
 };
 
+struct FuncDecl {
+    Scope *scope;
+    uint32_t flags;
+    Array<ExprRef> return_type_expr_refs;
+    Array<DeclRef> param_decl_refs;
+    Array<StmtRef> body_stmts;
+};
+
 struct Decl {
-    DeclKind kind;
-    TypeRef decl_type_ref;
-    TypeRef as_type_ref;
-    Location loc;
-    String name;
     union {
-        struct {
-            Scope *scope;
-            uint32_t flags;
-            Array<ExprRef> return_type_expr_refs;
-            Array<DeclRef> param_decl_refs;
-            Array<StmtRef> body_stmts;
-        } func;
+        FuncDecl *func;
         struct {
             ExprRef type_expr;
         } func_param;
@@ -491,6 +494,7 @@ struct Decl {
             ExprRef type_expr;
         } type_decl;
     };
+    DeclKind kind;
 };
 
 struct Compiler {
@@ -506,6 +510,14 @@ struct Compiler {
     Array<Decl> decls;
     Array<Stmt> stmts;
     Array<Expr> exprs;
+    Array<Location> expr_locs;
+    Array<Location> decl_locs;
+    Array<Location> stmt_locs;
+    Array<String> decl_names;
+    Array<TypeRef> decl_types;
+    Array<TypeRef> decl_as_types;
+    Array<TypeRef> expr_types;
+    Array<TypeRef> expr_as_types;
 
     TypeRef void_type;
     TypeRef type_type;
@@ -552,29 +564,37 @@ struct Compiler {
     }
 
     LANG_INLINE
-    ExprRef add_expr(const Expr &expr)
+    ExprRef add_expr(const Location &loc, const Expr &expr)
     {
         LANG_ASSERT(expr.kind != ExprKind_Unknown);
         ExprRef ref = {(uint32_t)this->exprs.len};
         this->exprs.push_back(expr);
+        this->expr_locs.push_back(loc);
+        this->expr_types.push_back({0});
+        this->expr_as_types.push_back({0});
         return ref;
     }
 
     LANG_INLINE
-    StmtRef add_stmt(const Stmt &stmt)
+    StmtRef add_stmt(const Location &loc, const Stmt &stmt)
     {
         LANG_ASSERT(stmt.kind != StmtKind_Unknown);
         StmtRef ref = {(uint32_t)this->stmts.len};
         this->stmts.push_back(stmt);
+        this->stmt_locs.push_back(loc);
         return ref;
     }
 
     LANG_INLINE
-    DeclRef add_decl(const Decl &decl)
+    DeclRef add_decl(const String &name, const Location &loc, const Decl &decl)
     {
         LANG_ASSERT(decl.kind != DeclKind_Unknown);
         DeclRef ref = {(uint32_t)this->decls.len};
         this->decls.push_back(decl);
+        this->decl_types.push_back({0});
+        this->decl_as_types.push_back({0});
+        this->decl_names.push_back(name);
+        this->decl_locs.push_back(loc);
         return ref;
     }
 

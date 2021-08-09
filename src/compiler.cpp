@@ -93,11 +93,11 @@ Scope *Scope::create(Compiler *compiler, FileRef file_ref, Scope *parent)
 
 void Scope::add(Compiler *compiler, DeclRef decl_ref)
 {
-    String name = compiler->decls[decl_ref.id].name;
+    String name = compiler->decl_names[decl_ref];
     if (!name.equal("_")) {
         DeclRef found_decl = this->lookup(name);
         if (found_decl.id != 0) {
-            const Location &loc = compiler->decls[decl_ref.id].loc;
+            const Location &loc = compiler->decl_locs[decl_ref];
             compiler->add_error(
                 loc,
                 "duplicate declaration of: '%.*s'",
@@ -151,13 +151,44 @@ Compiler Compiler::create()
     Array<Decl> decls = Array<Decl>::create(MallocAllocator::get_instance());
     decls.push_back({}); // 0th decl
 
+    Array<TypeRef> decl_types =
+        Array<TypeRef>::create(MallocAllocator::get_instance());
+    decl_types.push_back({}); // 0th decl
+
+    Array<TypeRef> decl_as_types =
+        Array<TypeRef>::create(MallocAllocator::get_instance());
+    decl_as_types.push_back({}); // 0th decl
+
     Array<Stmt> stmts = Array<Stmt>::create(MallocAllocator::get_instance());
     stmts.push_back({}); // 0th decl
 
     Array<Expr> exprs = Array<Expr>::create(MallocAllocator::get_instance());
     exprs.push_back({}); // 0th expr
 
-    keyword_map.set("extern", TokenKind_Extern);
+    Array<TypeRef> expr_types =
+        Array<TypeRef>::create(MallocAllocator::get_instance());
+    expr_types.push_back({}); // 0th expr
+
+    Array<TypeRef> expr_as_types =
+        Array<TypeRef>::create(MallocAllocator::get_instance());
+    expr_as_types.push_back({}); // 0th expr
+
+    Array<Location> expr_locs =
+        Array<Location>::create(MallocAllocator::get_instance());
+    expr_locs.push_back({}); // 0th expr
+
+    Array<Location> stmt_locs =
+        Array<Location>::create(MallocAllocator::get_instance());
+    stmt_locs.push_back({}); // 0th expr
+
+    Array<Location> decl_locs =
+        Array<Location>::create(MallocAllocator::get_instance());
+    decl_locs.push_back({}); // 0th expr
+
+    Array<String> decl_names =
+        Array<String>::create(MallocAllocator::get_instance());
+    decl_names.push_back({}); // 0th expr
+
     keyword_map.set("extern", TokenKind_Extern);
     keyword_map.set("vararg", TokenKind_VarArg);
     keyword_map.set("export", TokenKind_Export);
@@ -208,6 +239,18 @@ Compiler Compiler::create()
         .decls = decls,
         .stmts = stmts,
         .exprs = exprs,
+
+        .expr_locs = expr_locs,
+        .decl_locs = decl_locs,
+        .stmt_locs = stmt_locs,
+
+        .decl_names = decl_names,
+
+        .decl_types = decl_types,
+        .decl_as_types = decl_as_types,
+
+        .expr_types = expr_types,
+        .expr_as_types = expr_as_types,
 
         .void_type = {0},
         .type_type = {0},
@@ -348,6 +391,14 @@ void Compiler::destroy()
     this->exprs.destroy();
     this->stmts.destroy();
     this->decls.destroy();
+    this->expr_locs.destroy();
+    this->stmt_locs.destroy();
+    this->decl_locs.destroy();
+    this->decl_types.destroy();
+    this->decl_as_types.destroy();
+    this->decl_names.destroy();
+    this->expr_types.destroy();
+    this->expr_as_types.destroy();
     this->type_map.destroy();
     this->types.destroy();
     this->files.destroy();

@@ -54,42 +54,58 @@ static void analyze_expr(
     }
 
     case ExprKind_VoidType: {
-        expr.expr_type_ref = compiler->type_type;
-        expr.as_type_ref = compiler->void_type;
+        compiler->expr_types[expr_ref] = compiler->type_type;
+        compiler->expr_as_types[expr_ref] = compiler->void_type;
         break;
     }
 
     case ExprKind_BoolType: {
-        expr.expr_type_ref = compiler->type_type;
-        expr.as_type_ref = compiler->bool_type;
+        compiler->expr_types[expr_ref] = compiler->type_type;
+        compiler->expr_as_types[expr_ref] = compiler->bool_type;
         break;
     }
 
     case ExprKind_IntType: {
-        expr.expr_type_ref = compiler->type_type;
+        compiler->expr_types[expr_ref] = compiler->type_type;
         if (expr.int_type.is_signed) {
             switch (expr.int_type.bits) {
-            case 8: expr.as_type_ref = compiler->i8_type; break;
-            case 16: expr.as_type_ref = compiler->i16_type; break;
-            case 32: expr.as_type_ref = compiler->i32_type; break;
-            case 64: expr.as_type_ref = compiler->i64_type; break;
+            case 8:
+                compiler->expr_as_types[expr_ref] = compiler->i8_type;
+                break;
+            case 16:
+                compiler->expr_as_types[expr_ref] = compiler->i16_type;
+                break;
+            case 32:
+                compiler->expr_as_types[expr_ref] = compiler->i32_type;
+                break;
+            case 64:
+                compiler->expr_as_types[expr_ref] = compiler->i64_type;
+                break;
             }
         } else {
             switch (expr.int_type.bits) {
-            case 8: expr.as_type_ref = compiler->u8_type; break;
-            case 16: expr.as_type_ref = compiler->u16_type; break;
-            case 32: expr.as_type_ref = compiler->u32_type; break;
-            case 64: expr.as_type_ref = compiler->u64_type; break;
+            case 8:
+                compiler->expr_as_types[expr_ref] = compiler->u8_type;
+                break;
+            case 16:
+                compiler->expr_as_types[expr_ref] = compiler->u16_type;
+                break;
+            case 32:
+                compiler->expr_as_types[expr_ref] = compiler->u32_type;
+                break;
+            case 64:
+                compiler->expr_as_types[expr_ref] = compiler->u64_type;
+                break;
             }
         }
         break;
     }
 
     case ExprKind_FloatType: {
-        expr.expr_type_ref = compiler->type_type;
+        compiler->expr_types[expr_ref] = compiler->type_type;
         switch (expr.float_type.bits) {
-        case 32: expr.as_type_ref = compiler->f32_type; break;
-        case 64: expr.as_type_ref = compiler->f64_type; break;
+        case 32: compiler->expr_as_types[expr_ref] = compiler->f32_type; break;
+        case 64: compiler->expr_as_types[expr_ref] = compiler->f64_type; break;
         }
         break;
     }
@@ -97,10 +113,11 @@ static void analyze_expr(
     case ExprKind_PointerType: {
         analyze_expr(
             compiler, state, expr.ptr_type.sub_expr_ref, compiler->type_type);
-        TypeRef sub_type = expr.ptr_type.sub_expr_ref.get(compiler).as_type_ref;
+        TypeRef sub_type = compiler->expr_as_types[expr.ptr_type.sub_expr_ref];
         if (sub_type.id) {
-            expr.expr_type_ref = compiler->type_type;
-            expr.as_type_ref = compiler->create_pointer_type(sub_type);
+            compiler->expr_types[expr_ref] = compiler->type_type;
+            compiler->expr_as_types[expr_ref] =
+                compiler->create_pointer_type(sub_type);
         }
         break;
     }
@@ -112,10 +129,11 @@ static void analyze_expr(
             expr.slice_type.subtype_expr_ref,
             compiler->type_type);
         TypeRef sub_type =
-            expr.slice_type.subtype_expr_ref.get(compiler).as_type_ref;
+            compiler->expr_as_types[expr.slice_type.subtype_expr_ref];
         if (sub_type.id) {
-            expr.expr_type_ref = compiler->type_type;
-            expr.as_type_ref = compiler->create_slice_type(sub_type);
+            compiler->expr_types[expr_ref] = compiler->type_type;
+            compiler->expr_as_types[expr_ref] =
+                compiler->create_slice_type(sub_type);
         }
         break;
     }
@@ -133,19 +151,19 @@ static void analyze_expr(
             compiler->untyped_int_type);
 
         TypeRef sub_type =
-            expr.array_type.subtype_expr_ref.get(compiler).as_type_ref;
+            compiler->expr_as_types[expr.array_type.subtype_expr_ref];
         if (sub_type.id) {
             InterpValue interp_value = {};
             if (interp_expr(
                     compiler, expr.array_type.size_expr_ref, &interp_value)) {
                 LANG_ASSERT(
                     interp_value.type_ref.id == compiler->untyped_int_type.id);
-                expr.expr_type_ref = compiler->type_type;
-                expr.as_type_ref =
+                compiler->expr_types[expr_ref] = compiler->type_type;
+                compiler->expr_as_types[expr_ref] =
                     compiler->create_array_type(sub_type, interp_value.i64);
             } else {
                 compiler->add_error(
-                    expr.array_type.size_expr_ref.get(compiler).loc,
+                    compiler->expr_locs[expr.array_type.size_expr_ref],
                     "array size expression does not evaluate to a compile-time "
                     "integer");
             }
@@ -164,7 +182,7 @@ static void analyze_expr(
              expr.struct_type.field_type_expr_refs) {
             analyze_expr(
                 compiler, state, field_type_expr_ref, compiler->type_type);
-            if (field_type_expr_ref.get(compiler).as_type_ref.id == 0) {
+            if (compiler->expr_as_types[field_type_expr_ref].id == 0) {
                 has_invalid_type = true;
             }
         }
@@ -179,7 +197,7 @@ static void analyze_expr(
             if (field_map.get(field_name)) {
                 has_conflict = true;
                 compiler->add_error(
-                    expr.loc,
+                    compiler->expr_locs[expr_ref],
                     "duplicate struct field: '%.*s'",
                     (int)field_name.len,
                     field_name.ptr);
@@ -194,20 +212,20 @@ static void analyze_expr(
             expr.struct_type.field_type_expr_refs.len);
 
         for (size_t i = 0; i < expr.struct_type.field_type_expr_refs.len; ++i) {
-            field_types[i] = expr.struct_type.field_type_expr_refs[i]
-                                 .get(compiler)
-                                 .as_type_ref;
+            field_types[i] =
+                compiler
+                    ->expr_as_types[expr.struct_type.field_type_expr_refs[i]];
         }
 
-        expr.expr_type_ref = compiler->type_type;
-        expr.as_type_ref = compiler->create_struct_type(
+        compiler->expr_types[expr_ref] = compiler->type_type;
+        compiler->expr_as_types[expr_ref] = compiler->create_struct_type(
             field_types, expr.struct_type.field_names.as_slice());
 
         break;
     }
 
     case ExprKind_BoolLiteral: {
-        expr.expr_type_ref = compiler->bool_type;
+        compiler->expr_types[expr_ref] = compiler->bool_type;
         break;
     }
 
@@ -215,9 +233,9 @@ static void analyze_expr(
         if (expected_type_ref.id &&
             (expected_type_ref.get(compiler).kind == TypeKind_Int ||
              expected_type_ref.get(compiler).kind == TypeKind_Float)) {
-            expr.expr_type_ref = expected_type_ref;
+            compiler->expr_types[expr_ref] = expected_type_ref;
         } else {
-            expr.expr_type_ref = compiler->untyped_int_type;
+            compiler->expr_types[expr_ref] = compiler->untyped_int_type;
         }
         break;
     }
@@ -225,20 +243,21 @@ static void analyze_expr(
     case ExprKind_FloatLiteral: {
         if (expected_type_ref.id &&
             expected_type_ref.get(compiler).kind == TypeKind_Float) {
-            expr.expr_type_ref = expected_type_ref;
+            compiler->expr_types[expr_ref] = expected_type_ref;
         } else {
-            expr.expr_type_ref = compiler->untyped_float_type;
+            compiler->expr_types[expr_ref] = compiler->untyped_float_type;
         }
         break;
     }
 
     case ExprKind_StringLiteral: {
-        expr.expr_type_ref = compiler->create_slice_type(compiler->u8_type);
+        compiler->expr_types[expr_ref] =
+            compiler->create_slice_type(compiler->u8_type);
         if (expected_type_ref.id) {
             Type expected_type = expected_type_ref.get(compiler);
             if (expected_type.kind == TypeKind_Pointer &&
                 expected_type.pointer.sub_type.id == compiler->u8_type.id) {
-                expr.expr_type_ref = expected_type_ref;
+                compiler->expr_types[expr_ref] = expected_type_ref;
             }
         }
         break;
@@ -247,16 +266,16 @@ static void analyze_expr(
     case ExprKind_NullLiteral: {
         if (expected_type_ref.id &&
             expected_type_ref.get(compiler).kind == TypeKind_Pointer) {
-            expr.expr_type_ref = expected_type_ref;
+            compiler->expr_types[expr_ref] = expected_type_ref;
         } else {
-            expr.expr_type_ref =
+            compiler->expr_types[expr_ref] =
                 compiler->create_pointer_type(compiler->void_type);
         }
         break;
     }
 
     case ExprKind_VoidLiteral: {
-        expr.expr_type_ref = compiler->void_type;
+        compiler->expr_types[expr_ref] = compiler->void_type;
         break;
     }
 
@@ -264,13 +283,13 @@ static void analyze_expr(
         Scope *scope = *state->scope_stack.last();
         DeclRef decl_ref = scope->lookup(expr.ident.str);
         if (decl_ref.id) {
-            Decl decl = decl_ref.get(compiler);
-            expr.expr_type_ref = decl.decl_type_ref;
-            expr.as_type_ref = decl.as_type_ref;
+            compiler->expr_types[expr_ref] = compiler->decl_types[decl_ref];
+            compiler->expr_as_types[expr_ref] =
+                compiler->decl_as_types[decl_ref];
             expr.ident.decl_ref = decl_ref;
         } else {
             compiler->add_error(
-                expr.loc,
+                compiler->expr_locs[expr_ref],
                 "identifier '%.*s' does not refer to a symbol",
                 (int)expr.ident.str.len,
                 expr.ident.str.ptr);
@@ -280,15 +299,16 @@ static void analyze_expr(
     }
 
     case ExprKind_Function: {
-        compiler->add_error(expr.loc, "unimplemented function expr");
+        compiler->add_error(
+            compiler->expr_locs[expr_ref], "unimplemented function expr");
         break;
     }
 
     case ExprKind_FunctionCall: {
         analyze_expr(compiler, state, expr.func_call.func_expr_ref);
 
-        Expr func_expr = expr.func_call.func_expr_ref.get(compiler);
-        Type func_type = func_expr.expr_type_ref.get(compiler);
+        ExprRef func_expr_ref = expr.func_call.func_expr_ref;
+        Type func_type = compiler->expr_types[func_expr_ref].get(compiler);
         switch (func_type.kind) {
         case TypeKind_Function: {
             // Actual function call
@@ -296,7 +316,7 @@ static void analyze_expr(
                 if (func_type.func.param_types.len >
                     expr.func_call.param_refs.len) {
                     compiler->add_error(
-                        expr.loc,
+                        compiler->expr_locs[expr_ref],
                         "expected at least '%zu' parameters for variadic "
                         "function call, instead got '%zu'",
                         func_type.func.param_types.len,
@@ -307,7 +327,7 @@ static void analyze_expr(
                 if (func_type.func.param_types.len !=
                     expr.func_call.param_refs.len) {
                     compiler->add_error(
-                        expr.loc,
+                        compiler->expr_locs[expr_ref],
                         "expected '%zu' parameters for function call, instead "
                         "got "
                         "'%zu'",
@@ -332,7 +352,7 @@ static void analyze_expr(
                 analyze_expr(compiler, state, expr.func_call.param_refs[i]);
             }
 
-            expr.expr_type_ref = func_type.func.return_type;
+            compiler->expr_types[expr_ref] = func_type.func.return_type;
             break;
         }
 
@@ -341,20 +361,22 @@ static void analyze_expr(
 
             if (expr.func_call.param_refs.len != 1) {
                 compiler->add_error(
-                    func_expr.loc, "expected type cast to have 1 parameter");
+                    compiler->expr_locs[func_expr_ref],
+                    "expected type cast to have 1 parameter");
                 break;
             }
 
-            LANG_ASSERT(func_expr.as_type_ref.id != 0);
+            LANG_ASSERT(compiler->expr_as_types[func_expr_ref].id != 0);
 
-            Type dest_type = func_expr.as_type_ref.get(compiler);
+            Type dest_type =
+                compiler->expr_as_types[func_expr_ref].get(compiler);
 
             size_t error_checkpoint = compiler->get_error_checkpoint();
 
             analyze_expr(compiler, state, expr.func_call.param_refs[0]);
 
             TypeRef param_type_ref =
-                expr.func_call.param_refs[0].get(compiler).expr_type_ref;
+                compiler->expr_types[expr.func_call.param_refs[0]];
             Type param_type = param_type_ref.get(compiler);
             if (param_type.kind == TypeKind_Unknown ||
                 param_type.kind == TypeKind_UntypedInt ||
@@ -366,24 +388,27 @@ static void analyze_expr(
                     compiler,
                     state,
                     expr.func_call.param_refs[0],
-                    func_expr.as_type_ref);
+                    compiler->expr_as_types[func_expr_ref]);
 
             } else if (!((param_type.kind == TypeKind_Int ||
                           param_type.kind == TypeKind_Float) &&
                          (dest_type.kind == TypeKind_Int ||
                           dest_type.kind == TypeKind_Float))) {
-                compiler->add_error(expr.loc, "invalid cast");
+                compiler->add_error(
+                    compiler->expr_locs[expr_ref], "invalid cast");
                 break;
             }
 
-            expr.expr_type_ref = func_expr.as_type_ref;
+            compiler->expr_types[expr_ref] =
+                compiler->expr_as_types[func_expr_ref];
 
             break;
         }
 
         default: {
             compiler->add_error(
-                func_expr.loc, "expected expression to have function type");
+                compiler->expr_locs[func_expr_ref],
+                "expected expression to have function type");
             break;
         }
         }
@@ -397,7 +422,8 @@ static void analyze_expr(
         case BuiltinFunction_Sizeof: {
             if (expr.builtin_call.param_refs.len != 1) {
                 compiler->add_error(
-                    expr.loc, "expected 1 parameter for @sizeof");
+                    compiler->expr_locs[expr_ref],
+                    "expected 1 parameter for @sizeof");
                 break;
             }
 
@@ -410,9 +436,9 @@ static void analyze_expr(
             if (expected_type_ref.id &&
                 (expected_type_ref.get(compiler).kind == TypeKind_Int ||
                  expected_type_ref.get(compiler).kind == TypeKind_Float)) {
-                expr.expr_type_ref = expected_type_ref;
+                compiler->expr_types[expr_ref] = expected_type_ref;
             } else {
-                expr.expr_type_ref = compiler->untyped_int_type;
+                compiler->expr_types[expr_ref] = compiler->untyped_int_type;
             }
 
             break;
@@ -420,7 +446,8 @@ static void analyze_expr(
         case BuiltinFunction_Alignof: {
             if (expr.builtin_call.param_refs.len != 1) {
                 compiler->add_error(
-                    expr.loc, "expected 1 parameter for @alignof");
+                    compiler->expr_locs[expr_ref],
+                    "expected 1 parameter for @alignof");
                 break;
             }
 
@@ -433,9 +460,9 @@ static void analyze_expr(
             if (expected_type_ref.id &&
                 (expected_type_ref.get(compiler).kind == TypeKind_Int ||
                  expected_type_ref.get(compiler).kind == TypeKind_Float)) {
-                expr.expr_type_ref = expected_type_ref;
+                compiler->expr_types[expr_ref] = expected_type_ref;
             } else {
-                expr.expr_type_ref = compiler->untyped_int_type;
+                compiler->expr_types[expr_ref] = compiler->untyped_int_type;
             }
 
             break;
@@ -443,7 +470,8 @@ static void analyze_expr(
         case BuiltinFunction_PtrCast: {
             if (expr.builtin_call.param_refs.len != 2) {
                 compiler->add_error(
-                    expr.loc, "expected 2 parameters for @ptrcast");
+                    compiler->expr_locs[expr_ref],
+                    "expected 2 parameters for @ptrcast");
                 break;
             }
 
@@ -455,20 +483,23 @@ static void analyze_expr(
 
             analyze_expr(compiler, state, expr.builtin_call.param_refs[1]);
 
-            Expr param0 = expr.builtin_call.param_refs[0].get(compiler);
-            Expr param1 = expr.builtin_call.param_refs[1].get(compiler);
-            if (param0.as_type_ref.get(compiler).kind != TypeKind_Pointer) {
-                compiler->add_error(param0.loc, "expected pointer type");
-                break;
-            }
-
-            if (param1.expr_type_ref.get(compiler).kind != TypeKind_Pointer) {
+            ExprRef param0 = expr.builtin_call.param_refs[0];
+            if (compiler->expr_as_types[param0].get(compiler).kind !=
+                TypeKind_Pointer) {
                 compiler->add_error(
-                    param1.loc, "expected expression of pointer type");
+                    compiler->expr_locs[param0], "expected pointer type");
                 break;
             }
 
-            expr.expr_type_ref = param0.as_type_ref;
+            if (compiler->expr_as_types[param0].get(compiler).kind !=
+                TypeKind_Pointer) {
+                compiler->add_error(
+                    compiler->expr_locs[param0],
+                    "expected expression of pointer type");
+                break;
+            }
+
+            compiler->expr_types[expr_ref] = compiler->expr_as_types[param0];
             break;
         }
         }
@@ -481,11 +512,11 @@ static void analyze_expr(
         analyze_expr(
             compiler, state, expr.subscript.right_ref, compiler->u64_type);
 
-        Expr left_expr = expr.subscript.left_ref.get(compiler);
-        Expr right_expr = expr.subscript.right_ref.get(compiler);
+        ExprRef left_ref = expr.subscript.left_ref;
+        ExprRef right_ref = expr.subscript.right_ref;
 
-        TypeRef indexed_type_ref = left_expr.expr_type_ref;
-        TypeRef index_type_ref = right_expr.expr_type_ref;
+        TypeRef indexed_type_ref = compiler->expr_types[left_ref];
+        TypeRef index_type_ref = compiler->expr_types[right_ref];
         if (index_type_ref.id == 0 || indexed_type_ref.id == 0) {
             LANG_ASSERT(compiler->errors.len > 0);
             break;
@@ -497,23 +528,24 @@ static void analyze_expr(
         if (index_type.kind != TypeKind_Int &&
             index_type.kind != TypeKind_UntypedInt) {
             compiler->add_error(
-                right_expr.loc, "subscript index is not an integer");
+                compiler->expr_locs[right_ref],
+                "subscript index is not an integer");
         }
 
         if (indexed_type.kind != TypeKind_Array &&
             indexed_type.kind != TypeKind_Slice) {
             compiler->add_error(
-                left_expr.loc,
+                compiler->expr_locs[left_ref],
                 "accessed expression in subscript is not an array");
         }
 
         switch (indexed_type.kind) {
         case TypeKind_Array: {
-            expr.expr_type_ref = indexed_type.array.sub_type;
+            compiler->expr_types[expr_ref] = indexed_type.array.sub_type;
             break;
         }
         case TypeKind_Slice: {
-            expr.expr_type_ref = indexed_type.slice.sub_type;
+            compiler->expr_types[expr_ref] = indexed_type.slice.sub_type;
             break;
         }
         default: LANG_ASSERT(0);
@@ -526,7 +558,7 @@ static void analyze_expr(
         analyze_expr(compiler, state, expr.access.left_ref);
 
         Type accessed_type =
-            expr.access.left_ref.get(compiler).expr_type_ref.get(compiler);
+            compiler->expr_types[expr.access.left_ref].get(compiler);
         String type_name = accessed_type.to_string(compiler);
 
         Expr ident_expr = expr.access.accessed_ident_ref.get(compiler);
@@ -539,7 +571,7 @@ static void analyze_expr(
             if (!accessed_type.struct_.field_map.get(
                     accessed_field, &field_index)) {
                 compiler->add_error(
-                    expr.loc,
+                    compiler->expr_locs[expr_ref],
                     "no struct field named '%.*s' for struct type '%.*s'",
                     (int)accessed_field.len,
                     accessed_field.ptr,
@@ -549,13 +581,13 @@ static void analyze_expr(
             }
 
             TypeRef field_type = accessed_type.struct_.field_types[field_index];
-            expr.expr_type_ref = field_type;
+            compiler->expr_types[expr_ref] = field_type;
 
             break;
         }
         default: {
             compiler->add_error(
-                expr.loc,
+                compiler->expr_locs[expr_ref],
                 "invalid type for left side of access expression: '%.*s'",
                 (int)type_name.len,
                 type_name.ptr);
@@ -572,13 +604,12 @@ static void analyze_expr(
         case UnaryOp_AddressOf: {
             analyze_expr(compiler, state, expr.unary.left_ref);
 
-            TypeRef subtype_ref =
-                expr.unary.left_ref.get(compiler).expr_type_ref;
+            TypeRef subtype_ref = compiler->expr_types[expr.unary.left_ref];
             if (!subtype_ref.is_runtime(compiler)) {
                 Type subtype = subtype_ref.get(compiler);
                 String type_string = subtype.to_string(compiler);
                 compiler->add_error(
-                    expr.loc,
+                    compiler->expr_locs[expr_ref],
                     "cannot take address of variable of non-runtime type: "
                     "'%.*s'",
                     (int)type_string.len,
@@ -588,12 +619,14 @@ static void analyze_expr(
 
             if (!expr.unary.left_ref.is_lvalue(compiler)) {
                 compiler->add_error(
-                    expr.loc, "cannot take address of non-lvalue");
+                    compiler->expr_locs[expr_ref],
+                    "cannot take address of non-lvalue");
                 break;
             }
 
             if (subtype_ref.id) {
-                expr.expr_type_ref = compiler->create_pointer_type(subtype_ref);
+                compiler->expr_types[expr_ref] =
+                    compiler->create_pointer_type(subtype_ref);
             }
 
             break;
@@ -601,30 +634,31 @@ static void analyze_expr(
         case UnaryOp_Dereference: {
             analyze_expr(compiler, state, expr.unary.left_ref);
 
-            TypeRef subtype_ref =
-                expr.unary.left_ref.get(compiler).expr_type_ref;
+            TypeRef subtype_ref = compiler->expr_types[expr.unary.left_ref];
             Type subtype = subtype_ref.get(compiler);
 
             if (subtype.kind != TypeKind_Pointer) {
                 String type_string = subtype.to_string(compiler);
                 compiler->add_error(
-                    expr.loc,
+                    compiler->expr_locs[expr_ref],
                     "cannot dereference variable of type: '%.*s'",
                     (int)type_string.len,
                     type_string.ptr);
                 break;
             }
 
-            expr.expr_type_ref = subtype.pointer.sub_type;
+            compiler->expr_types[expr_ref] = subtype.pointer.sub_type;
 
             break;
         }
         case UnaryOp_Negate: {
-            compiler->add_error(expr.loc, "'-' not implemented");
+            compiler->add_error(
+                compiler->expr_locs[expr_ref], "'-' not implemented");
             break;
         }
         case UnaryOp_Not: {
-            compiler->add_error(expr.loc, "'!' not implemented");
+            compiler->add_error(
+                compiler->expr_locs[expr_ref], "'!' not implemented");
             break;
         }
         }
@@ -649,11 +683,10 @@ static void analyze_expr(
                 TypeRef type_refs[2] = {};
 
                 analyze_expr(compiler, state, expr.binary.left_ref);
-                type_refs[0] = expr.binary.left_ref.get(compiler).expr_type_ref;
+                type_refs[0] = compiler->expr_types[expr.binary.left_ref];
 
                 analyze_expr(compiler, state, expr.binary.right_ref);
-                type_refs[1] =
-                    expr.binary.right_ref.get(compiler).expr_type_ref;
+                type_refs[1] = compiler->expr_types[expr.binary.right_ref];
 
                 for (size_t i = 0; i < LANG_CARRAY_LENGTH(type_refs); ++i) {
                     Type type = type_refs[i].get(compiler);
@@ -669,7 +702,8 @@ static void analyze_expr(
 
             if (expected_type_ref.id == 0) {
                 compiler->add_error(
-                    expr.loc, "cannot infer type for binary expression");
+                    compiler->expr_locs[expr_ref],
+                    "cannot infer type for binary expression");
                 break;
             }
 
@@ -677,16 +711,18 @@ static void analyze_expr(
                 compiler, state, expr.binary.left_ref, expected_type_ref);
             analyze_expr(
                 compiler, state, expr.binary.right_ref, expected_type_ref);
-            Expr left = expr.binary.left_ref.get(compiler);
-            Expr right = expr.binary.right_ref.get(compiler);
+            ExprRef left_ref = expr.binary.left_ref;
+            ExprRef right_ref = expr.binary.right_ref;
 
-            if (left.expr_type_ref.id != right.expr_type_ref.id) {
+            TypeRef left_type_ref = compiler->expr_types[left_ref];
+            TypeRef right_type_ref = compiler->expr_types[right_ref];
+            if (left_type_ref.id != right_type_ref.id) {
                 String left_type_str =
-                    left.expr_type_ref.get(compiler).to_string(compiler);
+                    left_type_ref.get(compiler).to_string(compiler);
                 String right_type_str =
-                    right.expr_type_ref.get(compiler).to_string(compiler);
+                    right_type_ref.get(compiler).to_string(compiler);
                 compiler->add_error(
-                    expr.loc,
+                    compiler->expr_locs[expr_ref],
                     "mismatched types for binary expression operands, got "
                     "'%.*s' and '%.*s'",
                     (int)left_type_str.len,
@@ -696,22 +732,23 @@ static void analyze_expr(
                 break;
             }
 
-            Type type = left.expr_type_ref.get(compiler);
+            Type type = left_type_ref.get(compiler);
             if (type.kind == TypeKind_UntypedInt ||
                 type.kind == TypeKind_UntypedFloat) {
                 compiler->add_error(
-                    expr.loc,
+                    compiler->expr_locs[expr_ref],
                     "cannot use untyped numbers in binary expression");
                 break;
             }
 
             if (type.kind != TypeKind_Int && type.kind != TypeKind_Float) {
                 compiler->add_error(
-                    expr.loc, "binary expression expects numeric operands");
+                    compiler->expr_locs[expr_ref],
+                    "binary expression expects numeric operands");
                 break;
             }
 
-            expr.expr_type_ref = left.expr_type_ref;
+            compiler->expr_types[expr_ref] = left_type_ref;
             break;
         }
         case BinaryOp_BitAnd:
@@ -723,11 +760,10 @@ static void analyze_expr(
                 TypeRef type_refs[2] = {};
 
                 analyze_expr(compiler, state, expr.binary.left_ref);
-                type_refs[0] = expr.binary.left_ref.get(compiler).expr_type_ref;
+                type_refs[0] = compiler->expr_types[expr.binary.left_ref];
 
                 analyze_expr(compiler, state, expr.binary.right_ref);
-                type_refs[1] =
-                    expr.binary.right_ref.get(compiler).expr_type_ref;
+                type_refs[1] = compiler->expr_types[expr.binary.right_ref];
 
                 for (size_t i = 0; i < LANG_CARRAY_LENGTH(type_refs); ++i) {
                     Type type = type_refs[i].get(compiler);
@@ -742,7 +778,8 @@ static void analyze_expr(
 
             if (expected_type_ref.id == 0) {
                 compiler->add_error(
-                    expr.loc, "cannot infer type for binary expression");
+                    compiler->expr_locs[expr_ref],
+                    "cannot infer type for binary expression");
                 break;
             }
 
@@ -750,16 +787,18 @@ static void analyze_expr(
                 compiler, state, expr.binary.left_ref, expected_type_ref);
             analyze_expr(
                 compiler, state, expr.binary.right_ref, expected_type_ref);
-            Expr left = expr.binary.left_ref.get(compiler);
-            Expr right = expr.binary.right_ref.get(compiler);
+            ExprRef left_ref = expr.binary.left_ref;
+            ExprRef right_ref = expr.binary.right_ref;
 
-            if (left.expr_type_ref.id != right.expr_type_ref.id) {
+            TypeRef left_type_ref = compiler->expr_types[left_ref];
+            TypeRef right_type_ref = compiler->expr_types[right_ref];
+            if (left_type_ref.id != right_type_ref.id) {
                 String left_type_str =
-                    left.expr_type_ref.get(compiler).to_string(compiler);
+                    left_type_ref.get(compiler).to_string(compiler);
                 String right_type_str =
-                    right.expr_type_ref.get(compiler).to_string(compiler);
+                    right_type_ref.get(compiler).to_string(compiler);
                 compiler->add_error(
-                    expr.loc,
+                    compiler->expr_locs[expr_ref],
                     "mismatched types for binary expression operands, got "
                     "'%.*s' and '%.*s'",
                     (int)left_type_str.len,
@@ -769,21 +808,22 @@ static void analyze_expr(
                 break;
             }
 
-            Type type = left.expr_type_ref.get(compiler);
+            Type type = left_type_ref.get(compiler);
             if (type.kind == TypeKind_UntypedInt) {
                 compiler->add_error(
-                    expr.loc,
+                    compiler->expr_locs[expr_ref],
                     "cannot use untyped numbers in binary expression");
                 break;
             }
 
             if (type.kind != TypeKind_Int) {
                 compiler->add_error(
-                    expr.loc, "binary expression expects integer operands");
+                    compiler->expr_locs[expr_ref],
+                    "binary expression expects integer operands");
                 break;
             }
 
-            expr.expr_type_ref = left.expr_type_ref;
+            compiler->expr_types[expr_ref] = left_type_ref;
             break;
         }
 
@@ -801,11 +841,10 @@ static void analyze_expr(
                 TypeRef type_refs[2] = {};
 
                 analyze_expr(compiler, state, expr.binary.left_ref);
-                type_refs[0] = expr.binary.left_ref.get(compiler).expr_type_ref;
+                type_refs[0] = compiler->expr_types[expr.binary.left_ref];
 
                 analyze_expr(compiler, state, expr.binary.right_ref);
-                type_refs[1] =
-                    expr.binary.right_ref.get(compiler).expr_type_ref;
+                type_refs[1] = compiler->expr_types[expr.binary.right_ref];
 
                 for (size_t i = 0; i < LANG_CARRAY_LENGTH(type_refs); ++i) {
                     Type type = type_refs[i].get(compiler);
@@ -823,21 +862,25 @@ static void analyze_expr(
                 compiler, state, expr.binary.left_ref, common_type_ref);
             analyze_expr(
                 compiler, state, expr.binary.right_ref, common_type_ref);
-            Expr left = expr.binary.left_ref.get(compiler);
-            Expr right = expr.binary.right_ref.get(compiler);
+            ExprRef left_ref = expr.binary.left_ref;
+            ExprRef right_ref = expr.binary.right_ref;
 
-            if (left.expr_type_ref.id != right.expr_type_ref.id) {
+            TypeRef left_type_ref = compiler->expr_types[left_ref];
+            TypeRef right_type_ref = compiler->expr_types[right_ref];
+
+            if (left_type_ref.id != right_type_ref.id) {
                 compiler->add_error(
-                    expr.loc, "mismatched types for comparison operands");
+                    compiler->expr_locs[expr_ref],
+                    "mismatched types for comparison operands");
                 break;
             }
 
-            Type type = left.expr_type_ref.get(compiler);
+            Type type = left_type_ref.get(compiler);
             if (type.kind == TypeKind_UntypedInt ||
                 type.kind == TypeKind_UntypedFloat) {
                 String type_string = type.to_string(compiler);
                 compiler->add_error(
-                    expr.loc,
+                    compiler->expr_locs[expr_ref],
                     "comparison expression expects runtime numeric types, "
                     "instead got '%.*s'",
                     (int)type_string.len,
@@ -847,11 +890,12 @@ static void analyze_expr(
 
             if (type.kind != TypeKind_Int && type.kind != TypeKind_Float) {
                 compiler->add_error(
-                    expr.loc, "comparison expression expects numeric operands");
+                    compiler->expr_locs[expr_ref],
+                    "comparison expression expects numeric operands");
                 break;
             }
 
-            expr.expr_type_ref = compiler->bool_type;
+            compiler->expr_types[expr_ref] = compiler->bool_type;
             break;
         }
 
@@ -860,14 +904,14 @@ static void analyze_expr(
             analyze_expr(
                 compiler, state, expr.binary.left_ref, expected_type_ref);
             analyze_expr(compiler, state, expr.binary.right_ref);
-            Expr left = expr.binary.left_ref.get(compiler);
-            Expr right = expr.binary.right_ref.get(compiler);
+            ExprRef left_ref = expr.binary.left_ref;
+            ExprRef right_ref = expr.binary.right_ref;
 
-            Type left_type = left.expr_type_ref.get(compiler);
+            Type left_type = compiler->expr_types[left_ref].get(compiler);
             if (left_type.kind != TypeKind_Int) {
                 String type_string = left_type.to_string(compiler);
                 compiler->add_error(
-                    left.loc,
+                    compiler->expr_locs[left_ref],
                     "bit shift expects runtime numeric types, instead "
                     "got '%.*s'",
                     (int)type_string.len,
@@ -875,11 +919,11 @@ static void analyze_expr(
                 break;
             }
 
-            Type right_type = right.expr_type_ref.get(compiler);
+            Type right_type = compiler->expr_types[right_ref].get(compiler);
             if (right_type.kind != TypeKind_Int) {
                 String type_string = right_type.to_string(compiler);
                 compiler->add_error(
-                    right.loc,
+                    compiler->expr_locs[right_ref],
                     "bit shift expects runtime numeric types, instead "
                     "got '%.*s'",
                     (int)type_string.len,
@@ -889,12 +933,12 @@ static void analyze_expr(
 
             if (right_type.int_.is_signed) {
                 compiler->add_error(
-                    right.loc,
+                    compiler->expr_locs[right_ref],
                     "right side of bit shift operation needs to be unsigned");
                 break;
             }
 
-            expr.expr_type_ref = left.expr_type_ref;
+            compiler->expr_types[expr_ref] = compiler->expr_types[left_ref];
             break;
         }
         }
@@ -904,15 +948,15 @@ static void analyze_expr(
     }
 
     if (expected_type_ref.id != 0 &&
-        expected_type_ref.id != expr.expr_type_ref.id) {
+        expected_type_ref.id != compiler->expr_types[expr_ref].id) {
         Type expected_type = expected_type_ref.get(compiler);
-        Type expr_type = expr.expr_type_ref.get(compiler);
+        Type expr_type = compiler->expr_types[expr_ref].get(compiler);
 
         String expected_type_str = expected_type.to_string(compiler);
         String expr_type_str = expr_type.to_string(compiler);
 
         compiler->add_error(
-            expr.loc,
+            compiler->expr_locs[expr_ref],
             "unmatched types, expecting '%.*s', but got '%.*s'",
             (int)expected_type_str.len,
             expected_type_str.ptr,
@@ -940,10 +984,10 @@ analyze_stmt(Compiler *compiler, AnalyzerState *state, StmtRef stmt_ref)
     case StmtKind_Assign: {
         analyze_expr(compiler, state, stmt.assign.assigned_expr_ref);
 
-        Expr assigned_expr = stmt.assign.assigned_expr_ref.get(compiler);
         if (!stmt.assign.assigned_expr_ref.is_lvalue(compiler)) {
             compiler->add_error(
-                assigned_expr.loc, "expression is not assignable");
+                compiler->expr_locs[stmt.assign.assigned_expr_ref],
+                "expression is not assignable");
             break;
         }
 
@@ -951,7 +995,7 @@ analyze_stmt(Compiler *compiler, AnalyzerState *state, StmtRef stmt_ref)
             compiler,
             state,
             stmt.assign.value_expr_ref,
-            assigned_expr.expr_type_ref);
+            compiler->expr_types[stmt.assign.assigned_expr_ref]);
 
         break;
     }
@@ -981,25 +1025,27 @@ analyze_stmt(Compiler *compiler, AnalyzerState *state, StmtRef stmt_ref)
     case StmtKind_Return: {
         LANG_ASSERT(state->func_stack.len > 0);
 
-        Decl func_decl = state->func_stack.last()->get(compiler);
-        Type func_type = func_decl.decl_type_ref.get(compiler);
+        DeclRef func_decl_ref = *state->func_stack.last();
+        Type func_type = compiler->decl_types[func_decl_ref].get(compiler);
         LANG_ASSERT(func_type.kind == TypeKind_Function);
+
+        String func_name = compiler->decl_names[func_decl_ref];
 
         if (func_type.func.return_type.id == 0) {
             if (stmt.return_.returned_expr_ref.id > 0) {
                 compiler->add_error(
-                    stmt.loc,
+                    compiler->stmt_locs[stmt_ref],
                     "function '%.*s' does not return a value",
-                    (int)func_decl.name.len,
-                    func_decl.name.ptr);
+                    (int)func_name.len,
+                    func_name.ptr);
             }
         } else {
             if (stmt.return_.returned_expr_ref.id == 0) {
                 compiler->add_error(
-                    stmt.loc,
+                    compiler->stmt_locs[stmt_ref],
                     "function '%.*s' must return a value",
-                    (int)func_decl.name.len,
-                    func_decl.name.ptr);
+                    (int)func_name.len,
+                    func_name.ptr);
             } else {
                 analyze_expr(
                     compiler,
@@ -1043,6 +1089,7 @@ analyze_decl(Compiler *compiler, AnalyzerState *state, DeclRef decl_ref)
 
     LANG_ASSERT(decl_ref.id > 0);
     Decl decl = compiler->decls[decl_ref.id];
+    String decl_name = compiler->decl_names[decl_ref.id];
 
     switch (decl.kind) {
     case DeclKind_Unknown: {
@@ -1052,73 +1099,73 @@ analyze_decl(Compiler *compiler, AnalyzerState *state, DeclRef decl_ref)
 
     case DeclKind_Type: {
         Scope *scope = *state->scope_stack.last();
-        if (scope->lookup(decl.name).id != decl_ref.id) {
+        if (scope->lookup(decl_name).id != decl_ref.id) {
             scope->add(compiler, decl_ref);
         }
 
         analyze_expr(
             compiler, state, decl.type_decl.type_expr, compiler->type_type);
-        TypeRef as_type_ref =
-            decl.type_decl.type_expr.get(compiler).as_type_ref;
+        TypeRef as_type_ref = compiler->expr_as_types[decl.type_decl.type_expr];
         if (as_type_ref.id > 0) {
-            decl.as_type_ref = as_type_ref;
-            decl.decl_type_ref = compiler->type_type;
+            compiler->decl_as_types[decl_ref] = as_type_ref;
+            compiler->decl_types[decl_ref] = compiler->type_type;
         }
         break;
     }
 
     case DeclKind_ConstDecl: {
-        compiler->add_error(decl.loc, "const decl unimplemented");
+        compiler->add_error(
+            compiler->decl_locs[decl_ref], "const decl unimplemented");
         break;
     }
 
     case DeclKind_Function: {
-        decl.func.scope = Scope::create(
+        decl.func->scope = Scope::create(
             compiler, state->file_ref, *state->scope_stack.last());
 
-        for (ExprRef return_type_expr_ref : decl.func.return_type_expr_refs) {
+        for (ExprRef return_type_expr_ref : decl.func->return_type_expr_refs) {
             analyze_expr(
                 compiler, state, return_type_expr_ref, compiler->type_type);
         }
 
         TypeRef return_type = {};
-        if (decl.func.return_type_expr_refs.len == 0) {
+        if (decl.func->return_type_expr_refs.len == 0) {
             return_type = compiler->void_type;
-        } else if (decl.func.return_type_expr_refs.len == 1) {
+        } else if (decl.func->return_type_expr_refs.len == 1) {
             return_type =
-                decl.func.return_type_expr_refs[0].get(compiler).as_type_ref;
+                compiler->expr_as_types[decl.func->return_type_expr_refs[0]];
         } else {
             Slice<TypeRef> fields = compiler->arena->alloc<TypeRef>(
-                decl.func.return_type_expr_refs.len);
+                decl.func->return_type_expr_refs.len);
 
-            for (size_t i = 0; i < decl.func.return_type_expr_refs.len; ++i) {
-                fields[i] = decl.func.return_type_expr_refs[i]
-                                .get(compiler)
-                                .as_type_ref;
+            for (size_t i = 0; i < decl.func->return_type_expr_refs.len; ++i) {
+                fields[i] =
+                    compiler
+                        ->expr_as_types[decl.func->return_type_expr_refs[i]];
             }
 
             return_type = compiler->create_tuple_type(fields);
         }
 
         Slice<TypeRef> param_types =
-            compiler->arena->alloc<TypeRef>(decl.func.param_decl_refs.len);
+            compiler->arena->alloc<TypeRef>(decl.func->param_decl_refs.len);
 
-        for (size_t i = 0; i < decl.func.param_decl_refs.len; ++i) {
-            DeclRef param_decl_ref = decl.func.param_decl_refs[i];
+        for (size_t i = 0; i < decl.func->param_decl_refs.len; ++i) {
+            DeclRef param_decl_ref = decl.func->param_decl_refs[i];
             analyze_decl(compiler, state, param_decl_ref);
-            param_types[i] = param_decl_ref.get(compiler).decl_type_ref;
+            param_types[i] = compiler->decl_types[param_decl_ref];
 
-            decl.func.scope->add(compiler, param_decl_ref);
+            decl.func->scope->add(compiler, param_decl_ref);
         }
 
-        decl.decl_type_ref = compiler->create_func_type(
-            return_type, param_types, decl.func.flags & FunctionFlags_VarArg);
+        compiler->decl_types[decl_ref] = compiler->create_func_type(
+            return_type, param_types, decl.func->flags & FunctionFlags_VarArg);
 
         compiler->decls[decl_ref.id] = decl;
 
         state->func_stack.push_back(decl_ref);
-        state->scope_stack.push_back(decl.func.scope);
-        for (StmtRef stmt_ref : decl.func.body_stmts) {
+        state->scope_stack.push_back(decl.func->scope);
+        for (StmtRef stmt_ref : decl.func->body_stmts) {
             analyze_stmt(compiler, state, stmt_ref);
         }
         state->scope_stack.pop();
@@ -1130,8 +1177,8 @@ analyze_decl(Compiler *compiler, AnalyzerState *state, DeclRef decl_ref)
     case DeclKind_FunctionParameter: {
         analyze_expr(
             compiler, state, decl.func_param.type_expr, compiler->type_type);
-        decl.decl_type_ref =
-            decl.func_param.type_expr.get(compiler).as_type_ref;
+        compiler->decl_types[decl_ref] =
+            compiler->expr_as_types[decl.func_param.type_expr];
         break;
     }
 
@@ -1147,31 +1194,31 @@ analyze_decl(Compiler *compiler, AnalyzerState *state, DeclRef decl_ref)
                 state,
                 decl.local_var_decl.type_expr,
                 compiler->type_type);
-            var_type = decl.local_var_decl.type_expr.get(compiler).as_type_ref;
+            var_type = compiler->expr_as_types[decl.local_var_decl.type_expr];
         }
 
         if (decl.local_var_decl.value_expr.id > 0) {
             analyze_expr(
                 compiler, state, decl.local_var_decl.value_expr, var_type);
             if (var_type.id == 0) {
-                var_type =
-                    decl.local_var_decl.value_expr.get(compiler).expr_type_ref;
+                var_type = compiler->expr_types[decl.local_var_decl.value_expr];
             }
         }
 
-        decl.decl_type_ref = var_type;
+        compiler->decl_types[decl_ref] = var_type;
 
-        if (decl.decl_type_ref.id == 0) {
+        if (var_type.id == 0) {
             compiler->add_error(
-                decl.loc, "could not resolve type for variable declaration");
+                compiler->decl_locs[decl_ref],
+                "could not resolve type for variable declaration");
             break;
         }
 
-        if (!decl.decl_type_ref.is_runtime(compiler)) {
-            Type decl_type = decl.decl_type_ref.get(compiler);
+        if (!var_type.is_runtime(compiler)) {
+            Type decl_type = var_type.get(compiler);
             String type_string = decl_type.to_string(compiler);
             compiler->add_error(
-                decl.loc,
+                compiler->decl_locs[decl_ref],
                 "cannot create variable of non-runtime type: "
                 "'%.*s'",
                 (int)type_string.len,
@@ -1183,7 +1230,7 @@ analyze_decl(Compiler *compiler, AnalyzerState *state, DeclRef decl_ref)
 
     case DeclKind_GlobalVarDecl: {
         Scope *scope = *state->scope_stack.last();
-        if (scope->lookup(decl.name).id != decl_ref.id) {
+        if (scope->lookup(decl_name).id != decl_ref.id) {
             scope->add(compiler, decl_ref);
         }
 
@@ -1195,35 +1242,35 @@ analyze_decl(Compiler *compiler, AnalyzerState *state, DeclRef decl_ref)
                 state,
                 decl.local_var_decl.type_expr,
                 compiler->type_type);
-            var_type = decl.local_var_decl.type_expr.get(compiler).as_type_ref;
+            var_type = compiler->expr_as_types[decl.local_var_decl.type_expr];
         }
 
         if (decl.local_var_decl.value_expr.id > 0) {
             analyze_expr(
                 compiler, state, decl.local_var_decl.value_expr, var_type);
             if (var_type.id == 0) {
-                var_type =
-                    decl.local_var_decl.value_expr.get(compiler).expr_type_ref;
+                var_type = compiler->expr_types[decl.local_var_decl.value_expr];
             }
 
             compiler->add_error(
-                decl.loc,
+                compiler->decl_locs[decl_ref],
                 "global variable initializers are not yet implemented");
         }
 
-        decl.decl_type_ref = var_type;
+        compiler->decl_types[decl_ref] = var_type;
 
-        if (decl.decl_type_ref.id == 0) {
+        if (var_type.id == 0) {
             compiler->add_error(
-                decl.loc, "could not resolve type for variable declaration");
+                compiler->decl_locs[decl_ref],
+                "could not resolve type for variable declaration");
             break;
         }
 
-        if (!decl.decl_type_ref.is_runtime(compiler)) {
-            Type decl_type = decl.decl_type_ref.get(compiler);
+        if (!var_type.is_runtime(compiler)) {
+            Type decl_type = var_type.get(compiler);
             String type_string = decl_type.to_string(compiler);
             compiler->add_error(
-                decl.loc,
+                compiler->decl_locs[decl_ref],
                 "cannot create variable of non-runtime type: "
                 "'%.*s'",
                 (int)type_string.len,

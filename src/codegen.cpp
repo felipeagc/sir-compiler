@@ -168,7 +168,8 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
     }
 
     case ExprKind_IntLiteral: {
-        Type type = expr.expr_type_ref.get(compiler);
+        TypeRef type_ref = compiler->expr_types[expr_ref];
+        Type type = type_ref.get(compiler);
 
         switch (type.kind) {
         case TypeKind_Int: {
@@ -176,7 +177,7 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
                 false,
                 SIRBuilderInsertImmInt(
                     ctx->builder,
-                    ctx->type_values[expr.expr_type_ref.id],
+                    ctx->type_values[type_ref.id],
                     expr.int_literal.u64),
             };
             break;
@@ -186,7 +187,7 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
                 false,
                 SIRBuilderInsertImmFloat(
                     ctx->builder,
-                    ctx->type_values[expr.expr_type_ref.id],
+                    ctx->type_values[type_ref.id],
                     (double)expr.int_literal.u64),
             };
             break;
@@ -198,13 +199,15 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
     }
 
     case ExprKind_FloatLiteral: {
-        LANG_ASSERT(expr.expr_type_ref.get(compiler).kind == TypeKind_Float);
+        LANG_ASSERT(
+            compiler->expr_types[expr_ref].get(compiler).kind ==
+            TypeKind_Float);
 
         value = {
             false,
             SIRBuilderInsertImmFloat(
                 ctx->builder,
-                ctx->type_values[expr.expr_type_ref.id],
+                ctx->type_values[compiler->expr_types[expr_ref].id],
                 (double)expr.float_literal.f64)};
 
         break;
@@ -216,7 +219,7 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
     }
 
     case ExprKind_StringLiteral: {
-        Type type = expr.expr_type_ref.get(compiler);
+        Type type = compiler->expr_types[expr_ref].get(compiler);
 
         switch (type.kind) {
         case TypeKind_Pointer: {
@@ -276,8 +279,8 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
     }
 
     case ExprKind_FunctionCall: {
-        Expr func_expr = expr.func_call.func_expr_ref.get(compiler);
-        Type func_type = func_expr.expr_type_ref.get(compiler);
+        ExprRef func_expr_ref = expr.func_call.func_expr_ref;
+        Type func_type = compiler->expr_types[func_expr_ref].get(compiler);
 
         switch (func_type.kind) {
         case TypeKind_Function: {
@@ -321,17 +324,20 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
 
             LANG_ASSERT(expr.func_call.param_refs.len == 1);
 
-            Expr param_expr = expr.func_call.param_refs[0].get(compiler);
+            ExprRef param_expr_ref = expr.func_call.param_refs[0];
 
-            Type dest_type = expr.expr_type_ref.get(compiler);
-            Type source_type = param_expr.expr_type_ref.get(compiler);
+            Type dest_type = compiler->expr_types[expr_ref].get(compiler);
+            Type source_type =
+                compiler->expr_types[param_expr_ref].get(compiler);
 
-            SIRType *dest_type_ir = ctx->type_values[expr.expr_type_ref.id];
+            SIRType *dest_type_ir =
+                ctx->type_values[compiler->expr_types[expr_ref].id];
 
             SIRInstRef source_value = load_lvalue(
                 ctx, codegen_expr(compiler, ctx, expr.func_call.param_refs[0]));
 
-            if (param_expr.expr_type_ref.id == expr.expr_type_ref.id) {
+            if (compiler->expr_types[param_expr_ref].id ==
+                compiler->expr_types[expr_ref].id) {
                 value = {false, source_value};
             } else if (
                 dest_type.kind == TypeKind_Int &&
@@ -373,33 +379,37 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
         switch (expr.builtin_call.builtin) {
         case BuiltinFunction_Unknown: LANG_ASSERT(0); break;
         case BuiltinFunction_Sizeof: {
-            Expr param0 = expr.builtin_call.param_refs[0].get(compiler);
-            uint64_t size = param0.as_type_ref.get(compiler).size_of(compiler);
+            ExprRef param0_ref = expr.builtin_call.param_refs[0];
+            uint64_t size =
+                compiler->expr_as_types[param0_ref].get(compiler).size_of(
+                    compiler);
 
             value = {
                 false,
                 SIRBuilderInsertImmInt(
                     ctx->builder,
-                    ctx->type_values[expr.expr_type_ref.id],
+                    ctx->type_values[compiler->expr_types[expr_ref].id],
                     size)};
 
             break;
         }
         case BuiltinFunction_Alignof: {
-            Expr param0 = expr.builtin_call.param_refs[0].get(compiler);
-            uint64_t size = param0.as_type_ref.get(compiler).align_of(compiler);
+            ExprRef param0_ref = expr.builtin_call.param_refs[0];
+            uint64_t size =
+                compiler->expr_as_types[param0_ref].get(compiler).align_of(
+                    compiler);
 
             value = {
                 false,
                 SIRBuilderInsertImmInt(
                     ctx->builder,
-                    ctx->type_values[expr.expr_type_ref.id],
+                    ctx->type_values[compiler->expr_types[expr_ref].id],
                     size)};
 
             break;
         }
         case BuiltinFunction_PtrCast: {
-            Expr param0 = expr.builtin_call.param_refs[0].get(compiler);
+            ExprRef param0_ref = expr.builtin_call.param_refs[0];
 
             CodegenValue ptr_value =
                 codegen_expr(compiler, ctx, expr.builtin_call.param_refs[1]);
@@ -408,7 +418,7 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
                 false,
                 SIRBuilderInsertPtrCast(
                     ctx->builder,
-                    ctx->type_values[param0.as_type_ref.id],
+                    ctx->type_values[compiler->expr_as_types[param0_ref]],
                     load_lvalue(ctx, ptr_value))};
 
             break;
@@ -445,7 +455,7 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
 
     case ExprKind_Access: {
         Type accessed_type =
-            expr.access.left_ref.get(compiler).expr_type_ref.get(compiler);
+            compiler->expr_types[expr.access.left_ref].get(compiler);
         Expr ident_expr = expr.access.accessed_ident_ref.get(compiler);
         LANG_ASSERT(ident_expr.kind == ExprKind_Identifier);
         String accessed_field = ident_expr.ident.str;
@@ -474,7 +484,7 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
             }
 
             TypeRef field_type = accessed_type.struct_.field_types[field_index];
-            expr.expr_type_ref = field_type;
+            compiler->expr_types[expr_ref] = field_type;
 
             break;
         }
@@ -498,8 +508,9 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
             if (!operand_value.is_lvalue) {
                 SIRInstRef func_ref = *ctx->function_stack.last();
 
-                Expr left_expr = expr.unary.left_ref.get(compiler);
-                SIRType *ir_type = ctx->type_values[left_expr.expr_type_ref.id];
+                ExprRef left_expr_ref = expr.unary.left_ref;
+                SIRType *ir_type =
+                    ctx->type_values[compiler->expr_types[left_expr_ref]];
 
                 value = {
                     false,
@@ -545,8 +556,8 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
 
         SIRBinaryOperation op = {};
 
-        Expr left = expr.binary.left_ref.get(compiler);
-        Type operand_type = left.expr_type_ref.get(compiler);
+        ExprRef left_ref = expr.binary.left_ref;
+        Type operand_type = compiler->expr_types[left_ref].get(compiler);
 
         switch (expr.binary.op) {
         case BinaryOp_Unknown:
@@ -861,7 +872,8 @@ codegen_decl(Compiler *compiler, CodegenContext *ctx, DeclRef decl_ref)
     }
 
     case DeclKind_Function: {
-        TypeRef func_type_ref = decl.decl_type_ref;
+        String decl_name = compiler->decl_names[decl_ref];
+        TypeRef func_type_ref = compiler->decl_types[decl_ref];
         Type func_type = func_type_ref.get(compiler);
 
         Slice<SIRType *> param_types =
@@ -873,8 +885,8 @@ codegen_decl(Compiler *compiler, CodegenContext *ctx, DeclRef decl_ref)
         SIRType *return_type = ctx->type_values[func_type.func.return_type.id];
 
         SIRLinkage linkage = SIRLinkage_Internal;
-        if ((decl.func.flags & FunctionFlags_Exported) ||
-            (decl.func.flags & FunctionFlags_Extern)) {
+        if ((decl.func->flags & FunctionFlags_Exported) ||
+            (decl.func->flags & FunctionFlags_Extern)) {
             linkage = SIRLinkage_External;
         }
 
@@ -882,8 +894,8 @@ codegen_decl(Compiler *compiler, CodegenContext *ctx, DeclRef decl_ref)
             false,
             SIRModuleAddFunction(
                 module,
-                decl.name.ptr,
-                decl.name.len,
+                decl_name.ptr,
+                decl_name.len,
                 SIRCallingConvention_SystemV,
                 linkage,
                 func_type.func.vararg,
@@ -895,21 +907,21 @@ codegen_decl(Compiler *compiler, CodegenContext *ctx, DeclRef decl_ref)
 
         ctx->function_stack.push_back(value.inst_ref);
 
-        for (size_t i = 0; i < decl.func.param_decl_refs.len; ++i) {
-            DeclRef param_decl_ref = decl.func.param_decl_refs[i];
+        for (size_t i = 0; i < decl.func->param_decl_refs.len; ++i) {
+            DeclRef param_decl_ref = decl.func->param_decl_refs[i];
 
             SIRInstRef param_value = {};
             param_value = SIRModuleGetFuncParam(module, value.inst_ref, i);
             ctx->decl_values[param_decl_ref.id] = {false, param_value};
         }
 
-        if (!(decl.func.flags & FunctionFlags_Extern)) {
+        if (!(decl.func->flags & FunctionFlags_Extern)) {
             SIRBuilderSetFunction(ctx->builder, value.inst_ref);
 
             auto block = SIRModuleInsertBlockAtEnd(module, value.inst_ref);
             SIRBuilderPositionAtEnd(ctx->builder, block);
 
-            for (StmtRef stmt_ref : decl.func.body_stmts) {
+            for (StmtRef stmt_ref : decl.func->body_stmts) {
                 codegen_stmt(compiler, ctx, stmt_ref);
             }
 
@@ -934,10 +946,10 @@ codegen_decl(Compiler *compiler, CodegenContext *ctx, DeclRef decl_ref)
                 if (last_block_inst_count == 0 ||
                     last_inst_kind != SIRInstKind_ReturnValue) {
                     compiler->add_error(
-                        decl.loc,
+                        compiler->decl_locs[decl_ref],
                         "no return statement for '%.*s'",
-                        (int)decl.name.len,
-                        decl.name.ptr);
+                        (int)decl_name.len,
+                        decl_name.ptr);
                 }
             }
         }
@@ -955,7 +967,7 @@ codegen_decl(Compiler *compiler, CodegenContext *ctx, DeclRef decl_ref)
 
     case DeclKind_LocalVarDecl: {
         SIRInstRef func_ref = *ctx->function_stack.last();
-        SIRType *ir_type = ctx->type_values[decl.decl_type_ref.id];
+        SIRType *ir_type = ctx->type_values[compiler->decl_types[decl_ref]];
         LANG_ASSERT(ir_type);
 
         value = {true, SIRModuleAddStackSlot(module, func_ref, ir_type)};
@@ -974,7 +986,7 @@ codegen_decl(Compiler *compiler, CodegenContext *ctx, DeclRef decl_ref)
     }
 
     case DeclKind_GlobalVarDecl: {
-        SIRType *ir_type = ctx->type_values[decl.decl_type_ref.id];
+        SIRType *ir_type = ctx->type_values[compiler->decl_types[decl_ref]];
 
         Slice<uint8_t> global_data = compiler->arena->alloc_init<uint8_t>(
             SIRTypeSizeOf(ctx->module, ir_type));
@@ -1053,8 +1065,7 @@ void codegen_file(Compiler *compiler, FileRef file_ref)
 #endif
 
     SIRObjectBuilder *obj_builder = SIRCreateELF64Builder(ctx.module);
-    SIRAsmBuilder *asm_builder =
-        SIRCreateX64Builder(ctx.module, obj_builder);
+    SIRAsmBuilder *asm_builder = SIRCreateX64Builder(ctx.module, obj_builder);
 
     SIRAsmBuilderGenerate(asm_builder);
 

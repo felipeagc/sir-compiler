@@ -1,7 +1,41 @@
 #include "compiler.hpp"
 
 #include <stdio.h>
+#ifdef __linux__
 #include <time.h>
+#endif
+
+struct Clock {
+    int64_t start_seconds = 0;
+    int64_t start_nanoseconds = 0;
+
+    void start()
+    {
+#ifdef __linux__
+        timespec start_time;
+        clock_gettime(CLOCK_MONOTONIC, &start_time);
+        this->start_seconds = start_time.tv_sec;
+        this->start_nanoseconds = start_time.tv_nsec;
+#else
+#error Unsupported OS
+#endif
+    }
+
+    double elapsed()
+    {
+#ifdef __linux__
+        timespec end_time;
+        clock_gettime(CLOCK_MONOTONIC, &end_time);
+        int64_t ns_diff =
+            ((int64_t)end_time.tv_sec - (int64_t)this->start_seconds) *
+                (int64_t)1000000000 +
+            ((int64_t)end_time.tv_nsec - (int64_t)this->start_nanoseconds);
+        return (double)ns_diff / 1000000000.0;
+#else
+#error Unsupported OS
+#endif
+    }
+};
 
 bool ExprRef::is_lvalue(Compiler *compiler)
 {
@@ -382,13 +416,8 @@ void Compiler::print_errors()
     }
 }
 
-static void
-print_time_taken(const char *task_name, timespec start_time, timespec end_time)
+static void print_time_taken(const char *task_name, double time)
 {
-    uint64_t secs = end_time.tv_sec - start_time.tv_sec;
-    uint64_t nsecs = end_time.tv_nsec - start_time.tv_nsec;
-    double time = (double)secs + ((double)nsecs / (double)1e9);
-
     printf("%s time: %.3lf seconds\n", task_name, time);
 }
 
@@ -432,34 +461,27 @@ void Compiler::compile(String path)
             .top_level_decls = Array<DeclRef>::create(this->arena),
         };
 
-        timespec total_start_time, total_end_time;
-        timespec start_time, end_time;
+        Clock total_clock = {};
+        Clock phase_clock = {};
 
-        clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &total_start_time);
+        total_clock.start();
 
-        clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &start_time);
+        phase_clock.start();
         parse_file(this, file_ref);
-        clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &end_time);
-        print_time_taken("Parser", start_time, end_time);
+        print_time_taken("Parser", phase_clock.elapsed());
 
-        clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &start_time);
+        phase_clock.start();
         analyze_file(this, file_ref);
-        clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &end_time);
-        print_time_taken("Analysis", start_time, end_time);
+        print_time_taken("Analysis", phase_clock.elapsed());
 
-        clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &start_time);
+        phase_clock.start();
         codegen_file(this, file_ref);
-        clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &end_time);
-        print_time_taken("Codegen", start_time, end_time);
-
-        clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &total_end_time);
+        print_time_taken("Codegen", phase_clock.elapsed());
 
         {
             File *file = &this->files[file_ref.id];
 
-            uint64_t secs = total_end_time.tv_sec - total_start_time.tv_sec;
-            uint64_t nsecs = total_end_time.tv_nsec - total_start_time.tv_nsec;
-            double time = (double)secs + ((double)nsecs / (double)1e9);
+            double time = total_clock.elapsed();
             double total_line_count = (double)file->line_count;
 
             printf("Compilation time: %.3lf seconds\n", time);

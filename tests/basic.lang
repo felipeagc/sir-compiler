@@ -48,7 +48,7 @@ def export main() {
 
 	{
 		i := i32(0);
-		while (i < i32(10)) {
+		while (i < 10) {
 			printf("iter %d\n", i);
 			i = i + 1;
 		}

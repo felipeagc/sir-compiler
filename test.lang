@@ -3,8 +3,8 @@ def extern vararg printf(arg: *u8);
 def print_int(x: u64) {
 	n := x;
 	i := u32(0);
-	while (i < u32(8)) {
-		printf("%02x", (n >> u32((u32(7) - i) * 8)) & u64(0xff));
+	while (i < 8) {
+		printf("%02x", (n >> ((7 - i) * 8)) & 0xff);
 		i = i + 1;
 	}
 	printf("\n");
@@ -39,6 +39,9 @@ def export main() {
 	// c := &b;
 	// a := u64(8) / b;
 	// printf("%d\n", i32(a));
+
+	a := i32(123);
+	b := a + 321;
 
 	print_int(0xFF00000000000000);
 	print_int(0xffffffffffffffff);

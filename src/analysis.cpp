@@ -645,53 +645,63 @@ static void analyze_expr(
         case BinaryOp_Mod: {
             size_t error_checkpoint = compiler->get_error_checkpoint();
 
-            analyze_expr(
-                compiler, state, expr.binary.left_ref, expected_type_ref);
-            Expr left = expr.binary.left_ref.get(compiler);
-            Type left_type = left.expr_type_ref.get(compiler);
+            if (expected_type_ref.id == 0) {
+                TypeRef type_refs[2] = {};
 
-            if (left_type.kind == TypeKind_Unknown ||
-                left_type.kind == TypeKind_UntypedInt ||
-                left_type.kind == TypeKind_UntypedFloat) {
-                compiler->restore_error_checkpoint(error_checkpoint);
+                analyze_expr(compiler, state, expr.binary.left_ref);
+                type_refs[0] = expr.binary.left_ref.get(compiler).expr_type_ref;
 
-                analyze_expr(
-                    compiler, state, expr.binary.left_ref, expected_type_ref);
-                left = expr.binary.left_ref.get(compiler);
-                left_type = left.expr_type_ref.get(compiler);
+                analyze_expr(compiler, state, expr.binary.right_ref);
+                type_refs[1] =
+                    expr.binary.right_ref.get(compiler).expr_type_ref;
+
+                for (size_t i = 0; i < LANG_CARRAY_LENGTH(type_refs); ++i) {
+                    Type type = type_refs[i].get(compiler);
+                    if (type.kind == TypeKind_Int ||
+                        type.kind == TypeKind_Float) {
+                        expected_type_ref = type_refs[i];
+                        break;
+                    }
+                }
             }
 
-            error_checkpoint = compiler->get_error_checkpoint();
+            compiler->restore_error_checkpoint(error_checkpoint);
 
-            analyze_expr(
-                compiler, state, expr.binary.right_ref, expected_type_ref);
-            Expr right = expr.binary.right_ref.get(compiler);
-            Type right_type = right.expr_type_ref.get(compiler);
-
-            if (right_type.kind == TypeKind_Unknown ||
-                right_type.kind == TypeKind_UntypedInt ||
-                right_type.kind == TypeKind_UntypedFloat) {
-                compiler->restore_error_checkpoint(error_checkpoint);
-
-                analyze_expr(
-                    compiler, state, expr.binary.right_ref, expected_type_ref);
-                right = expr.binary.right_ref.get(compiler);
-                right_type = right.expr_type_ref.get(compiler);
-            }
-
-            if (left.expr_type_ref.id != right.expr_type_ref.id) {
+            if (expected_type_ref.id == 0) {
                 compiler->add_error(
-                    expr.loc,
-                    "mismatched types for binary expression operands");
+                    expr.loc, "cannot infer type for binary expression");
                 break;
             }
 
-            Type type = left_type;
+            analyze_expr(
+                compiler, state, expr.binary.left_ref, expected_type_ref);
+            analyze_expr(
+                compiler, state, expr.binary.right_ref, expected_type_ref);
+            Expr left = expr.binary.left_ref.get(compiler);
+            Expr right = expr.binary.right_ref.get(compiler);
+
+            if (left.expr_type_ref.id != right.expr_type_ref.id) {
+                String left_type_str =
+                    left.expr_type_ref.get(compiler).to_string(compiler);
+                String right_type_str =
+                    right.expr_type_ref.get(compiler).to_string(compiler);
+                compiler->add_error(
+                    expr.loc,
+                    "mismatched types for binary expression operands, got "
+                    "'%.*s' and '%.*s'",
+                    (int)left_type_str.len,
+                    left_type_str.ptr,
+                    (int)right_type_str.len,
+                    right_type_str.ptr);
+                break;
+            }
+
+            Type type = left.expr_type_ref.get(compiler);
             if (type.kind == TypeKind_UntypedInt ||
                 type.kind == TypeKind_UntypedFloat) {
                 compiler->add_error(
                     expr.loc,
-                    "cannot use compile-time integers in binary expression");
+                    "cannot use untyped numbers in binary expression");
                 break;
             }
 
@@ -709,61 +719,67 @@ static void analyze_expr(
         case BinaryOp_BitXor: {
             size_t error_checkpoint = compiler->get_error_checkpoint();
 
-            analyze_expr(compiler, state, expr.binary.left_ref);
-            Expr left = expr.binary.left_ref.get(compiler);
-            Type left_type = left.expr_type_ref.get(compiler);
+            if (expected_type_ref.id == 0) {
+                TypeRef type_refs[2] = {};
 
-            if (left_type.kind == TypeKind_Unknown ||
-                left_type.kind == TypeKind_UntypedInt ||
-                left_type.kind == TypeKind_UntypedFloat) {
-                compiler->restore_error_checkpoint(error_checkpoint);
+                analyze_expr(compiler, state, expr.binary.left_ref);
+                type_refs[0] = expr.binary.left_ref.get(compiler).expr_type_ref;
 
-                analyze_expr(
-                    compiler, state, expr.binary.left_ref, expected_type_ref);
-                left = expr.binary.left_ref.get(compiler);
-                left_type = left.expr_type_ref.get(compiler);
+                analyze_expr(compiler, state, expr.binary.right_ref);
+                type_refs[1] =
+                    expr.binary.right_ref.get(compiler).expr_type_ref;
+
+                for (size_t i = 0; i < LANG_CARRAY_LENGTH(type_refs); ++i) {
+                    Type type = type_refs[i].get(compiler);
+                    if (type.kind == TypeKind_Int) {
+                        expected_type_ref = type_refs[i];
+                        break;
+                    }
+                }
             }
 
-            error_checkpoint = compiler->get_error_checkpoint();
+            compiler->restore_error_checkpoint(error_checkpoint);
 
-            analyze_expr(compiler, state, expr.binary.right_ref);
-            Expr right = expr.binary.right_ref.get(compiler);
-            Type right_type = right.expr_type_ref.get(compiler);
-
-            if (right_type.kind == TypeKind_Unknown ||
-                right_type.kind == TypeKind_UntypedInt ||
-                right_type.kind == TypeKind_UntypedFloat) {
-                compiler->restore_error_checkpoint(error_checkpoint);
-
-                analyze_expr(
-                    compiler, state, expr.binary.right_ref, expected_type_ref);
-                right = expr.binary.right_ref.get(compiler);
-                right_type = right.expr_type_ref.get(compiler);
-            }
-
-            if (left.expr_type_ref.id != right.expr_type_ref.id) {
+            if (expected_type_ref.id == 0) {
                 compiler->add_error(
-                    expr.loc,
-                    "mismatched types for bitwise expression operands");
+                    expr.loc, "cannot infer type for binary expression");
                 break;
             }
 
-            Type type = left_type;
-            if (type.kind == TypeKind_UntypedInt ||
-                type.kind == TypeKind_UntypedFloat) {
-                String type_string = type.to_string(compiler);
+            analyze_expr(
+                compiler, state, expr.binary.left_ref, expected_type_ref);
+            analyze_expr(
+                compiler, state, expr.binary.right_ref, expected_type_ref);
+            Expr left = expr.binary.left_ref.get(compiler);
+            Expr right = expr.binary.right_ref.get(compiler);
+
+            if (left.expr_type_ref.id != right.expr_type_ref.id) {
+                String left_type_str =
+                    left.expr_type_ref.get(compiler).to_string(compiler);
+                String right_type_str =
+                    right.expr_type_ref.get(compiler).to_string(compiler);
                 compiler->add_error(
                     expr.loc,
-                    "bitwise expression expects runtime numeric types, "
-                    "instead got '%.*s'",
-                    (int)type_string.len,
-                    type_string.ptr);
+                    "mismatched types for binary expression operands, got "
+                    "'%.*s' and '%.*s'",
+                    (int)left_type_str.len,
+                    left_type_str.ptr,
+                    (int)right_type_str.len,
+                    right_type_str.ptr);
+                break;
+            }
+
+            Type type = left.expr_type_ref.get(compiler);
+            if (type.kind == TypeKind_UntypedInt) {
+                compiler->add_error(
+                    expr.loc,
+                    "cannot use untyped numbers in binary expression");
                 break;
             }
 
             if (type.kind != TypeKind_Int) {
                 compiler->add_error(
-                    expr.loc, "bitwise expression expects numeric operands");
+                    expr.loc, "binary expression expects integer operands");
                 break;
             }
 
@@ -777,8 +793,36 @@ static void analyze_expr(
         case BinaryOp_GreaterEqual:
         case BinaryOp_Less:
         case BinaryOp_LessEqual: {
-            analyze_expr(compiler, state, expr.binary.left_ref);
-            analyze_expr(compiler, state, expr.binary.right_ref);
+            size_t error_checkpoint = compiler->get_error_checkpoint();
+
+            TypeRef common_type_ref = {0};
+
+            {
+                TypeRef type_refs[2] = {};
+
+                analyze_expr(compiler, state, expr.binary.left_ref);
+                type_refs[0] = expr.binary.left_ref.get(compiler).expr_type_ref;
+
+                analyze_expr(compiler, state, expr.binary.right_ref);
+                type_refs[1] =
+                    expr.binary.right_ref.get(compiler).expr_type_ref;
+
+                for (size_t i = 0; i < LANG_CARRAY_LENGTH(type_refs); ++i) {
+                    Type type = type_refs[i].get(compiler);
+                    if (type.kind == TypeKind_Int ||
+                        type.kind == TypeKind_Float) {
+                        common_type_ref = type_refs[i];
+                        break;
+                    }
+                }
+            }
+
+            compiler->restore_error_checkpoint(error_checkpoint);
+
+            analyze_expr(
+                compiler, state, expr.binary.left_ref, common_type_ref);
+            analyze_expr(
+                compiler, state, expr.binary.right_ref, common_type_ref);
             Expr left = expr.binary.left_ref.get(compiler);
             Expr right = expr.binary.right_ref.get(compiler);
 
@@ -813,7 +857,8 @@ static void analyze_expr(
 
         case BinaryOp_LShift:
         case BinaryOp_RShift: {
-            analyze_expr(compiler, state, expr.binary.left_ref);
+            analyze_expr(
+                compiler, state, expr.binary.left_ref, expected_type_ref);
             analyze_expr(compiler, state, expr.binary.right_ref);
             Expr left = expr.binary.left_ref.get(compiler);
             Expr right = expr.binary.right_ref.get(compiler);

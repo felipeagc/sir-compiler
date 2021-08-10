@@ -970,19 +970,27 @@ static void analyze_expr(
             }
 
             Type type = left_type_ref.inner(compiler).get(compiler);
-            if (!type.is_numeric()) {
-                compiler->add_error(
-                    compiler->expr_locs[expr_ref],
-                    "comparison expression expects numeric operands");
-                break;
-            }
 
-            if (!type.is_runtime_numeric()) {
+            bool is_valid_bool_op = type.kind == TypeKind_Bool &&
+                                    (expr.binary.op == BinaryOp_Equal ||
+                                     expr.binary.op == BinaryOp_NotEqual);
+
+            if (type.is_numeric()) {
+                if (!type.is_runtime_numeric()) {
+                    String type_string = type.to_string(compiler);
+                    compiler->add_error(
+                        compiler->expr_locs[expr_ref],
+                        "comparison expression expects runtime numeric types, "
+                        "instead got '%.*s'",
+                        (int)type_string.len,
+                        type_string.ptr);
+                    break;
+                }
+            } else if (!is_valid_bool_op) {
                 String type_string = type.to_string(compiler);
                 compiler->add_error(
                     compiler->expr_locs[expr_ref],
-                    "comparison expression expects runtime numeric types, "
-                    "instead got '%.*s'",
+                    "invalid type for binary expression '%*.s'",
                     (int)type_string.len,
                     type_string.ptr);
                 break;

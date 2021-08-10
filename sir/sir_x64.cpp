@@ -1388,6 +1388,8 @@ void X64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
             break;
         }
 
+        case SIRBinaryOperation_BEQ:
+        case SIRBinaryOperation_BNE:
         case SIRBinaryOperation_IEQ:
         case SIRBinaryOperation_INE:
         case SIRBinaryOperation_UGT:
@@ -1418,9 +1420,11 @@ void X64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
             this->encode(x86_inst, FE_AX, FE_DX);
 
             switch (inst.binop.op) {
+            case SIRBinaryOperation_BEQ:
             case SIRBinaryOperation_IEQ:
                 this->encode(FE_SETZ8r, FE_AX); // sete
                 break;
+            case SIRBinaryOperation_BNE:
             case SIRBinaryOperation_INE:
                 this->encode(FE_SETNZ8r, FE_AX); // setne
                 break;

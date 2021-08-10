@@ -48,7 +48,7 @@ fn export main() {
 	printf("@sizeof(usize) = %d\n", i32(@sizeof(usize)));
 	s: usize = 1231;
 
-	if (@defined("linux")) {
+	if (@defined("linux") == true) {
 		printf("Linux\n");
 	}
 	my_int2 := MyInt(123);

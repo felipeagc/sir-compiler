@@ -636,6 +636,7 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
 
         case BinaryOp_Equal: {
             switch (operand_type.kind) {
+            case TypeKind_Bool: op = SIRBinaryOperation_BEQ; break;
             case TypeKind_Int: op = SIRBinaryOperation_IEQ; break;
             case TypeKind_Float: op = SIRBinaryOperation_FEQ; break;
             default: LANG_ASSERT(0);
@@ -645,6 +646,7 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
 
         case BinaryOp_NotEqual: {
             switch (operand_type.kind) {
+            case TypeKind_Bool: op = SIRBinaryOperation_BNE; break;
             case TypeKind_Int: op = SIRBinaryOperation_INE; break;
             case TypeKind_Float: op = SIRBinaryOperation_FNE; break;
             default: LANG_ASSERT(0);

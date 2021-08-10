@@ -40,6 +40,8 @@ static const char *binop_to_string(SIRBinaryOperation op)
     case SIRBinaryOperation_FDiv: return "fdiv";
     case SIRBinaryOperation_FRem: return "frem";
 
+    case SIRBinaryOperation_BEQ: return "beq";
+    case SIRBinaryOperation_BNE: return "bne";
     case SIRBinaryOperation_IEQ: return "ieq";
     case SIRBinaryOperation_INE: return "ine";
     case SIRBinaryOperation_UGT: return "ugt";
@@ -1111,6 +1113,8 @@ SIRInstRef SIRBuilderInsertBinop(
         break;
     }
 
+    case SIRBinaryOperation_BEQ:
+    case SIRBinaryOperation_BNE:
     case SIRBinaryOperation_IEQ:
     case SIRBinaryOperation_INE:
     case SIRBinaryOperation_UGT:

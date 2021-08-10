@@ -1,6 +1,6 @@
-def extern vararg printf(_: *u8);
+fn extern vararg printf(_: *u8);
 
-def export main(): i32 {
+fn export main(): i32 {
 	// Integer addition
 
 	printf("%d\n",  i32(u8(1 + 2)));

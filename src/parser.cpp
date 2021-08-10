@@ -67,7 +67,7 @@ static inline String token_kind_to_string(TokenKind kind)
     case TokenKind_Global: return "global";
     case TokenKind_Inline: return "inline";
     case TokenKind_Macro: return "macro";
-    case TokenKind_Def: return "def";
+    case TokenKind_Fn: return "fn";
     case TokenKind_Type: return "type";
     case TokenKind_Struct: return "struct";
     case TokenKind_Union: return "union";
@@ -1566,7 +1566,7 @@ static void parse_top_level_decl(
 
     Token next_token = state->peek_token();
     switch (next_token.kind) {
-    case TokenKind_Def: {
+    case TokenKind_Fn: {
         Token func_token = state->next_token();
 
         Location func_decl_loc = func_token.loc;

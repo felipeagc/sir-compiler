@@ -151,7 +151,7 @@ enum TokenKind {
     TokenKind_Export,
     TokenKind_Inline,
     TokenKind_VarArg,
-    TokenKind_Def,
+    TokenKind_Fn,
     TokenKind_Macro,
     TokenKind_Type,
     TokenKind_Struct,

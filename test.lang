@@ -1,6 +1,6 @@
-def extern vararg printf(arg: *u8);
+fn extern vararg printf(arg: *u8);
 
-def print_int(x: u64) {
+fn print_int(x: u64) {
 	n := x;
 	i := u32(0);
 	while (i < 8) {
@@ -22,14 +22,14 @@ def print_int(x: u64) {
 // 	d: f64,
 // };
 // 
-// def func1(p1: i32, p2: i32, p3: i32, p4: i32, p5: i32, s1: P): S {
+// fn func1(p1: i32, p2: i32, p3: i32, p4: i32, p5: i32, s1: P): S {
 // 	printf("%f\n", s1.c);
 // 	s: S;
 // 	s.b = 123;
 // 	return s;
 // }
 
-def export main() {
+fn export main() {
 	// p: P;
 	// p.c = 3;
 	// p2 := func1(1, 2, 3, 4, 5, p);

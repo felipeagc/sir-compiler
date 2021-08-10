@@ -193,7 +193,7 @@ Compiler Compiler::create()
     keyword_map.set("vararg", TokenKind_VarArg);
     keyword_map.set("export", TokenKind_Export);
     keyword_map.set("inline", TokenKind_Inline);
-    keyword_map.set("def", TokenKind_Def);
+    keyword_map.set("fn", TokenKind_Fn);
     keyword_map.set("type", TokenKind_Type);
     keyword_map.set("struct", TokenKind_Struct);
     keyword_map.set("global", TokenKind_Global);

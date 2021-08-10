@@ -171,10 +171,10 @@ struct MetaValue {
             uint8_t bytes;
         } reg;
         struct {
-            RegisterIndex base;
-            RegisterIndex index;
             int32_t scale;
             int32_t offset;
+            RegisterIndex base;
+            RegisterIndex index;
         } regmem;
         struct {
             size_t offset;

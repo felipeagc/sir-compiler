@@ -207,6 +207,7 @@ enum BuiltinFunction {
     BuiltinFunction_Sizeof,
     BuiltinFunction_Alignof,
     BuiltinFunction_PtrCast,
+    BuiltinFunction_Defined,
 };
 
 enum TypeKind {
@@ -329,6 +330,7 @@ struct Type {
 struct InterpValue {
     TypeRef type_ref;
     union {
+        bool boolean;
         uint8_t u8;
         uint16_t u16;
         uint32_t u32;
@@ -574,6 +576,7 @@ struct Compiler {
 
     uint32_t distinct_type_counter;
 
+    StringMap<bool> defines;
     Array<File> files;
     StringMap<TypeRef> type_map;
     Array<Type> types;

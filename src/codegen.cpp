@@ -64,7 +64,8 @@ get_ir_type(Compiler *compiler, SIRModule *module, const Type &type)
         return SIRModuleGetU8Type(module);
     }
     case TypeKind_Distinct: {
-        return get_ir_type(compiler, module, type.distinct.sub_type.get(compiler));
+        return get_ir_type(
+            compiler, module, type.distinct.sub_type.get(compiler));
     }
     case TypeKind_Int: {
         if (type.int_.is_signed) {
@@ -333,9 +334,11 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
 
             ExprRef param_expr_ref = expr.func_call.param_refs[0];
 
-            Type dest_type = compiler->expr_types[expr_ref].inner(compiler).get(compiler);
+            Type dest_type =
+                compiler->expr_types[expr_ref].inner(compiler).get(compiler);
             Type source_type =
-                compiler->expr_types[param_expr_ref].inner(compiler).get(compiler);
+                compiler->expr_types[param_expr_ref].inner(compiler).get(
+                    compiler);
 
             SIRType *dest_type_ir =
                 ctx->type_values[compiler->expr_types[expr_ref].id];
@@ -426,6 +429,17 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
                     ctx->builder,
                     ctx->type_values[compiler->expr_as_types[param0_ref]],
                     load_lvalue(ctx, ptr_value))};
+
+            break;
+        }
+        case BuiltinFunction_Defined: {
+            ExprRef param0_ref = expr.builtin_call.param_refs[0];
+            String define = param0_ref.get(compiler).str_literal.str;
+
+            value = {
+                false,
+                SIRBuilderInsertImmBool(
+                    ctx->builder, compiler->defines.get(define))};
 
             break;
         }
@@ -563,7 +577,8 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
         SIRBinaryOperation op = {};
 
         ExprRef left_ref = expr.binary.left_ref;
-        Type operand_type = compiler->expr_types[left_ref].inner(compiler).get(compiler);
+        Type operand_type =
+            compiler->expr_types[left_ref].inner(compiler).get(compiler);
 
         switch (expr.binary.op) {
         case BinaryOp_Unknown:

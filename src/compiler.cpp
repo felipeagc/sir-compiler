@@ -120,6 +120,9 @@ Compiler Compiler::create()
 
     StringBuilder sb = StringBuilder::create(MallocAllocator::get_instance());
 
+    StringMap<bool> defines = StringMap<bool>::create(MallocAllocator::get_instance());
+    defines.set("linux", true);
+
     Array<File> files = Array<File>::create(MallocAllocator::get_instance());
     files.push_back({}); // 0th file
 
@@ -208,6 +211,7 @@ Compiler Compiler::create()
     builtin_function_map.set("sizeof", BuiltinFunction_Sizeof);
     builtin_function_map.set("alignof", BuiltinFunction_Alignof);
     builtin_function_map.set("ptrcast", BuiltinFunction_PtrCast);
+    builtin_function_map.set("defined", BuiltinFunction_Defined);
 
     Compiler compiler = {
         .arena = arena,
@@ -218,6 +222,7 @@ Compiler Compiler::create()
 
         .distinct_type_counter = 0,
 
+        .defines = defines,
         .files = files,
         .type_map = type_map,
         .types = types,

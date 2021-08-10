@@ -9,21 +9,63 @@ struct AnalyzerState {
 static bool
 interp_expr(Compiler *compiler, ExprRef expr_ref, InterpValue *out_value)
 {
+    InterpValue value = {};
     Expr expr = expr_ref.get(compiler);
+
     switch (expr.kind) {
     case ExprKind_IntLiteral: {
-        InterpValue value = {};
         value.type_ref = compiler->untyped_int_type;
         value.i64 = expr.int_literal.u64;
         *out_value = value;
         return true;
     }
     case ExprKind_FloatLiteral: {
-        InterpValue value = {};
         value.type_ref = compiler->untyped_float_type;
         value.f64 = expr.float_literal.f64;
         *out_value = value;
         return true;
+    }
+    case ExprKind_BuiltinCall: {
+        switch (expr.builtin_call.builtin) {
+        case BuiltinFunction_Sizeof: {
+            ExprRef param0_ref = expr.builtin_call.param_refs[0];
+            LANG_ASSERT(compiler->expr_as_types[param0_ref.id].id);
+
+            uint32_t size =
+                compiler->expr_as_types[param0_ref.id].get(compiler).size_of(
+                    compiler);
+
+            value.type_ref = compiler->untyped_int_type;
+            value.i64 = size;
+            *out_value = value;
+            return true;
+        }
+        case BuiltinFunction_Alignof: {
+            ExprRef param0_ref = expr.builtin_call.param_refs[0];
+            LANG_ASSERT(compiler->expr_as_types[param0_ref.id].id);
+
+            uint32_t alignment =
+                compiler->expr_as_types[param0_ref.id].get(compiler).align_of(
+                    compiler);
+
+            value.type_ref = compiler->untyped_int_type;
+            value.i64 = alignment;
+            *out_value = value;
+            return true;
+        }
+        case BuiltinFunction_Defined: {
+            ExprRef param0_ref = expr.builtin_call.param_refs[0];
+            Expr param0 = param0_ref.get(compiler);
+            LANG_ASSERT(param0.kind == ExprKind_StringLiteral);
+
+            InterpValue value = {};
+            value.type_ref = compiler->bool_type;
+            value.boolean = compiler->defines.get(param0.str_literal.str);
+            *out_value = value;
+            return true;
+        }
+        default: break;
+        }
     }
     default: break;
     }
@@ -526,6 +568,26 @@ static void analyze_expr(
             }
 
             compiler->expr_types[expr_ref] = compiler->expr_as_types[param0];
+            break;
+        }
+        case BuiltinFunction_Defined: {
+            if (expr.builtin_call.param_refs.len != 1) {
+                compiler->add_error(
+                    compiler->expr_locs[expr_ref],
+                    "expected 1 parameter for @defined");
+                break;
+            }
+
+            ExprRef param0_ref = expr.builtin_call.param_refs[0];
+            Expr param0 = param0_ref.get(compiler);
+
+            if (param0.kind != ExprKind_StringLiteral) {
+                compiler->add_error(
+                    compiler->expr_locs[param0_ref], "expected string literal");
+                break;
+            }
+
+            compiler->expr_types[expr_ref] = compiler->bool_type;
             break;
         }
         }

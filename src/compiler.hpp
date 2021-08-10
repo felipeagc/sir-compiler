@@ -54,6 +54,7 @@ struct TypeRef {
         return this->id;
     }
     Type get(Compiler *compiler) const;
+    TypeRef inner(Compiler *compiler) const;
 };
 
 struct Scope {
@@ -149,6 +150,7 @@ enum TokenKind {
     TokenKind_Extern,
     TokenKind_Export,
     TokenKind_Inline,
+    TokenKind_Distinct,
     TokenKind_VarArg,
     TokenKind_Fn,
     TokenKind_Macro,
@@ -215,6 +217,7 @@ enum TypeKind {
     TypeKind_Bool,
     TypeKind_UntypedInt,
     TypeKind_UntypedFloat,
+    TypeKind_Distinct,
     TypeKind_Int,
     TypeKind_Float,
     TypeKind_Struct,
@@ -250,6 +253,10 @@ struct Type {
         struct {
             TypeRef sub_type;
         } pointer;
+        struct {
+            TypeRef sub_type;
+            uint32_t index;
+        } distinct;
         struct {
             TypeRef sub_type;
             uint64_t size;
@@ -385,6 +392,7 @@ enum ExprKind : uint8_t {
     ExprKind_FunctionCall,
     ExprKind_NullLiteral,
     ExprKind_PointerType,
+    ExprKind_DistinctType,
     ExprKind_VoidType,
     ExprKind_BoolType,
     ExprKind_IntType,
@@ -430,6 +438,9 @@ struct Expr {
         struct {
             ExprRef sub_expr_ref;
         } ptr_type;
+        struct {
+            ExprRef sub_expr_ref;
+        } distinct_type;
         struct {
             uint32_t bits;
             bool is_signed;
@@ -561,6 +572,8 @@ struct Compiler {
     Array<Error> errors;
     StringBuilder sb;
 
+    uint32_t distinct_type_counter;
+
     Array<File> files;
     StringMap<TypeRef> type_map;
     Array<Type> types;
@@ -599,6 +612,7 @@ struct Compiler {
 
     TypeRef get_cached_type(Type &type);
     TypeRef create_pointer_type(TypeRef sub);
+    TypeRef create_distinct_type(TypeRef sub);
     TypeRef
     create_struct_type(Slice<TypeRef> fields, Slice<String> field_names);
     TypeRef create_tuple_type(Slice<TypeRef> fields);
@@ -701,4 +715,14 @@ inline Expr ExprRef::get(Compiler *compiler) const
 inline Type TypeRef::get(Compiler *compiler) const
 {
     return compiler->types[this->id];
+}
+
+inline TypeRef TypeRef::inner(Compiler *compiler) const
+{
+    const Type &this_type = this->get(compiler);
+    switch (this_type.kind) {
+    case TypeKind_Distinct: return this_type.distinct.sub_type.inner(compiler);
+    default: return *this;
+    }
+    return *this;
 }

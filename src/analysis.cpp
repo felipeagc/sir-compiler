@@ -134,6 +134,22 @@ static void analyze_expr(
         break;
     }
 
+    case ExprKind_DistinctType: {
+        analyze_expr(
+            compiler,
+            state,
+            expr.distinct_type.sub_expr_ref,
+            compiler->type_type);
+        TypeRef sub_type =
+            compiler->expr_as_types[expr.distinct_type.sub_expr_ref];
+        if (sub_type.id) {
+            compiler->expr_types[expr_ref] = compiler->type_type;
+            compiler->expr_as_types[expr_ref] =
+                compiler->create_distinct_type(sub_type);
+        }
+        break;
+    }
+
     case ExprKind_SliceType: {
         analyze_expr(
             compiler,
@@ -379,8 +395,8 @@ static void analyze_expr(
 
             LANG_ASSERT(compiler->expr_as_types[func_expr_ref].id != 0);
 
-            Type dest_type =
-                compiler->expr_as_types[func_expr_ref].get(compiler);
+            TypeRef dest_type_ref = compiler->expr_as_types[func_expr_ref];
+            Type dest_type = dest_type_ref.get(compiler);
 
             size_t error_checkpoint = compiler->get_error_checkpoint();
 
@@ -399,7 +415,7 @@ static void analyze_expr(
                     compiler,
                     state,
                     expr.func_call.param_refs[0],
-                    compiler->expr_as_types[func_expr_ref]);
+                    dest_type_ref.inner(compiler));
 
             } else if (!((param_type.kind == TypeKind_Int ||
                           param_type.kind == TypeKind_Float) &&
@@ -410,8 +426,7 @@ static void analyze_expr(
                 break;
             }
 
-            compiler->expr_types[expr_ref] =
-                compiler->expr_as_types[func_expr_ref];
+            compiler->expr_types[expr_ref] = dest_type_ref;
 
             break;
         }
@@ -742,7 +757,7 @@ static void analyze_expr(
                 break;
             }
 
-            Type type = left_type_ref.get(compiler);
+            Type type = left_type_ref.inner(compiler).get(compiler);
             if (!type.is_numeric()) {
                 compiler->add_error(
                     compiler->expr_locs[expr_ref],
@@ -821,7 +836,7 @@ static void analyze_expr(
                 break;
             }
 
-            Type type = left_type_ref.get(compiler);
+            Type type = left_type_ref.inner(compiler).get(compiler);
             if (!type.is_int()) {
                 compiler->add_error(
                     compiler->expr_locs[expr_ref],
@@ -892,7 +907,7 @@ static void analyze_expr(
                 break;
             }
 
-            Type type = left_type_ref.get(compiler);
+            Type type = left_type_ref.inner(compiler).get(compiler);
             if (!type.is_numeric()) {
                 compiler->add_error(
                     compiler->expr_locs[expr_ref],
@@ -923,7 +938,8 @@ static void analyze_expr(
             ExprRef left_ref = expr.binary.left_ref;
             ExprRef right_ref = expr.binary.right_ref;
 
-            Type left_type = compiler->expr_types[left_ref].get(compiler);
+            Type left_type =
+                compiler->expr_types[left_ref].inner(compiler).get(compiler);
             if (!left_type.is_runtime_int()) {
                 String type_string = left_type.to_string(compiler);
                 compiler->add_error(
@@ -935,7 +951,8 @@ static void analyze_expr(
                 break;
             }
 
-            Type right_type = compiler->expr_types[right_ref].get(compiler);
+            Type right_type =
+                compiler->expr_types[right_ref].inner(compiler).get(compiler);
             if (!right_type.is_runtime_int()) {
                 String type_string = right_type.to_string(compiler);
                 compiler->add_error(

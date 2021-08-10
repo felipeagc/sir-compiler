@@ -63,6 +63,9 @@ get_ir_type(Compiler *compiler, SIRModule *module, const Type &type)
     case TypeKind_Bool: {
         return SIRModuleGetU8Type(module);
     }
+    case TypeKind_Distinct: {
+        return get_ir_type(compiler, module, type.distinct.sub_type.get(compiler));
+    }
     case TypeKind_Int: {
         if (type.int_.is_signed) {
             switch (type.int_.bits) {
@@ -154,6 +157,7 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
     case ExprKind_VoidLiteral:
     case ExprKind_VoidType:
     case ExprKind_PointerType:
+    case ExprKind_DistinctType:
     case ExprKind_BoolType:
     case ExprKind_FloatType:
     case ExprKind_IntType:
@@ -329,9 +333,9 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
 
             ExprRef param_expr_ref = expr.func_call.param_refs[0];
 
-            Type dest_type = compiler->expr_types[expr_ref].get(compiler);
+            Type dest_type = compiler->expr_types[expr_ref].inner(compiler).get(compiler);
             Type source_type =
-                compiler->expr_types[param_expr_ref].get(compiler);
+                compiler->expr_types[param_expr_ref].inner(compiler).get(compiler);
 
             SIRType *dest_type_ir =
                 ctx->type_values[compiler->expr_types[expr_ref].id];
@@ -559,7 +563,7 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
         SIRBinaryOperation op = {};
 
         ExprRef left_ref = expr.binary.left_ref;
-        Type operand_type = compiler->expr_types[left_ref].get(compiler);
+        Type operand_type = compiler->expr_types[left_ref].inner(compiler).get(compiler);
 
         switch (expr.binary.op) {
         case BinaryOp_Unknown:

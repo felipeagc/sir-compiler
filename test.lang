@@ -29,6 +29,8 @@ fn print_int(x: u64) {
 // 	return s;
 // }
 
+type MyInt distinct i32;
+
 fn export main() {
 	// p: P;
 	// p.c = 3;
@@ -45,7 +47,8 @@ fn export main() {
 
 	printf("@sizeof(usize) = %d\n", i32(@sizeof(usize)));
 	s: usize = 1231;
-	aa: u64 = s;
+
+	my_int2 := MyInt(123);
 
 	print_int(0xFF00000000000000);
 	print_int(0xffffffffffffffff);

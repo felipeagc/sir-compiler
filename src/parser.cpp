@@ -66,6 +66,7 @@ static inline String token_kind_to_string(TokenKind kind)
     case TokenKind_VarArg: return "vararg";
     case TokenKind_Global: return "global";
     case TokenKind_Inline: return "inline";
+    case TokenKind_Distinct: return "distinct";
     case TokenKind_Macro: return "macro";
     case TokenKind_Fn: return "fn";
     case TokenKind_Type: return "type";
@@ -751,6 +752,19 @@ parse_primary_expr(Compiler *compiler, ParserState *state, Location *expr_loc)
 
         expr.kind = ExprKind_ISizeType;
         *expr_loc = next_token.loc;
+
+        break;
+    }
+    case TokenKind_Distinct: {
+        Token distinct_token = state->next_token();
+
+        Location sub_loc = {};
+        Expr sub_expr = parse_expr(compiler, state, &sub_loc);
+        ExprRef sub_expr_ref = compiler->add_expr(sub_loc, sub_expr);
+
+        expr.kind = ExprKind_DistinctType;
+        *expr_loc = distinct_token.loc;
+        expr.distinct_type.sub_expr_ref = sub_expr_ref;
 
         break;
     }

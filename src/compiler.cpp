@@ -173,6 +173,7 @@ Compiler Compiler::create()
     keyword_map.set("vararg", TokenKind_VarArg);
     keyword_map.set("export", TokenKind_Export);
     keyword_map.set("inline", TokenKind_Inline);
+    keyword_map.set("distinct", TokenKind_Distinct);
     keyword_map.set("fn", TokenKind_Fn);
     keyword_map.set("type", TokenKind_Type);
     keyword_map.set("struct", TokenKind_Struct);
@@ -214,6 +215,8 @@ Compiler Compiler::create()
         .builtin_function_map = builtin_function_map,
         .errors = errors,
         .sb = sb,
+
+        .distinct_type_counter = 0,
 
         .files = files,
         .type_map = type_map,
@@ -577,6 +580,15 @@ TypeRef Compiler::create_pointer_type(TypeRef sub)
     return this->get_cached_type(type);
 }
 
+TypeRef Compiler::create_distinct_type(TypeRef sub)
+{
+    Type type = {};
+    type.kind = TypeKind_Distinct;
+    type.distinct.sub_type = sub;
+    type.distinct.index = this->distinct_type_counter++;
+    return this->get_cached_type(type);
+}
+
 TypeRef
 Compiler::create_struct_type(Slice<TypeRef> fields, Slice<String> field_names)
 {
@@ -662,15 +674,19 @@ String Type::to_string(Compiler *compiler)
     case TypeKind_Int: {
         if (this->int_.is_size) {
             if (this->int_.is_signed) {
-                this->str = compiler->arena->sprintf("@isize(%u)", this->int_.bits);
+                this->str =
+                    compiler->arena->sprintf("@isize(%u)", this->int_.bits);
             } else {
-                this->str = compiler->arena->sprintf("@usize(%u)", this->int_.bits);
+                this->str =
+                    compiler->arena->sprintf("@usize(%u)", this->int_.bits);
             }
         } else {
             if (this->int_.is_signed) {
-                this->str = compiler->arena->sprintf("@int(%u)", this->int_.bits);
+                this->str =
+                    compiler->arena->sprintf("@int(%u)", this->int_.bits);
             } else {
-                this->str = compiler->arena->sprintf("@uint(%u)", this->int_.bits);
+                this->str =
+                    compiler->arena->sprintf("@uint(%u)", this->int_.bits);
             }
         }
         break;
@@ -684,6 +700,16 @@ String Type::to_string(Compiler *compiler)
             compiler->types[this->pointer.sub_type.id].to_string(compiler);
         this->str = compiler->arena->sprintf(
             "@ptr(%.*s)", (int)sub_str.len, sub_str.ptr);
+        break;
+    }
+    case TypeKind_Distinct: {
+        String sub_str =
+            compiler->types[this->distinct.sub_type.id].to_string(compiler);
+        this->str = compiler->arena->sprintf(
+            "@dist(%.*s, %u)",
+            (int)sub_str.len,
+            sub_str.ptr,
+            this->distinct.index);
         break;
     }
     case TypeKind_Array: {
@@ -838,6 +864,10 @@ uint32_t Type::size_of(Compiler *compiler)
         size = 8;
         break;
     }
+    case TypeKind_Distinct: {
+        size = this->distinct.sub_type.get(compiler).size_of(compiler);
+        break;
+    }
     case TypeKind_Struct: {
         size = 0;
         for (TypeRef field_type_ref : this->struct_.field_types) {
@@ -909,6 +939,10 @@ uint32_t Type::align_of(Compiler *compiler)
     }
     case TypeKind_Pointer: {
         alignment = 8;
+        break;
+    }
+    case TypeKind_Distinct: {
+        alignment = this->distinct.sub_type.get(compiler).align_of(compiler);
         break;
     }
     case TypeKind_Struct: {

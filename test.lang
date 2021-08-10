@@ -48,11 +48,15 @@ fn export main() {
 	printf("@sizeof(usize) = %d\n", i32(@sizeof(usize)));
 	s: usize = 1231;
 
-	if (@defined("linux") == true) {
+	if (@defined("linux")) {
 		printf("Linux\n");
 	}
 	my_int2 := MyInt(123);
-	// bytes: bool = @defined("linux");
+	is_linux := @defined("linux") == true;
+	not_linux: bool = is_linux == false;
+	if (not_linux) {
+		printf("Not linux\n");
+	}
 
 	print_int(0xFF00000000000000);
 	print_int(0xffffffffffffffff);

@@ -31,15 +31,24 @@ static SIRInstRef load_lvalue(CodegenContext *ctx, const CodegenValue &value)
     return value.inst_ref;
 }
 
-static SIRInstRef value_into_bool(CodegenContext *ctx, SIRInstRef inst_ref)
+static SIRInstRef
+value_into_bool(CodegenContext *ctx, const Type &type, SIRInstRef inst_ref)
 {
-    SIRType *type = SIRModuleGetInstType(ctx->module, inst_ref);
-    if (SIRModuleGetTypeKind(ctx->module, type) == SIRTypeKind_Int) {
+    switch (type.kind) {
+    case TypeKind_Int: {
         return SIRBuilderInsertBinop(
             ctx->builder,
             SIRBinaryOperation_INE,
             inst_ref,
-            SIRBuilderInsertImmInt(ctx->builder, type, 0));
+            SIRBuilderInsertImmInt(
+                ctx->builder, SIRModuleGetInstType(ctx->module, inst_ref), 0));
+        break;
+    }
+    case TypeKind_Bool: {
+        return SIRBuilderInsertTrunc(
+            ctx->builder, SIRModuleGetBoolType(ctx->module), inst_ref);
+    }
+    default: return inst_ref;
     }
     return inst_ref;
 }
@@ -169,9 +178,15 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
     case ExprKind_StructType: break;
 
     case ExprKind_BoolLiteral: {
+        TypeRef type_ref = compiler->expr_types[expr_ref];
+
         value = {
             false,
-            SIRBuilderInsertImmBool(ctx->builder, expr.bool_literal.bool_)};
+            SIRBuilderInsertZext(
+                ctx->builder,
+                ctx->type_values[type_ref.id],
+                SIRBuilderInsertImmBool(
+                    ctx->builder, expr.bool_literal.bool_))};
         break;
     }
 
@@ -385,6 +400,8 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
     }
 
     case ExprKind_BuiltinCall: {
+        TypeRef type_ref = compiler->expr_types[expr_ref];
+
         switch (expr.builtin_call.builtin) {
         case BuiltinFunction_Unknown: LANG_ASSERT(0); break;
         case BuiltinFunction_Sizeof: {
@@ -396,9 +413,7 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
             value = {
                 false,
                 SIRBuilderInsertImmInt(
-                    ctx->builder,
-                    ctx->type_values[compiler->expr_types[expr_ref].id],
-                    size)};
+                    ctx->builder, ctx->type_values[type_ref], size)};
 
             break;
         }
@@ -411,15 +426,11 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
             value = {
                 false,
                 SIRBuilderInsertImmInt(
-                    ctx->builder,
-                    ctx->type_values[compiler->expr_types[expr_ref].id],
-                    size)};
+                    ctx->builder, ctx->type_values[type_ref], size)};
 
             break;
         }
         case BuiltinFunction_PtrCast: {
-            ExprRef param0_ref = expr.builtin_call.param_refs[0];
-
             CodegenValue ptr_value =
                 codegen_expr(compiler, ctx, expr.builtin_call.param_refs[1]);
 
@@ -427,7 +438,7 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
                 false,
                 SIRBuilderInsertPtrCast(
                     ctx->builder,
-                    ctx->type_values[compiler->expr_as_types[param0_ref]],
+                    ctx->type_values[type_ref],
                     load_lvalue(ctx, ptr_value))};
 
             break;
@@ -438,8 +449,11 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
 
             value = {
                 false,
-                SIRBuilderInsertImmBool(
-                    ctx->builder, compiler->defines.get(define))};
+                SIRBuilderInsertZext(
+                    ctx->builder,
+                    ctx->type_values[type_ref.id],
+                    SIRBuilderInsertImmBool(
+                        ctx->builder, compiler->defines.get(define)))};
 
             break;
         }
@@ -577,6 +591,8 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
         SIRBinaryOperation op = {};
 
         ExprRef left_ref = expr.binary.left_ref;
+        TypeRef type_ref = compiler->expr_types[expr_ref].inner(compiler);
+        Type type = type_ref.get(compiler);
         Type operand_type =
             compiler->expr_types[left_ref].inner(compiler).get(compiler);
 
@@ -636,7 +652,7 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
 
         case BinaryOp_Equal: {
             switch (operand_type.kind) {
-            case TypeKind_Bool: op = SIRBinaryOperation_BEQ; break;
+            case TypeKind_Bool:
             case TypeKind_Int: op = SIRBinaryOperation_IEQ; break;
             case TypeKind_Float: op = SIRBinaryOperation_FEQ; break;
             default: LANG_ASSERT(0);
@@ -646,7 +662,7 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
 
         case BinaryOp_NotEqual: {
             switch (operand_type.kind) {
-            case TypeKind_Bool: op = SIRBinaryOperation_BNE; break;
+            case TypeKind_Bool:
             case TypeKind_Int: op = SIRBinaryOperation_INE; break;
             case TypeKind_Float: op = SIRBinaryOperation_FNE; break;
             default: LANG_ASSERT(0);
@@ -738,6 +754,11 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
             false,
             SIRBuilderInsertBinop(ctx->builder, op, left_inst, right_inst)};
 
+        if (type.kind == TypeKind_Bool) {
+            value.inst_ref = SIRBuilderInsertZext(
+                ctx->builder, ctx->type_values[type_ref], value.inst_ref);
+        }
+
         break;
     }
     }
@@ -800,7 +821,10 @@ codegen_stmt(Compiler *compiler, CodegenContext *ctx, StmtRef stmt_ref)
     case StmtKind_If: {
         SIRInstRef cond_value = load_lvalue(
             ctx, codegen_expr(compiler, ctx, stmt.if_.cond_expr_ref));
-        cond_value = value_into_bool(ctx, cond_value);
+        cond_value = value_into_bool(
+            ctx,
+            compiler->expr_types[stmt.if_.cond_expr_ref].get(compiler),
+            cond_value);
 
         SIRInstRef current_func = SIRBuilderGetCurrentFunction(ctx->builder);
 
@@ -858,6 +882,10 @@ codegen_stmt(Compiler *compiler, CodegenContext *ctx, StmtRef stmt_ref)
 
         SIRInstRef cond_value = load_lvalue(
             ctx, codegen_expr(compiler, ctx, stmt.while_.cond_expr_ref));
+        cond_value = value_into_bool(
+            ctx,
+            compiler->expr_types[stmt.while_.cond_expr_ref].get(compiler),
+            cond_value);
 
         SIRBuilderInsertBranch(
             ctx->builder, cond_value, true_block, merge_block);

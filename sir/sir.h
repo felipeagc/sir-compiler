@@ -87,6 +87,7 @@ typedef enum SIRBinaryOperation {
 
 typedef enum SIRInstKind {
     SIRInstKind_Unknown = 0,
+    SIRInstKind_Alias,
     SIRInstKind_Global,
     SIRInstKind_StackSlot,
     SIRInstKind_Block,

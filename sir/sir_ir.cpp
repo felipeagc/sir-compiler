@@ -85,6 +85,14 @@ print_instruction(SIRModule *module, SIRInstRef inst_ref, SIRStringBuilder *sb)
     case SIRInstKind_FunctionParameter: SIR_ASSERT(0); break;
     case SIRInstKind_Block: SIR_ASSERT(0); break;
 
+    case SIRInstKind_Alias: {
+        sb->sprintf(
+            "%%r%u = alias %%r%u",
+            inst_ref.id,
+            inst.alias.inst_ref.id);
+        break;
+    }
+
     case SIRInstKind_ImmediateInt: {
         SIRString type_string = SIRTypeToString(module, inst.type);
         sb->sprintf(
@@ -1072,7 +1080,9 @@ SIRInstRef SIRBuilderInsertTrunc(
 {
     ZoneScoped;
 
-    SIR_ASSERT(dest_type->kind == SIRTypeKind_Int);
+    SIR_ASSERT(
+        dest_type->kind == SIRTypeKind_Int ||
+        dest_type->kind == SIRTypeKind_Bool);
 
     SIRInst inst = {};
     inst.kind = SIRInstKind_Trunc;

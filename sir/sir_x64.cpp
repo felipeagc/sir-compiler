@@ -848,6 +848,12 @@ void X64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
     case SIRInstKind_Global: SIR_ASSERT(0); break;
     case SIRInstKind_StackSlot: SIR_ASSERT(0); break;
 
+    case SIRInstKind_Alias: {
+        this->meta_insts[inst_ref.id] =
+            this->meta_insts[inst.alias.inst_ref.id];
+        break;
+    }
+
     case SIRInstKind_ImmediateInt: {
         uint8_t data[8];
 
@@ -909,11 +915,14 @@ void X64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
 
         this->move_inst_rvalue(inst.trunc.inst_ref, &source_ax_value);
 
-        size_t source_bytes = source_type->int_.bits >> 3;
+        size_t source_bytes = source_type->kind == SIRTypeKind_Bool
+                                  ? 1
+                                  : source_type->int_.bits >> 3;
         size_t dest_bytes = dest_type->int_.bits >> 3;
 
         int64_t x86_inst = 0;
         switch (dest_bytes) {
+        case 1: break;
         case 2: x86_inst = FE_MOVZXr16r8; break;
         case 4: {
             switch (source_bytes) {
@@ -2449,6 +2458,57 @@ void X64AsmBuilder::generate_function(SIRInstRef func_ref)
         return;
     }
 
+    // Aliasing pass
+    for (SIRInstRef block_ref : func->blocks) {
+        SIRInst block = SIRModuleGetInst(this->module, block_ref);
+        for (SIRInstRef inst_ref : block.block.inst_refs) {
+            SIRInst inst = SIRModuleGetInst(this->module, inst_ref);
+            switch (inst.kind) {
+            case SIRInstKind_Trunc: {
+                SIRType *dest_type = SIRModuleGetInstType(module, inst_ref);
+                SIRType *source_type =
+                    SIRModuleGetInstType(module, inst.trunc.inst_ref);
+
+                uint32_t dest_type_size = SIRTypeSizeOf(module, dest_type);
+                uint32_t source_type_size = SIRTypeSizeOf(module, source_type);
+                uint32_t dest_type_align = SIRTypeAlignOf(module, dest_type);
+                uint32_t source_type_align =
+                    SIRTypeAlignOf(module, source_type);
+
+                if (dest_type_align == source_type_align &&
+                    dest_type_size == source_type_size) {
+                    inst.kind = SIRInstKind_Alias;
+                    inst.alias.inst_ref = inst.trunc.inst_ref;
+                    module->insts[inst_ref.id] = inst;
+                }
+
+                break;
+            }
+            case SIRInstKind_ZExt: {
+                SIRType *dest_type = SIRModuleGetInstType(module, inst_ref);
+                SIRType *source_type =
+                    SIRModuleGetInstType(module, inst.zext.inst_ref);
+
+                uint32_t dest_type_size = SIRTypeSizeOf(module, dest_type);
+                uint32_t source_type_size = SIRTypeSizeOf(module, source_type);
+                uint32_t dest_type_align = SIRTypeAlignOf(module, dest_type);
+                uint32_t source_type_align =
+                    SIRTypeAlignOf(module, source_type);
+
+                if (dest_type_align == source_type_align &&
+                    dest_type_size == source_type_size) {
+                    inst.kind = SIRInstKind_Alias;
+                    inst.alias.inst_ref = inst.zext.inst_ref;
+                    module->insts[inst_ref.id] = inst;
+                }
+
+                break;
+            }
+            default: break;
+            }
+        }
+    }
+
     for (SIRInstRef stack_slot_ref : func->stack_slots) {
         SIRInst stack_slot = SIRModuleGetInst(this->module, stack_slot_ref);
         SIR_ASSERT(stack_slot.type->kind == SIRTypeKind_Pointer);
@@ -2502,6 +2562,7 @@ void X64AsmBuilder::generate_function(SIRInstRef func_ref)
             case SIRInstKind_ReturnValue: break;
 
             // Data already stored somewhere else:
+            case SIRInstKind_Alias:
             case SIRInstKind_ImmediateInt:
             case SIRInstKind_ImmediateFloat:
             case SIRInstKind_ImmediateBool:
@@ -2893,8 +2954,8 @@ SIRCreateX64Builder(SIRModule *module, SIRObjectBuilder *obj_builder)
     ENCODING_ENTRIES[Mnem_MOV][OperandKind_Reg][SizeClass_1][OperandKind_Imm]
                     [SizeClass_1] = FE_MOV8ri;
 
-    ENCODING_ENTRIES[Mnem_MOV][OperandKind_Memory][SizeClass_8]
-                    [OperandKind_Imm][SizeClass_8] = FE_MOV64mi;
+    ENCODING_ENTRIES[Mnem_MOV][OperandKind_Memory][SizeClass_8][OperandKind_Imm]
+                    [SizeClass_8] = FE_MOV64mi;
     ENCODING_ENTRIES[Mnem_MOV][OperandKind_Memory][SizeClass_4][OperandKind_Imm]
                     [SizeClass_4] = FE_MOV32mi;
     ENCODING_ENTRIES[Mnem_MOV][OperandKind_Memory][SizeClass_2][OperandKind_Imm]

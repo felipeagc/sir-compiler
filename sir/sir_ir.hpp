@@ -59,6 +59,9 @@ struct SIRInst {
     union {
         SIRFunction *func;
         struct {
+            SIRInstRef inst_ref;
+        } alias;
+        struct {
             SIRArray<SIRInstRef> inst_refs;
         } block;
         struct {

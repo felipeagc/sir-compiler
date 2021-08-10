@@ -10,7 +10,7 @@ elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
 endif ()
 
 if (NOT MSVC)
-	add_compile_options(-Wall -Wextra -Wno-unused-function)
+	add_compile_options(-Wall -Wextra -Wno-unused-function -Wno-xor-used-as-pow)
 	# set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fsanitize=address,undefined")
 	# set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fsanitize=memory -fsanitize-memory-track-origins")
 endif()

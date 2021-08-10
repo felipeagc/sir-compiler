@@ -51,6 +51,7 @@ get_ir_type(Compiler *compiler, SIRModule *module, const Type &type)
 
     switch (type.kind) {
     case TypeKind_Unknown:
+    case TypeKind_MAX:
     case TypeKind_Function:
     case TypeKind_UntypedInt:
     case TypeKind_UntypedFloat:
@@ -156,6 +157,8 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
     case ExprKind_BoolType:
     case ExprKind_FloatType:
     case ExprKind_IntType:
+    case ExprKind_ISizeType:
+    case ExprKind_USizeType:
     case ExprKind_SliceType:
     case ExprKind_ArrayType:
     case ExprKind_StructType: break;
@@ -340,8 +343,7 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
                 compiler->expr_types[expr_ref].id) {
                 value = {false, source_value};
             } else if (
-                dest_type.kind == TypeKind_Int &&
-                source_type.kind == TypeKind_Int) {
+                dest_type.is_runtime_int() && source_type.is_runtime_int()) {
 
                 if (dest_type.int_.bits < source_type.int_.bits) {
                     value = {
@@ -680,32 +682,32 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
         }
 
         case BinaryOp_LShift: {
-            LANG_ASSERT(operand_type.kind == TypeKind_Int);
+            LANG_ASSERT(operand_type.is_runtime_int());
             op = SIRBinaryOperation_Shl;
             break;
         }
 
         case BinaryOp_RShift: {
-            LANG_ASSERT(operand_type.kind == TypeKind_Int);
+            LANG_ASSERT(operand_type.is_runtime_int());
             op = (operand_type.int_.is_signed) ? SIRBinaryOperation_AShr
                                                : SIRBinaryOperation_LShr;
             break;
         }
 
         case BinaryOp_BitAnd: {
-            LANG_ASSERT(operand_type.kind == TypeKind_Int);
+            LANG_ASSERT(operand_type.is_runtime_int());
             op = SIRBinaryOperation_And;
             break;
         }
 
         case BinaryOp_BitOr: {
-            LANG_ASSERT(operand_type.kind == TypeKind_Int);
+            LANG_ASSERT(operand_type.is_runtime_int());
             op = SIRBinaryOperation_Or;
             break;
         }
 
         case BinaryOp_BitXor: {
-            LANG_ASSERT(operand_type.kind == TypeKind_Int);
+            LANG_ASSERT(operand_type.is_runtime_int());
             op = SIRBinaryOperation_Xor;
             break;
         }

@@ -43,6 +43,10 @@ fn export main() {
 	a := i32(123);
 	b := a + 321;
 
+	printf("@sizeof(usize) = %d\n", i32(@sizeof(usize)));
+	s: usize = 1231;
+	aa: u64 = s;
+
 	print_int(0xFF00000000000000);
 	print_int(0xffffffffffffffff);
 }

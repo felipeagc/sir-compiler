@@ -92,6 +92,8 @@ static inline String token_kind_to_string(TokenKind kind)
     case TokenKind_I64: return "i64";
     case TokenKind_F32: return "f32";
     case TokenKind_F64: return "f64";
+    case TokenKind_ISize: return "isize";
+    case TokenKind_USize: return "usize";
     case TokenKind_Identifier: return "<identifier>";
     case TokenKind_BuiltinIdentifier: return "<builtin identifier>";
     case TokenKind_StringLiteral: return "<string literal>";
@@ -733,6 +735,22 @@ parse_primary_expr(Compiler *compiler, ParserState *state, Location *expr_loc)
         case TokenKind_F64: expr.float_type.bits = 64; break;
         default: LANG_ASSERT(0);
         }
+
+        break;
+    }
+    case TokenKind_USize: {
+        state->next_token();
+
+        expr.kind = ExprKind_USizeType;
+        *expr_loc = next_token.loc;
+
+        break;
+    }
+    case TokenKind_ISize: {
+        state->next_token();
+
+        expr.kind = ExprKind_ISizeType;
+        *expr_loc = next_token.loc;
 
         break;
     }

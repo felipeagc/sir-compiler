@@ -54,7 +54,6 @@ struct TypeRef {
         return this->id;
     }
     Type get(Compiler *compiler) const;
-    bool is_runtime(Compiler *compiler);
 };
 
 struct Scope {
@@ -179,6 +178,8 @@ enum TokenKind {
     TokenKind_I64,
     TokenKind_F32,
     TokenKind_F64,
+    TokenKind_USize,
+    TokenKind_ISize,
     TokenKind_Identifier,
     TokenKind_BuiltinIdentifier,
     TokenKind_StringLiteral,
@@ -208,6 +209,7 @@ enum BuiltinFunction {
 
 enum TypeKind {
     TypeKind_Unknown = 0,
+
     TypeKind_Void,
     TypeKind_Type,
     TypeKind_Bool,
@@ -221,6 +223,8 @@ enum TypeKind {
     TypeKind_Array,
     TypeKind_Slice,
     TypeKind_Function,
+
+    TypeKind_MAX,
 };
 
 struct Type {
@@ -230,6 +234,7 @@ struct Type {
         struct {
             uint32_t bits;
             bool is_signed;
+            bool is_size;
         } int_;
         struct {
             uint32_t bits;
@@ -262,6 +267,56 @@ struct Type {
     String to_string(Compiler *compiler);
     uint32_t align_of(Compiler *compiler);
     uint32_t size_of(Compiler *compiler);
+
+    inline bool is_numeric()
+    {
+        switch (this->kind) {
+        case TypeKind_UntypedInt:
+        case TypeKind_Int:
+        case TypeKind_UntypedFloat:
+        case TypeKind_Float: return true;
+        default: return false;
+        }
+        return false;
+    }
+
+    inline bool is_int()
+    {
+        switch (this->kind) {
+        case TypeKind_UntypedInt:
+        case TypeKind_Int: return true;
+        default: return false;
+        }
+        return false;
+    }
+
+    inline bool is_runtime_int()
+    {
+        return this->kind == TypeKind_Int;
+    }
+
+    inline bool is_runtime_numeric()
+    {
+        switch (this->kind) {
+        case TypeKind_Int:
+        case TypeKind_Float: return true;
+        default: return false;
+        }
+        return false;
+    }
+
+    inline bool is_runtime()
+    {
+        switch (this->kind) {
+        case TypeKind_Unknown:
+        case TypeKind_UntypedFloat:
+        case TypeKind_UntypedInt:
+        case TypeKind_Function:
+        case TypeKind_Type: return false;
+        default: return true;
+        }
+        return true;
+    }
 };
 
 struct InterpValue {
@@ -333,6 +388,8 @@ enum ExprKind : uint8_t {
     ExprKind_VoidType,
     ExprKind_BoolType,
     ExprKind_IntType,
+    ExprKind_USizeType,
+    ExprKind_ISizeType,
     ExprKind_FloatType,
     ExprKind_SliceType,
     ExprKind_ArrayType,
@@ -534,6 +591,8 @@ struct Compiler {
     TypeRef i64_type;
     TypeRef f32_type;
     TypeRef f64_type;
+    TypeRef usize_type;
+    TypeRef isize_type;
 
     static Compiler create();
     void destroy();

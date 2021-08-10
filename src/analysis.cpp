@@ -110,6 +110,18 @@ static void analyze_expr(
         break;
     }
 
+    case ExprKind_ISizeType: {
+        compiler->expr_types[expr_ref] = compiler->type_type;
+        compiler->expr_as_types[expr_ref] = compiler->isize_type;
+        break;
+    }
+
+    case ExprKind_USizeType: {
+        compiler->expr_types[expr_ref] = compiler->type_type;
+        compiler->expr_as_types[expr_ref] = compiler->usize_type;
+        break;
+    }
+
     case ExprKind_PointerType: {
         analyze_expr(
             compiler, state, expr.ptr_type.sub_expr_ref, compiler->type_type);
@@ -231,8 +243,7 @@ static void analyze_expr(
 
     case ExprKind_IntLiteral: {
         if (expected_type_ref.id &&
-            (expected_type_ref.get(compiler).kind == TypeKind_Int ||
-             expected_type_ref.get(compiler).kind == TypeKind_Float)) {
+            (expected_type_ref.get(compiler).is_runtime_numeric())) {
             compiler->expr_types[expr_ref] = expected_type_ref;
         } else {
             compiler->expr_types[expr_ref] = compiler->untyped_int_type;
@@ -605,7 +616,7 @@ static void analyze_expr(
             analyze_expr(compiler, state, expr.unary.left_ref);
 
             TypeRef subtype_ref = compiler->expr_types[expr.unary.left_ref];
-            if (!subtype_ref.is_runtime(compiler)) {
+            if (!subtype_ref.get(compiler).is_runtime()) {
                 Type subtype = subtype_ref.get(compiler);
                 String type_string = subtype.to_string(compiler);
                 compiler->add_error(
@@ -690,8 +701,7 @@ static void analyze_expr(
 
                 for (size_t i = 0; i < LANG_CARRAY_LENGTH(type_refs); ++i) {
                     Type type = type_refs[i].get(compiler);
-                    if (type.kind == TypeKind_Int ||
-                        type.kind == TypeKind_Float) {
+                    if (type.is_runtime_numeric()) {
                         expected_type_ref = type_refs[i];
                         break;
                     }
@@ -733,18 +743,21 @@ static void analyze_expr(
             }
 
             Type type = left_type_ref.get(compiler);
-            if (type.kind == TypeKind_UntypedInt ||
-                type.kind == TypeKind_UntypedFloat) {
-                compiler->add_error(
-                    compiler->expr_locs[expr_ref],
-                    "cannot use untyped numbers in binary expression");
-                break;
-            }
-
-            if (type.kind != TypeKind_Int && type.kind != TypeKind_Float) {
+            if (!type.is_numeric()) {
                 compiler->add_error(
                     compiler->expr_locs[expr_ref],
                     "binary expression expects numeric operands");
+                break;
+            }
+
+            if (!type.is_runtime_numeric()) {
+                String type_string = type.to_string(compiler);
+                compiler->add_error(
+                    compiler->expr_locs[expr_ref],
+                    "binary expression expects runtime numeric types, "
+                    "instead got '%.*s'",
+                    (int)type_string.len,
+                    type_string.ptr);
                 break;
             }
 
@@ -767,7 +780,7 @@ static void analyze_expr(
 
                 for (size_t i = 0; i < LANG_CARRAY_LENGTH(type_refs); ++i) {
                     Type type = type_refs[i].get(compiler);
-                    if (type.kind == TypeKind_Int) {
+                    if (type.is_runtime_int()) {
                         expected_type_ref = type_refs[i];
                         break;
                     }
@@ -809,17 +822,21 @@ static void analyze_expr(
             }
 
             Type type = left_type_ref.get(compiler);
-            if (type.kind == TypeKind_UntypedInt) {
-                compiler->add_error(
-                    compiler->expr_locs[expr_ref],
-                    "cannot use untyped numbers in binary expression");
-                break;
-            }
-
-            if (type.kind != TypeKind_Int) {
+            if (!type.is_int()) {
                 compiler->add_error(
                     compiler->expr_locs[expr_ref],
                     "binary expression expects integer operands");
+                break;
+            }
+
+            if (!type.is_runtime_int()) {
+                String type_string = type.to_string(compiler);
+                compiler->add_error(
+                    compiler->expr_locs[expr_ref],
+                    "binary expression expects runtime integer types, "
+                    "instead got '%.*s'",
+                    (int)type_string.len,
+                    type_string.ptr);
                 break;
             }
 
@@ -876,8 +893,14 @@ static void analyze_expr(
             }
 
             Type type = left_type_ref.get(compiler);
-            if (type.kind == TypeKind_UntypedInt ||
-                type.kind == TypeKind_UntypedFloat) {
+            if (!type.is_numeric()) {
+                compiler->add_error(
+                    compiler->expr_locs[expr_ref],
+                    "comparison expression expects numeric operands");
+                break;
+            }
+
+            if (!type.is_runtime_numeric()) {
                 String type_string = type.to_string(compiler);
                 compiler->add_error(
                     compiler->expr_locs[expr_ref],
@@ -885,13 +908,6 @@ static void analyze_expr(
                     "instead got '%.*s'",
                     (int)type_string.len,
                     type_string.ptr);
-                break;
-            }
-
-            if (type.kind != TypeKind_Int && type.kind != TypeKind_Float) {
-                compiler->add_error(
-                    compiler->expr_locs[expr_ref],
-                    "comparison expression expects numeric operands");
                 break;
             }
 
@@ -908,11 +924,11 @@ static void analyze_expr(
             ExprRef right_ref = expr.binary.right_ref;
 
             Type left_type = compiler->expr_types[left_ref].get(compiler);
-            if (left_type.kind != TypeKind_Int) {
+            if (!left_type.is_runtime_int()) {
                 String type_string = left_type.to_string(compiler);
                 compiler->add_error(
                     compiler->expr_locs[left_ref],
-                    "bit shift expects runtime numeric types, instead "
+                    "bit shift expects runtime integer types, instead "
                     "got '%.*s'",
                     (int)type_string.len,
                     type_string.ptr);
@@ -920,11 +936,11 @@ static void analyze_expr(
             }
 
             Type right_type = compiler->expr_types[right_ref].get(compiler);
-            if (right_type.kind != TypeKind_Int) {
+            if (!right_type.is_runtime_int()) {
                 String type_string = right_type.to_string(compiler);
                 compiler->add_error(
                     compiler->expr_locs[right_ref],
-                    "bit shift expects runtime numeric types, instead "
+                    "bit shift expects runtime integer types, instead "
                     "got '%.*s'",
                     (int)type_string.len,
                     type_string.ptr);
@@ -1214,7 +1230,7 @@ analyze_decl(Compiler *compiler, AnalyzerState *state, DeclRef decl_ref)
             break;
         }
 
-        if (!var_type.is_runtime(compiler)) {
+        if (!var_type.get(compiler).is_runtime()) {
             Type decl_type = var_type.get(compiler);
             String type_string = decl_type.to_string(compiler);
             compiler->add_error(
@@ -1266,7 +1282,7 @@ analyze_decl(Compiler *compiler, AnalyzerState *state, DeclRef decl_ref)
             break;
         }
 
-        if (!var_type.is_runtime(compiler)) {
+        if (!var_type.get(compiler).is_runtime()) {
             Type decl_type = var_type.get(compiler);
             String type_string = decl_type.to_string(compiler);
             compiler->add_error(

@@ -59,26 +59,6 @@ bool ExprRef::is_lvalue(Compiler *compiler)
     return is_lvalue;
 }
 
-bool TypeRef::is_runtime(Compiler *compiler)
-{
-    bool is_runtime = true;
-
-    Type type = this->get(compiler);
-    switch (type.kind) {
-    case TypeKind_Unknown:
-    case TypeKind_UntypedFloat:
-    case TypeKind_UntypedInt:
-    case TypeKind_Function:
-    case TypeKind_Type: {
-        is_runtime = false;
-        break;
-    }
-    default: break;
-    }
-
-    return is_runtime;
-}
-
 Scope *Scope::create(Compiler *compiler, FileRef file_ref, Scope *parent)
 {
     Scope *scope = compiler->arena->alloc<Scope>();
@@ -219,6 +199,8 @@ Compiler Compiler::create()
     keyword_map.set("i64", TokenKind_I64);
     keyword_map.set("f32", TokenKind_F32);
     keyword_map.set("f64", TokenKind_F64);
+    keyword_map.set("usize", TokenKind_USize);
+    keyword_map.set("isize", TokenKind_ISize);
     keyword_map.set("and", TokenKind_And);
     keyword_map.set("or", TokenKind_Or);
 
@@ -267,6 +249,8 @@ Compiler Compiler::create()
         .i64_type = {0},
         .f32_type = {0},
         .f64_type = {0},
+        .usize_type = {0},
+        .isize_type = {0},
     };
 
     {
@@ -381,6 +365,26 @@ Compiler Compiler::create()
         type.kind = TypeKind_Float;
         type.float_.bits = 64;
         compiler.f64_type = compiler.get_cached_type(type);
+    }
+
+    {
+        // TODO: use different sizes depending on architecture
+        Type type = {};
+        type.kind = TypeKind_Int;
+        type.int_.bits = 64;
+        type.int_.is_signed = false;
+        type.int_.is_size = true;
+        compiler.usize_type = compiler.get_cached_type(type);
+    }
+
+    {
+        // TODO: use different sizes depending on architecture
+        Type type = {};
+        type.kind = TypeKind_Int;
+        type.int_.bits = 64;
+        type.int_.is_signed = true;
+        type.int_.is_size = true;
+        compiler.isize_type = compiler.get_cached_type(type);
     }
 
     return compiler;
@@ -630,6 +634,7 @@ String Type::to_string(Compiler *compiler)
     }
 
     switch (this->kind) {
+    case TypeKind_MAX: LANG_ASSERT(0); break;
     case TypeKind_Unknown: {
         this->str = "@unknown";
         break;
@@ -655,10 +660,18 @@ String Type::to_string(Compiler *compiler)
         break;
     }
     case TypeKind_Int: {
-        if (this->int_.is_signed) {
-            this->str = compiler->arena->sprintf("@int(%u)", this->int_.bits);
+        if (this->int_.is_size) {
+            if (this->int_.is_signed) {
+                this->str = compiler->arena->sprintf("@isize(%u)", this->int_.bits);
+            } else {
+                this->str = compiler->arena->sprintf("@usize(%u)", this->int_.bits);
+            }
         } else {
-            this->str = compiler->arena->sprintf("@uint(%u)", this->int_.bits);
+            if (this->int_.is_signed) {
+                this->str = compiler->arena->sprintf("@int(%u)", this->int_.bits);
+            } else {
+                this->str = compiler->arena->sprintf("@uint(%u)", this->int_.bits);
+            }
         }
         break;
     }
@@ -787,6 +800,7 @@ uint32_t Type::size_of(Compiler *compiler)
 
     switch (this->kind) {
     case TypeKind_Unknown:
+    case TypeKind_MAX:
     case TypeKind_Void:
     case TypeKind_UntypedInt:
     case TypeKind_UntypedFloat:
@@ -862,6 +876,7 @@ uint32_t Type::align_of(Compiler *compiler)
 
     switch (this->kind) {
     case TypeKind_Unknown:
+    case TypeKind_MAX:
     case TypeKind_Void:
     case TypeKind_UntypedInt:
     case TypeKind_UntypedFloat:

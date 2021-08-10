@@ -4,16 +4,6 @@ fn extern vararg printf(_: *u8);
 
 global my_global: i32;
 
-type ArrayList struct[T] {
-	ptr: *T;
-	len: usize;
-	cap: usize;
-
-	fn push(self: *Self, v: T) {
-
-	}
-};
-
 fn factorial(n: i32): i32 {
 	if (n <= i32(0)) return 0;
 	if (n == i32(1)) return 1;

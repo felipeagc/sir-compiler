@@ -34,6 +34,7 @@ static SIRInstRef load_lvalue(CodegenContext *ctx, const CodegenValue &value)
 static SIRInstRef
 value_into_bool(CodegenContext *ctx, const Type &type, SIRInstRef inst_ref)
 {
+    // TODO: wtf is this
     switch (type.kind) {
     case TypeKind_Int: {
         return SIRBuilderInsertBinop(
@@ -580,183 +581,307 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
     }
 
     case ExprKind_Binary: {
-        CodegenValue left_val =
-            codegen_expr(compiler, ctx, expr.binary.left_ref);
-        CodegenValue right_val =
-            codegen_expr(compiler, ctx, expr.binary.right_ref);
-
-        SIRInstRef left_inst = load_lvalue(ctx, left_val);
-        SIRInstRef right_inst = load_lvalue(ctx, right_val);
-
-        SIRBinaryOperation op = {};
-
-        ExprRef left_ref = expr.binary.left_ref;
-        TypeRef type_ref = compiler->expr_types[expr_ref].inner(compiler);
-        Type type = type_ref.get(compiler);
-        Type operand_type =
-            compiler->expr_types[left_ref].inner(compiler).get(compiler);
-
         switch (expr.binary.op) {
         case BinaryOp_Unknown:
-        case BinaryOp_MAX: LANG_ASSERT(0); break;
-
-        case BinaryOp_Add: {
-            switch (operand_type.kind) {
-            case TypeKind_Int: op = SIRBinaryOperation_IAdd; break;
-            case TypeKind_Float: op = SIRBinaryOperation_FAdd; break;
-            default: LANG_ASSERT(0);
-            }
+        case BinaryOp_MAX: {
+            LANG_ASSERT(0);
             break;
         }
-
-        case BinaryOp_Sub: {
-            switch (operand_type.kind) {
-            case TypeKind_Int: op = SIRBinaryOperation_ISub; break;
-            case TypeKind_Float: op = SIRBinaryOperation_FSub; break;
-            default: LANG_ASSERT(0);
-            }
-            break;
-        }
-
-        case BinaryOp_Mul: {
-            switch (operand_type.kind) {
-            case TypeKind_Int: op = SIRBinaryOperation_IMul; break;
-            case TypeKind_Float: op = SIRBinaryOperation_FMul; break;
-            default: LANG_ASSERT(0);
-            }
-            break;
-        }
-
-        case BinaryOp_Div: {
-            switch (operand_type.kind) {
-            case TypeKind_Int:
-                op = (operand_type.int_.is_signed) ? SIRBinaryOperation_SDiv
-                                                   : SIRBinaryOperation_UDiv;
-                break;
-            case TypeKind_Float: op = SIRBinaryOperation_FDiv; break;
-            default: LANG_ASSERT(0);
-            }
-            break;
-        }
-        case BinaryOp_Mod: {
-            switch (operand_type.kind) {
-            case TypeKind_Int:
-                op = (operand_type.int_.is_signed) ? SIRBinaryOperation_SRem
-                                                   : SIRBinaryOperation_URem;
-                break;
-            case TypeKind_Float: op = SIRBinaryOperation_FRem; break;
-            default: LANG_ASSERT(0);
-            }
-            break;
-        }
-
-        case BinaryOp_Equal: {
-            switch (operand_type.kind) {
-            case TypeKind_Bool:
-            case TypeKind_Int: op = SIRBinaryOperation_IEQ; break;
-            case TypeKind_Float: op = SIRBinaryOperation_FEQ; break;
-            default: LANG_ASSERT(0);
-            }
-            break;
-        }
-
-        case BinaryOp_NotEqual: {
-            switch (operand_type.kind) {
-            case TypeKind_Bool:
-            case TypeKind_Int: op = SIRBinaryOperation_INE; break;
-            case TypeKind_Float: op = SIRBinaryOperation_FNE; break;
-            default: LANG_ASSERT(0);
-            }
-            break;
-        }
-
-        case BinaryOp_Greater: {
-            switch (operand_type.kind) {
-            case TypeKind_Int:
-                op = (operand_type.int_.is_signed) ? SIRBinaryOperation_SGT
-                                                   : SIRBinaryOperation_UGT;
-                break;
-            case TypeKind_Float: op = SIRBinaryOperation_FGT; break;
-            default: LANG_ASSERT(0);
-            }
-            break;
-        }
-
-        case BinaryOp_GreaterEqual: {
-            switch (operand_type.kind) {
-            case TypeKind_Int:
-                op = (operand_type.int_.is_signed) ? SIRBinaryOperation_SGE
-                                                   : SIRBinaryOperation_UGE;
-                break;
-            case TypeKind_Float: op = SIRBinaryOperation_FGE; break;
-            default: LANG_ASSERT(0);
-            }
-            break;
-        }
-
-        case BinaryOp_Less: {
-            switch (operand_type.kind) {
-            case TypeKind_Int:
-                op = (operand_type.int_.is_signed) ? SIRBinaryOperation_SLT
-                                                   : SIRBinaryOperation_ULT;
-                break;
-            case TypeKind_Float: op = SIRBinaryOperation_FLT; break;
-            default: LANG_ASSERT(0);
-            }
-            break;
-        }
-
-        case BinaryOp_LessEqual: {
-            switch (operand_type.kind) {
-            case TypeKind_Int:
-                op = (operand_type.int_.is_signed) ? SIRBinaryOperation_SLE
-                                                   : SIRBinaryOperation_ULE;
-                break;
-            case TypeKind_Float: op = SIRBinaryOperation_FLE; break;
-            default: LANG_ASSERT(0);
-            }
-            break;
-        }
-
-        case BinaryOp_LShift: {
-            LANG_ASSERT(operand_type.is_runtime_int());
-            op = SIRBinaryOperation_Shl;
-            break;
-        }
-
+        case BinaryOp_Add:
+        case BinaryOp_Sub:
+        case BinaryOp_Mul:
+        case BinaryOp_Div:
+        case BinaryOp_Mod:
+        case BinaryOp_BitAnd:
+        case BinaryOp_BitOr:
+        case BinaryOp_BitXor:
+        case BinaryOp_Equal:
+        case BinaryOp_NotEqual:
+        case BinaryOp_Greater:
+        case BinaryOp_GreaterEqual:
+        case BinaryOp_Less:
+        case BinaryOp_LessEqual:
+        case BinaryOp_LShift:
         case BinaryOp_RShift: {
-            LANG_ASSERT(operand_type.is_runtime_int());
-            op = (operand_type.int_.is_signed) ? SIRBinaryOperation_AShr
-                                               : SIRBinaryOperation_LShr;
+            CodegenValue left_val =
+                codegen_expr(compiler, ctx, expr.binary.left_ref);
+            CodegenValue right_val =
+                codegen_expr(compiler, ctx, expr.binary.right_ref);
+
+            SIRInstRef left_inst = load_lvalue(ctx, left_val);
+            SIRInstRef right_inst = load_lvalue(ctx, right_val);
+
+            SIRBinaryOperation op = {};
+
+            ExprRef left_ref = expr.binary.left_ref;
+            TypeRef type_ref = compiler->expr_types[expr_ref].inner(compiler);
+            Type type = type_ref.get(compiler);
+            Type operand_type =
+                compiler->expr_types[left_ref].inner(compiler).get(compiler);
+
+            switch (expr.binary.op) {
+            case BinaryOp_Unknown:
+            case BinaryOp_MAX:
+            case BinaryOp_And:
+            case BinaryOp_Or: LANG_ASSERT(0); break;
+
+            case BinaryOp_Add: {
+                switch (operand_type.kind) {
+                case TypeKind_Int: op = SIRBinaryOperation_IAdd; break;
+                case TypeKind_Float: op = SIRBinaryOperation_FAdd; break;
+                default: LANG_ASSERT(0);
+                }
+                break;
+            }
+
+            case BinaryOp_Sub: {
+                switch (operand_type.kind) {
+                case TypeKind_Int: op = SIRBinaryOperation_ISub; break;
+                case TypeKind_Float: op = SIRBinaryOperation_FSub; break;
+                default: LANG_ASSERT(0);
+                }
+                break;
+            }
+
+            case BinaryOp_Mul: {
+                switch (operand_type.kind) {
+                case TypeKind_Int: op = SIRBinaryOperation_IMul; break;
+                case TypeKind_Float: op = SIRBinaryOperation_FMul; break;
+                default: LANG_ASSERT(0);
+                }
+                break;
+            }
+
+            case BinaryOp_Div: {
+                switch (operand_type.kind) {
+                case TypeKind_Int:
+                    op = (operand_type.int_.is_signed)
+                             ? SIRBinaryOperation_SDiv
+                             : SIRBinaryOperation_UDiv;
+                    break;
+                case TypeKind_Float: op = SIRBinaryOperation_FDiv; break;
+                default: LANG_ASSERT(0);
+                }
+                break;
+            }
+            case BinaryOp_Mod: {
+                switch (operand_type.kind) {
+                case TypeKind_Int:
+                    op = (operand_type.int_.is_signed)
+                             ? SIRBinaryOperation_SRem
+                             : SIRBinaryOperation_URem;
+                    break;
+                case TypeKind_Float: op = SIRBinaryOperation_FRem; break;
+                default: LANG_ASSERT(0);
+                }
+                break;
+            }
+
+            case BinaryOp_Equal: {
+                switch (operand_type.kind) {
+                case TypeKind_Bool:
+                case TypeKind_Int: op = SIRBinaryOperation_IEQ; break;
+                case TypeKind_Float: op = SIRBinaryOperation_FEQ; break;
+                default: LANG_ASSERT(0);
+                }
+                break;
+            }
+
+            case BinaryOp_NotEqual: {
+                switch (operand_type.kind) {
+                case TypeKind_Bool:
+                case TypeKind_Int: op = SIRBinaryOperation_INE; break;
+                case TypeKind_Float: op = SIRBinaryOperation_FNE; break;
+                default: LANG_ASSERT(0);
+                }
+                break;
+            }
+
+            case BinaryOp_Greater: {
+                switch (operand_type.kind) {
+                case TypeKind_Int:
+                    op = (operand_type.int_.is_signed) ? SIRBinaryOperation_SGT
+                                                       : SIRBinaryOperation_UGT;
+                    break;
+                case TypeKind_Float: op = SIRBinaryOperation_FGT; break;
+                default: LANG_ASSERT(0);
+                }
+                break;
+            }
+
+            case BinaryOp_GreaterEqual: {
+                switch (operand_type.kind) {
+                case TypeKind_Int:
+                    op = (operand_type.int_.is_signed) ? SIRBinaryOperation_SGE
+                                                       : SIRBinaryOperation_UGE;
+                    break;
+                case TypeKind_Float: op = SIRBinaryOperation_FGE; break;
+                default: LANG_ASSERT(0);
+                }
+                break;
+            }
+
+            case BinaryOp_Less: {
+                switch (operand_type.kind) {
+                case TypeKind_Int:
+                    op = (operand_type.int_.is_signed) ? SIRBinaryOperation_SLT
+                                                       : SIRBinaryOperation_ULT;
+                    break;
+                case TypeKind_Float: op = SIRBinaryOperation_FLT; break;
+                default: LANG_ASSERT(0);
+                }
+                break;
+            }
+
+            case BinaryOp_LessEqual: {
+                switch (operand_type.kind) {
+                case TypeKind_Int:
+                    op = (operand_type.int_.is_signed) ? SIRBinaryOperation_SLE
+                                                       : SIRBinaryOperation_ULE;
+                    break;
+                case TypeKind_Float: op = SIRBinaryOperation_FLE; break;
+                default: LANG_ASSERT(0);
+                }
+                break;
+            }
+
+            case BinaryOp_LShift: {
+                LANG_ASSERT(operand_type.is_runtime_int());
+                op = SIRBinaryOperation_Shl;
+                break;
+            }
+
+            case BinaryOp_RShift: {
+                LANG_ASSERT(operand_type.is_runtime_int());
+                op = (operand_type.int_.is_signed) ? SIRBinaryOperation_AShr
+                                                   : SIRBinaryOperation_LShr;
+                break;
+            }
+
+            case BinaryOp_BitAnd: {
+                LANG_ASSERT(operand_type.is_runtime_int());
+                op = SIRBinaryOperation_And;
+                break;
+            }
+
+            case BinaryOp_BitOr: {
+                LANG_ASSERT(operand_type.is_runtime_int());
+                op = SIRBinaryOperation_Or;
+                break;
+            }
+
+            case BinaryOp_BitXor: {
+                LANG_ASSERT(operand_type.is_runtime_int());
+                op = SIRBinaryOperation_Xor;
+                break;
+            }
+            }
+
+            value = {
+                false,
+                SIRBuilderInsertBinop(ctx->builder, op, left_inst, right_inst)};
+
+            if (type.kind == TypeKind_Bool) {
+                value.inst_ref = SIRBuilderInsertZext(
+                    ctx->builder, ctx->type_values[type_ref], value.inst_ref);
+            }
             break;
         }
+        case BinaryOp_And: {
+            SIRInstRef current_func =
+                SIRBuilderGetCurrentFunction(ctx->builder);
+            SIRInstRef incoming_block = SIRBuilderGetCurrentBlock(ctx->builder);
 
-        case BinaryOp_BitAnd: {
-            LANG_ASSERT(operand_type.is_runtime_int());
-            op = SIRBinaryOperation_And;
+            SIRInstRef true_block =
+                SIRModuleInsertBlockAtEnd(ctx->module, current_func);
+
+            SIRInstRef merge_block =
+                SIRModuleInsertBlockAtEnd(ctx->module, current_func);
+
+            // In incoming block
+            SIRInstRef left_value = load_lvalue(
+                ctx, codegen_expr(compiler, ctx, expr.binary.left_ref));
+
+            left_value = value_into_bool(
+                ctx,
+                compiler->expr_types[expr.binary.left_ref].get(compiler),
+                left_value);
+
+            SIRBuilderInsertBranch(
+                ctx->builder, left_value, true_block, merge_block);
+
+            // In true block
+            SIRBuilderPositionAtEnd(ctx->builder, true_block);
+
+            SIRInstRef right_value = load_lvalue(
+                ctx, codegen_expr(compiler, ctx, expr.binary.right_ref));
+
+            SIRBuilderInsertJump(ctx->builder, merge_block);
+
+            // In merge block
+            SIRBuilderPositionAtEnd(ctx->builder, merge_block);
+
+            value = {
+                false,
+                SIRBuilderInsertPhi(
+                    ctx->builder, ctx->type_values[compiler->bool_type]),
+            };
+
+            SIRPhiAddIncoming(
+                ctx->builder, value.inst_ref, incoming_block, left_value);
+
+            SIRPhiAddIncoming(
+                ctx->builder, value.inst_ref, true_block, right_value);
+
             break;
         }
+        case BinaryOp_Or: {
+            SIRInstRef current_func =
+                SIRBuilderGetCurrentFunction(ctx->builder);
+            SIRInstRef incoming_block = SIRBuilderGetCurrentBlock(ctx->builder);
 
-        case BinaryOp_BitOr: {
-            LANG_ASSERT(operand_type.is_runtime_int());
-            op = SIRBinaryOperation_Or;
+            SIRInstRef false_block =
+                SIRModuleInsertBlockAtEnd(ctx->module, current_func);
+
+            SIRInstRef merge_block =
+                SIRModuleInsertBlockAtEnd(ctx->module, current_func);
+
+            // In incoming block
+            SIRInstRef left_value = load_lvalue(
+                ctx, codegen_expr(compiler, ctx, expr.binary.left_ref));
+
+            left_value = value_into_bool(
+                ctx,
+                compiler->expr_types[expr.binary.left_ref].get(compiler),
+                left_value);
+
+            SIRBuilderInsertBranch(
+                ctx->builder, left_value, merge_block, false_block);
+
+            // In false block
+            SIRBuilderPositionAtEnd(ctx->builder, false_block);
+
+            SIRInstRef right_value = load_lvalue(
+                ctx, codegen_expr(compiler, ctx, expr.binary.right_ref));
+
+            SIRBuilderInsertJump(ctx->builder, merge_block);
+
+            // In merge block
+            SIRBuilderPositionAtEnd(ctx->builder, merge_block);
+
+            value = {
+                false,
+                SIRBuilderInsertPhi(
+                    ctx->builder, ctx->type_values[compiler->bool_type]),
+            };
+
+            SIRPhiAddIncoming(
+                ctx->builder, value.inst_ref, incoming_block, left_value);
+
+            SIRPhiAddIncoming(
+                ctx->builder, value.inst_ref, false_block, right_value);
             break;
         }
-
-        case BinaryOp_BitXor: {
-            LANG_ASSERT(operand_type.is_runtime_int());
-            op = SIRBinaryOperation_Xor;
-            break;
-        }
-        }
-
-        value = {
-            false,
-            SIRBuilderInsertBinop(ctx->builder, op, left_inst, right_inst)};
-
-        if (type.kind == TypeKind_Bool) {
-            value.inst_ref = SIRBuilderInsertZext(
-                ctx->builder, ctx->type_values[type_ref], value.inst_ref);
         }
 
         break;

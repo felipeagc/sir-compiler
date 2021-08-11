@@ -86,10 +86,7 @@ print_instruction(SIRModule *module, SIRInstRef inst_ref, SIRStringBuilder *sb)
     case SIRInstKind_Block: SIR_ASSERT(0); break;
 
     case SIRInstKind_Alias: {
-        sb->sprintf(
-            "%%r%u = alias %%r%u",
-            inst_ref.id,
-            inst.alias.inst_ref.id);
+        sb->sprintf("%%r%u = alias %%r%u", inst_ref.id, inst.alias.inst_ref.id);
         break;
     }
 
@@ -300,7 +297,7 @@ print_instruction(SIRModule *module, SIRInstRef inst_ref, SIRStringBuilder *sb)
         break;
     }
     case SIRInstKind_Jump: {
-        sb->sprintf("jump %%r%u", inst.jump.block_ref.id);
+        sb->sprintf("jump %%b%u", inst.jump.block_ref.id);
         break;
     }
     case SIRInstKind_Branch: {
@@ -309,6 +306,24 @@ print_instruction(SIRModule *module, SIRInstRef inst_ref, SIRStringBuilder *sb)
             inst.branch.cond_inst_ref.id,
             inst.branch.true_block_ref.id,
             inst.branch.false_block_ref.id);
+        break;
+    }
+    case SIRInstKind_Phi: {
+        SIRString type_string = SIRTypeToString(module, inst.type);
+        sb->sprintf(
+            "%%r%u = phi %.*s ",
+            inst_ref.id,
+            (int)type_string.len,
+            type_string.ptr);
+
+        for (size_t i = 0; i < inst.phi.pairs.len; ++i) {
+            if (i > 0) sb->append(SIR_STR(", "));
+
+            sb->sprintf(
+                "[%%b%u, %%r%u]",
+                inst.phi.pairs[i].block_ref.id,
+                inst.phi.pairs[i].value_ref.id);
+        }
         break;
     }
     }
@@ -323,7 +338,7 @@ print_block(SIRModule *module, SIRInstRef block_ref, SIRStringBuilder *sb)
 
     SIRInst *block = &module->insts[block_ref.id];
 
-    sb->sprintf("  block %%r%u:\n", block_ref.id);
+    sb->sprintf("  block %%b%u:\n", block_ref.id);
 
     for (SIRInstRef inst_ref : block->block.inst_refs) {
         sb->append(SIR_STR("    "));
@@ -1229,6 +1244,32 @@ void SIRBuilderInsertBranch(
     inst.branch.false_block_ref = false_block_ref;
 
     builder_insert_inst(builder, inst);
+}
+
+SIRInstRef SIRBuilderInsertPhi(SIRBuilder *builder, SIRType *type)
+{
+    ZoneScoped;
+
+    SIRInst inst = {};
+    inst.kind = SIRInstKind_Phi;
+    inst.type = type;
+    inst.phi.pairs =
+        SIRArray<SIRPhiPair>::create((SIRAllocator *)builder->module->arena);
+
+    return builder_insert_inst(builder, inst);
+}
+
+void SIRPhiAddIncoming(
+    SIRBuilder *builder,
+    SIRInstRef phi_ref,
+    SIRInstRef block_ref,
+    SIRInstRef value_ref)
+{
+    ZoneScoped;
+
+    SIRInst phi = SIRModuleGetInst(builder->module, phi_ref);
+    phi.phi.pairs.push_back((SIRPhiPair){block_ref, value_ref});
+    builder->module->insts[phi_ref.id] = phi;
 }
 
 void SIRBuilderInsertReturnValue(SIRBuilder *builder, SIRInstRef inst_ref)

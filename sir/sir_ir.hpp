@@ -55,6 +55,11 @@ struct SIRFunction {
     SIRCallingConvention calling_convention;
 };
 
+struct SIRPhiPair {
+    SIRInstRef block_ref;
+    SIRInstRef value_ref;
+};
+
 struct SIRInst {
     union {
         SIRFunction *func;
@@ -92,6 +97,9 @@ struct SIRInst {
             SIRInstRef true_block_ref;
             SIRInstRef false_block_ref;
         } branch;
+        struct {
+            SIRArray<SIRPhiPair> pairs;
+        } phi;
         struct {
             SIRInstRef func_ref;
             SIRInstRef *params;

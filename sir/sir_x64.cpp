@@ -236,6 +236,7 @@ struct X64AsmBuilder {
     SIRModule *module;
     SIRObjectBuilder *obj_builder;
     SIRArray<MetaValue> meta_insts;
+    SIRInstRef current_block;
 
     size_t get_code_offset();
     size_t encode_raw(const uint8_t *bytes, size_t len);
@@ -2333,6 +2334,24 @@ void X64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
     }
 
     case SIRInstKind_Jump: {
+        SIRInst dest_block = SIRModuleGetInst(module, inst.jump.block_ref);
+        if (dest_block.block.inst_refs.len > 0) {
+            SIRInstRef first_inst_ref = dest_block.block.inst_refs[0];
+            SIRInst first_inst = SIRModuleGetInst(module, first_inst_ref);
+
+            if (first_inst.kind == SIRInstKind_Phi) {
+                for (size_t i = 0; i < first_inst.phi.pairs.len; ++i) {
+                    SIRPhiPair pair = first_inst.phi.pairs[i];
+                    if (pair.block_ref.id == this->current_block.id) {
+                        this->move_inst_rvalue(
+                            pair.value_ref,
+                            &this->meta_insts[first_inst_ref.id]);
+                        break;
+                    }
+                }
+            }
+        }
+
         FuncJumpPatch patch = {
             .instruction = FE_JMP | FE_JMPL,
             .instruction_offset = this->get_code_offset(),
@@ -2347,6 +2366,51 @@ void X64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
     case SIRInstKind_Branch: {
         MetaValue al_value = create_int_register_value(1, RegisterIndex_RAX);
 
+        SIRInstRef true_phi = {};
+        SIRInstRef true_phi_value = {};
+        SIRInstRef false_phi = {};
+        SIRInstRef false_phi_value = {};
+
+        {
+            SIRInst dest_block =
+                SIRModuleGetInst(module, inst.branch.true_block_ref);
+            if (dest_block.block.inst_refs.len > 0) {
+                SIRInstRef first_inst_ref = dest_block.block.inst_refs[0];
+                SIRInst first_inst = SIRModuleGetInst(module, first_inst_ref);
+
+                if (first_inst.kind == SIRInstKind_Phi) {
+                    for (size_t i = 0; i < first_inst.phi.pairs.len; ++i) {
+                        SIRPhiPair pair = first_inst.phi.pairs[i];
+                        if (pair.block_ref.id == this->current_block.id) {
+                            true_phi = first_inst_ref;
+                            true_phi_value = pair.value_ref;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        {
+            SIRInst dest_block =
+                SIRModuleGetInst(module, inst.branch.false_block_ref);
+            if (dest_block.block.inst_refs.len > 0) {
+                SIRInstRef first_inst_ref = dest_block.block.inst_refs[0];
+                SIRInst first_inst = SIRModuleGetInst(module, first_inst_ref);
+
+                if (first_inst.kind == SIRInstKind_Phi) {
+                    for (size_t i = 0; i < first_inst.phi.pairs.len; ++i) {
+                        SIRPhiPair pair = first_inst.phi.pairs[i];
+                        if (pair.block_ref.id == this->current_block.id) {
+                            false_phi = first_inst_ref;
+                            false_phi_value = pair.value_ref;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
         this->encode_mnem(
             Mnem_MOV,
             &this->meta_insts[inst.branch.cond_inst_ref.id],
@@ -2357,6 +2421,11 @@ void X64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
             REGISTERS[al_value.reg.index],
             REGISTERS[al_value.reg.index]);
 
+        if (true_phi.id) {
+            this->move_inst_rvalue(
+                true_phi_value, &this->meta_insts[true_phi.id]);
+        }
+
         FuncJumpPatch true_patch = {
             .instruction = FE_JNZ | FE_JMPL,
             .instruction_offset = this->get_code_offset(),
@@ -2364,6 +2433,11 @@ void X64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
         };
         meta_func->jump_patches.push_back(true_patch);
         this->encode(FE_JNZ | FE_JMPL, -true_patch.instruction_offset);
+
+        if (false_phi.id) {
+            this->move_inst_rvalue(
+                false_phi_value, &this->meta_insts[false_phi.id]);
+        }
 
         FuncJumpPatch false_patch = {
             .instruction = FE_JMP | FE_JMPL,
@@ -2373,6 +2447,9 @@ void X64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
         meta_func->jump_patches.push_back(false_patch);
         this->encode(FE_JMP | FE_JMPL, -false_patch.instruction_offset);
 
+        break;
+    }
+    case SIRInstKind_Phi: {
         break;
     }
     }
@@ -2569,6 +2646,7 @@ void X64AsmBuilder::generate_function(SIRInstRef func_ref)
             case SIRInstKind_PtrCast: break;
 
             // Create stack space for these kinds:
+            case SIRInstKind_Phi:
             case SIRInstKind_ZExt:
             case SIRInstKind_SExt:
             case SIRInstKind_Trunc:
@@ -2836,6 +2914,9 @@ void X64AsmBuilder::generate_function(SIRInstRef func_ref)
 
         meta_block->kind = MetaValueKind_Block;
         meta_block->block.offset = this->get_code_offset();
+
+        this->current_block = block_ref;
+
         for (SIRInstRef inst_ref : block.block.inst_refs) {
             this->generate_inst(func_ref, inst_ref);
             /* this->encode(FE_NOP); */

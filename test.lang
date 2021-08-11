@@ -42,11 +42,11 @@ fn export main() {
 	// a := u64(8) / b;
 	// printf("%d\n", i32(a));
 
-	a := i32(123);
-	b := a + 321;
+	// a := i32(123);
+	// b := a + 321;
 
-	printf("@sizeof(usize) = %d\n", i32(@sizeof(usize)));
-	s: usize = 1231;
+	// printf("@sizeof(usize) = %d\n", i32(@sizeof(usize)));
+	// s: usize = 1231;
 
 	if (@defined("linux")) {
 		printf("Linux\n");
@@ -56,6 +56,14 @@ fn export main() {
 	not_linux: bool = is_linux == false;
 	if (not_linux) {
 		printf("Not linux\n");
+	}
+
+	if (is_linux and my_int2 > MyInt(1)) {
+		printf("hey\n");
+	}
+
+	if (not_linux or my_int2 > MyInt(1)) {
+		printf("hey again\n");
 	}
 
 	print_int(0xFF00000000000000);

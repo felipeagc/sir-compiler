@@ -102,6 +102,7 @@ typedef enum SIRInstKind {
     SIRInstKind_Store,
     SIRInstKind_Jump,
     SIRInstKind_Branch,
+    SIRInstKind_Phi,
     SIRInstKind_FuncCall,
     SIRInstKind_PtrCast,
     SIRInstKind_ZExt,
@@ -246,6 +247,16 @@ void SIRBuilderInsertBranch(
     SIRInstRef cond_ref,
     SIRInstRef true_block_ref,
     SIRInstRef false_block_ref);
+
+SIRInstRef SIRBuilderInsertPhi(
+    SIRBuilder *builder,
+    SIRType *type);
+
+void SIRPhiAddIncoming(
+    SIRBuilder *builder,
+    SIRInstRef phi_ref,
+    SIRInstRef block_ref,
+    SIRInstRef value_ref);
 
 void SIRBuilderInsertReturnValue(SIRBuilder *builder, SIRInstRef inst_ref);
 void SIRBuilderInsertReturnVoid(SIRBuilder *builder);

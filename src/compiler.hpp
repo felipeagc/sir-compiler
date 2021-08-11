@@ -379,6 +379,8 @@ enum BinaryOp {
     BinaryOp_LessEqual,
     BinaryOp_Greater,
     BinaryOp_GreaterEqual,
+    BinaryOp_And,
+    BinaryOp_Or,
     BinaryOp_MAX,
 };
 

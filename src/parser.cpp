@@ -1169,7 +1169,10 @@ parse_binary_expr(Compiler *compiler, ParserState *state, Location *expr_loc)
     case TokenKind_Greater:
     case TokenKind_GreaterEqual:
     case TokenKind_Less:
-    case TokenKind_LessEqual: break;
+    case TokenKind_LessEqual:
+
+    case TokenKind_And:
+    case TokenKind_Or: break;
     default: return expr;
     }
 
@@ -1196,6 +1199,8 @@ parse_binary_expr(Compiler *compiler, ParserState *state, Location *expr_loc)
         6,  // BinaryOp_LessEqual
         6,  // BinaryOp_Greater
         6,  // BinaryOp_GreaterEqual
+        11,  // BinaryOp_And
+        12,  // BinaryOp_or
     };
 
     {
@@ -1225,6 +1230,8 @@ parse_binary_expr(Compiler *compiler, ParserState *state, Location *expr_loc)
         case TokenKind_LessEqual: op = BinaryOp_LessEqual; break;
         case TokenKind_Greater: op = BinaryOp_Greater; break;
         case TokenKind_GreaterEqual: op = BinaryOp_GreaterEqual; break;
+        case TokenKind_And: op = BinaryOp_And; break;
+        case TokenKind_Or: op = BinaryOp_Or; break;
         default: break;
         }
 

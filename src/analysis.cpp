@@ -1044,6 +1044,17 @@ static void analyze_expr(
             compiler->expr_types[expr_ref] = compiler->expr_types[left_ref];
             break;
         }
+
+        case BinaryOp_And:
+        case BinaryOp_Or: {
+            analyze_expr(
+                compiler, state, expr.binary.left_ref, compiler->bool_type);
+            analyze_expr(
+                compiler, state, expr.binary.right_ref, compiler->bool_type);
+
+            compiler->expr_types[expr_ref] = compiler->bool_type;
+            break;
+        }
         }
 
         break;

@@ -25,6 +25,12 @@ interp_expr(Compiler *compiler, ExprRef expr_ref, InterpValue *out_value)
         *out_value = value;
         return true;
     }
+    case ExprKind_BoolLiteral: {
+        value.type_ref = compiler->bool_type;
+        value.boolean = expr.bool_literal.bool_;
+        *out_value = value;
+        return true;
+    }
     case ExprKind_BuiltinCall: {
         switch (expr.builtin_call.builtin) {
         case BuiltinFunction_Sizeof: {
@@ -58,7 +64,6 @@ interp_expr(Compiler *compiler, ExprRef expr_ref, InterpValue *out_value)
             Expr param0 = param0_ref.get(compiler);
             LANG_ASSERT(param0.kind == ExprKind_StringLiteral);
 
-            InterpValue value = {};
             value.type_ref = compiler->bool_type;
             value.boolean = compiler->defines.get(param0.str_literal.str);
             *out_value = value;
@@ -66,6 +71,39 @@ interp_expr(Compiler *compiler, ExprRef expr_ref, InterpValue *out_value)
         }
         default: break;
         }
+    }
+    case ExprKind_Binary: {
+        InterpValue left = {};
+        InterpValue right = {};
+        if (!interp_expr(compiler, expr.binary.left_ref, &left)) {
+            return false;
+        }
+        if (!interp_expr(compiler, expr.binary.right_ref, &right)) {
+            return false;
+        }
+
+        LANG_ASSERT(left.type_ref.id == right.type_ref.id);
+
+        switch (expr.binary.op) {
+        case BinaryOp_Unknown:
+        case BinaryOp_MAX: LANG_ASSERT(0); break;
+
+        default: return false;
+
+        case BinaryOp_And: {
+            value.type_ref = compiler->bool_type;
+            value.boolean = left.boolean && right.boolean;
+            *out_value = value;
+            return true;
+        }
+        case BinaryOp_Or: {
+            value.type_ref = compiler->bool_type;
+            value.boolean = left.boolean || right.boolean;
+            *out_value = value;
+            return true;
+        }
+        }
+        break;
     }
     default: break;
     }
@@ -1167,6 +1205,30 @@ analyze_stmt(Compiler *compiler, AnalyzerState *state, StmtRef stmt_ref)
                     stmt.return_.returned_expr_ref,
                     func_type.func.return_type);
             }
+        }
+
+        break;
+    }
+
+    case StmtKind_When: {
+        TypeRef bool_type = compiler->bool_type;
+        analyze_expr(compiler, state, stmt.when.cond_expr_ref, bool_type);
+
+        InterpValue value = {};
+        if (!interp_expr(compiler, stmt.when.cond_expr_ref, &value)) {
+            compiler->add_error(
+                compiler->expr_locs[stmt.when.cond_expr_ref],
+                "could not evaluate compile time expression");
+            break;
+        }
+
+        LANG_ASSERT(value.type_ref.id == bool_type.id);
+        stmt.when.cond_value = value.boolean;
+
+        if (stmt.when.cond_value) {
+            analyze_stmt(compiler, state, stmt.when.true_stmt_ref);
+        } else if (stmt.when.false_stmt_ref.id) {
+            analyze_stmt(compiler, state, stmt.when.false_stmt_ref);
         }
 
         break;

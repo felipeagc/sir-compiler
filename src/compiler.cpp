@@ -185,6 +185,7 @@ Compiler Compiler::create()
     keyword_map.set("null", TokenKind_Null);
     keyword_map.set("true", TokenKind_True);
     keyword_map.set("false", TokenKind_False);
+    keyword_map.set("when", TokenKind_When);
     keyword_map.set("if", TokenKind_If);
     keyword_map.set("else", TokenKind_Else);
     keyword_map.set("while", TokenKind_While);

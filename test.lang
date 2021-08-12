@@ -58,6 +58,12 @@ fn export main() {
 		printf("Not linux\n");
 	}
 
+	when (@defined("linux") or @defined("no")) {
+		printf("Compiling 1\n");
+	} else {
+		printf("Compiling 2\n");
+	}
+
 	if (is_linux and my_int2 > MyInt(1)) {
 		printf("hey\n");
 	}

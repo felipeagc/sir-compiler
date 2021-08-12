@@ -943,6 +943,15 @@ codegen_stmt(Compiler *compiler, CodegenContext *ctx, StmtRef stmt_ref)
         break;
     }
 
+    case StmtKind_When: {
+        if (stmt.when.cond_value) {
+            codegen_stmt(compiler, ctx, stmt.when.true_stmt_ref);
+        } else if (stmt.when.false_stmt_ref.id) {
+            codegen_stmt(compiler, ctx, stmt.when.false_stmt_ref);
+        }
+        break;
+    }
+
     case StmtKind_If: {
         SIRInstRef cond_value = load_lvalue(
             ctx, codegen_expr(compiler, ctx, stmt.if_.cond_expr_ref));

@@ -72,6 +72,7 @@ static inline String token_kind_to_string(TokenKind kind)
     case TokenKind_Type: return "type";
     case TokenKind_Struct: return "struct";
     case TokenKind_Union: return "union";
+    case TokenKind_When: return "when";
     case TokenKind_If: return "if";
     case TokenKind_Else: return "else";
     case TokenKind_While: return "while";
@@ -1199,8 +1200,8 @@ parse_binary_expr(Compiler *compiler, ParserState *state, Location *expr_loc)
         6,  // BinaryOp_LessEqual
         6,  // BinaryOp_Greater
         6,  // BinaryOp_GreaterEqual
-        11,  // BinaryOp_And
-        12,  // BinaryOp_or
+        11, // BinaryOp_And
+        12, // BinaryOp_or
     };
 
     {
@@ -1342,8 +1343,40 @@ parse_stmt(Compiler *compiler, ParserState *state, Location *stmt_loc)
     Token next_token = state->peek_token();
 
     switch (next_token.kind) {
+    case TokenKind_When: {
+        Token when_token = state->next_token();
+        *stmt_loc = when_token.loc;
+
+        stmt.kind = StmtKind_When;
+        stmt.when = {};
+
+        state->consume_token(compiler, TokenKind_LParen);
+
+        Location cond_expr_loc = {};
+        Expr cond_expr = parse_expr(compiler, state, &cond_expr_loc);
+
+        stmt.when.cond_expr_ref = compiler->add_expr(cond_expr_loc, cond_expr);
+
+        state->consume_token(compiler, TokenKind_RParen);
+
+        Location true_stmt_loc = {};
+        Stmt true_stmt = parse_stmt(compiler, state, &true_stmt_loc);
+
+        stmt.when.true_stmt_ref = compiler->add_stmt(true_stmt_loc, true_stmt);
+
+        next_token = state->peek_token();
+        if (next_token.kind == TokenKind_Else) {
+            state->consume_token(compiler, TokenKind_Else);
+
+            Location false_stmt_loc = {};
+            Stmt false_stmt = parse_stmt(compiler, state, &false_stmt_loc);
+            stmt.when.false_stmt_ref =
+                compiler->add_stmt(false_stmt_loc, false_stmt);
+        }
+        break;
+    }
     case TokenKind_If: {
-        Token if_token = state->consume_token(compiler, TokenKind_If);
+        Token if_token = state->next_token();
         *stmt_loc = if_token.loc;
 
         stmt.kind = StmtKind_If;

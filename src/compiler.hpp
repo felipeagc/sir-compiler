@@ -157,6 +157,7 @@ enum TokenKind {
     TokenKind_Type,
     TokenKind_Struct,
     TokenKind_Union,
+    TokenKind_When,
     TokenKind_If,
     TokenKind_Else,
     TokenKind_While,
@@ -331,15 +332,8 @@ struct InterpValue {
     TypeRef type_ref;
     union {
         bool boolean;
-        uint8_t u8;
-        uint16_t u16;
-        uint32_t u32;
         uint64_t u64;
-        int8_t i8;
-        int16_t i16;
-        int32_t i32;
         int64_t i64;
-        float f32;
         double f64;
     };
 };
@@ -489,6 +483,7 @@ enum StmtKind : uint8_t {
     StmtKind_Block,
     StmtKind_Expr,
     StmtKind_Decl,
+    StmtKind_When,
     StmtKind_If,
     StmtKind_While,
     StmtKind_Return,
@@ -509,6 +504,12 @@ struct Stmt {
         struct {
             ExprRef returned_expr_ref;
         } return_;
+        struct {
+            ExprRef cond_expr_ref;
+            StmtRef true_stmt_ref;
+            StmtRef false_stmt_ref;
+            bool cond_value;
+        } when;
         struct {
             ExprRef cond_expr_ref;
             StmtRef true_stmt_ref;

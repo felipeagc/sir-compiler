@@ -67,8 +67,8 @@ typedef enum SIRVMOpCode {
     SIRVMOpCode_MovAR32,
     SIRVMOpCode_MovAR64,
 
-    SIRVMOpCode_JumpImm32,
-    SIRVMOpCode_CondReg_JumpImm32,
+    SIRVMOpCode_JumpI32,
+    SIRVMOpCode_CondJumpR8I32,
 
     SIRVMOpCode_IAdd8,
     SIRVMOpCode_IAdd16,
@@ -143,6 +143,7 @@ SIRVM *SIRVMCreate();
 void SIRVMDestroy(SIRVM *vm);
 void SIRVMRunTestProgram(SIRVM *vm);
 SIRVMExitCode SIRVMRun(SIRVM *vm, void **data, size_t *data_size);
+void SIRVMDisassemble(const uint8_t *program, size_t program_size);
 
 #ifdef __cplusplus
 }

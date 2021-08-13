@@ -4,26 +4,28 @@
 
 struct SIRVM {
     uint32_t ip;
-    uint32_t bp;
     bool running;
     SIRVMExitCode exit_code;
     SIRArray<uint8_t> program;
-    SIRArray<uint8_t> stack;
+    SIRArray<uint8_t> globals;
+    uint8_t *stack;
+    size_t stack_size;
+    uint64_t registers[SIRVMRegister_MAX];
 };
 
 SIRVM *SIRVMCreate()
 {
     SIRVM *vm = SIRAllocInit(&SIR_MALLOC_ALLOCATOR, SIRVM);
     vm->program = SIRArray<uint8_t>::create(&SIR_MALLOC_ALLOCATOR);
-    vm->stack = SIRArray<uint8_t>::create(&SIR_MALLOC_ALLOCATOR);
-    vm->stack.reserve(1 << 22);
+    vm->stack_size = 1 << 22;
+    vm->stack = SIRAllocSlice(&SIR_MALLOC_ALLOCATOR, uint8_t, vm->stack_size);
     return vm;
 }
 
 void SIRVMDestroy(SIRVM *vm)
 {
     vm->program.destroy();
-    vm->stack.destroy();
+    SIRFree(&SIR_MALLOC_ALLOCATOR, vm->stack);
     SIRFree(&SIR_MALLOC_ALLOCATOR, vm);
 }
 
@@ -67,89 +69,6 @@ void SIRVMBuildF64(SIRVM *vm, double val)
     vm->program.push_many({u8, sizeof(val)});
 }
 
-SIR_INLINE void SIRVMPush(SIRVM *vm, void *val, size_t size)
-{
-    if (vm->stack.len + size > vm->stack.cap) {
-        vm->running = false;
-        vm->exit_code = SIRVMExitCode_StackOverflow;
-        return;
-    }
-    memcpy(vm->stack.ptr + vm->stack.len, val, size);
-    vm->stack.len += size;
-}
-
-SIR_INLINE void SIRVMPushI8(SIRVM *vm, uint8_t val)
-{
-    SIRVMPush(vm, &val, sizeof(val));
-}
-
-SIR_INLINE void SIRVMPushI16(SIRVM *vm, uint16_t val)
-{
-    SIRVMPush(vm, &val, sizeof(val));
-}
-
-SIR_INLINE void SIRVMPushI32(SIRVM *vm, uint32_t val)
-{
-    SIRVMPush(vm, &val, sizeof(val));
-}
-
-SIR_INLINE void SIRVMPushI64(SIRVM *vm, uint64_t val)
-{
-    SIRVMPush(vm, &val, sizeof(val));
-}
-
-SIR_INLINE void SIRVMPushF32(SIRVM *vm, float val)
-{
-    SIRVMPush(vm, &val, sizeof(val));
-}
-
-SIR_INLINE void SIRVMPushF64(SIRVM *vm, double val)
-{
-    SIRVMPush(vm, &val, sizeof(val));
-}
-
-SIR_INLINE uint8_t SIRVMPopI8(SIRVM *vm)
-{
-    SIR_ASSERT(vm->stack.len >= 1);
-    vm->stack.len -= 1;
-    return *((uint8_t *)&vm->stack.ptr[vm->stack.len]);
-}
-
-SIR_INLINE uint16_t SIRVMPopI16(SIRVM *vm)
-{
-    SIR_ASSERT(vm->stack.len >= 2);
-    vm->stack.len -= 2;
-    return *((uint16_t *)&vm->stack.ptr[vm->stack.len]);
-}
-
-SIR_INLINE uint32_t SIRVMPopI32(SIRVM *vm)
-{
-    SIR_ASSERT(vm->stack.len >= 4);
-    vm->stack.len -= 4;
-    return *((uint32_t *)&vm->stack.ptr[vm->stack.len]);
-}
-
-SIR_INLINE uint64_t SIRVMPopI64(SIRVM *vm)
-{
-    SIR_ASSERT(vm->stack.len >= 8);
-    vm->stack.len -= 8;
-    return *((uint64_t *)&vm->stack.ptr[vm->stack.len]);
-}
-
-SIR_INLINE float SIRVMPopF32(SIRVM *vm)
-{
-    SIR_ASSERT(vm->stack.len >= 4);
-    vm->stack.len -= 4;
-    return *((float *)&vm->stack.ptr[vm->stack.len]);
-}
-
-SIR_INLINE double SIRVMPopF64(SIRVM *vm)
-{
-    SIR_ASSERT(vm->stack.len >= 8);
-    vm->stack.len -= 8;
-    return *((double *)&vm->stack.ptr[vm->stack.len]);
-}
-
 void dump_hex(const void *data, size_t size)
 {
     char ascii[17];
@@ -183,12 +102,23 @@ void dump_hex(const void *data, size_t size)
 
 void SIRVMRunTestProgram(SIRVM *vm)
 {
-    SIRVMBuildOpCode(vm, SIRVMOpCode_PushImm32);
-    SIRVMBuildI32(vm, 1);
-    SIRVMBuildOpCode(vm, SIRVMOpCode_PushImm32);
-    SIRVMBuildI32(vm, 2);
+    SIRVMBuildOpCode(vm, SIRVMOpCode_MovIR64);
+    SIRVMBuildI8(vm, SIRVMRegister_1);
+    SIRVMBuildI64(vm, 8);
 
-    SIRVMBuildOpCode(vm, SIRVMOpCode_IAdd32);
+    SIRVMBuildOpCode(vm, SIRVMOpCode_ISub64);
+    SIRVMBuildI8(vm, (SIRVMRegister_BP << 4) | SIRVMRegister_1);
+
+    SIRVMBuildOpCode(vm, SIRVMOpCode_LEASR);
+    SIRVMBuildI8(vm, SIRVMRegister_1);
+    SIRVMBuildI32(vm, 0);
+
+    SIRVMBuildOpCode(vm, SIRVMOpCode_MovIR64);
+    SIRVMBuildI8(vm, SIRVMRegister_2);
+    SIRVMBuildI64(vm, 123);
+
+    SIRVMBuildOpCode(vm, SIRVMOpCode_MovRA64);
+    SIRVMBuildI8(vm, (SIRVMRegister_2 << 4) | SIRVMRegister_1);
 
     SIRVMBuildOpCode(vm, SIRVMOpCode_Halt);
 
@@ -199,17 +129,28 @@ void SIRVMRunTestProgram(SIRVM *vm)
     SIRVMExitCode exit_code = SIRVMRun(vm, &data, &data_size);
     SIR_ASSERT(exit_code == SIRVMExitCode_Success);
 
-    SIR_ASSERT(data_size == 4);
-    uint32_t u32 = *(uint32_t *)data;
-    SIR_ASSERT(u32 == 3);
+    printf("stack_end = %zu\n", (uint64_t)vm->stack + vm->stack_size);
+    printf("bp        = %zu\n", vm->registers[SIRVMRegister_BP]);
+    printf("r1        = %zu\n", vm->registers[SIRVMRegister_1]);
+
+    uint64_t value = *(uint64_t *)vm->registers[SIRVMRegister_BP];
+    printf("result    = %zu\n", value);
+    SIR_ASSERT(value == 123);
+
+    SIR_ASSERT(
+        vm->registers[SIRVMRegister_1] == vm->registers[SIRVMRegister_BP]);
+
+    /* SIR_ASSERT(data_size == 4); */
+    /* uint32_t u32 = *(uint32_t *)data; */
+    /* SIR_ASSERT(u32 == 3); */
 }
 
 SIRVMExitCode SIRVMRun(SIRVM *vm, void **data, size_t *data_size)
 {
     vm->ip = 0;
-    vm->bp = 0;
-    vm->stack.len = 0;
     vm->running = true;
+
+    vm->registers[SIRVMRegister_BP] = (uint64_t)(vm->stack + vm->stack_size);
 
     while (vm->running) {
         SIRVMOpCode op = (SIRVMOpCode)vm->program[vm->ip];
@@ -230,82 +171,177 @@ SIRVMExitCode SIRVMRun(SIRVM *vm, void **data, size_t *data_size)
             break;
         }
 
-        case SIRVMOpCode_PushImm8: {
-            SIRVMPush(vm, &vm->program[vm->ip], 1);
+        case SIRVMOpCode_LEASR: {
+            uint8_t reg = vm->program[vm->ip++] & 0x0f;
+            uint32_t stack_offset = *((uint32_t *)&vm->program[vm->ip]);
+            vm->ip += 4;
+
+            vm->registers[reg] = vm->registers[SIRVMRegister_BP] + stack_offset;
+            break;
+        }
+
+        case SIRVMOpCode_LEAGR: {
+            uint8_t reg = vm->program[vm->ip++] & 0x0f;
+            uint32_t global_offset = *((uint32_t *)&vm->program[vm->ip]);
+            vm->ip += 4;
+
+            vm->registers[reg] = (uint64_t)&vm->globals[global_offset];
+            break;
+        }
+
+        case SIRVMOpCode_MovIR8: {
+            uint8_t reg = vm->program[vm->ip++] & 0x0f;
+            uint8_t imm = *((uint8_t *)&vm->program[vm->ip]);
             vm->ip += 1;
+
+            *(uint8_t *)&vm->registers[reg] = imm;
             break;
         }
-        case SIRVMOpCode_PushImm16: {
-            SIRVMPush(vm, &vm->program[vm->ip], 2);
+        case SIRVMOpCode_MovIR16: {
+            uint8_t reg = vm->program[vm->ip++] & 0x0f;
+            uint16_t imm = *((uint16_t *)&vm->program[vm->ip]);
             vm->ip += 2;
+
+            *(uint16_t *)&vm->registers[reg] = imm;
             break;
         }
-        case SIRVMOpCode_PushImm32: {
-            SIRVMPush(vm, &vm->program[vm->ip], 4);
+        case SIRVMOpCode_MovIR32: {
+            uint8_t reg = vm->program[vm->ip++] & 0x0f;
+            uint32_t imm = *((uint32_t *)&vm->program[vm->ip]);
             vm->ip += 4;
+
+            *(uint32_t *)&vm->registers[reg] = imm;
             break;
         }
-        case SIRVMOpCode_PushImm64: {
-            SIRVMPush(vm, &vm->program[vm->ip], 8);
+        case SIRVMOpCode_MovIR64: {
+            uint8_t reg = vm->program[vm->ip++] & 0x0f;
+            uint64_t imm = *((uint64_t *)&vm->program[vm->ip]);
             vm->ip += 8;
+
+            *(uint64_t *)&vm->registers[reg] = imm;
             break;
         }
 
-        case SIRVMOpCode_PushBPRel8_Imm32: {
-            int32_t offset = *((int32_t *)&vm->program[vm->ip]);
-            SIRVMPush(vm, &vm->stack[vm->bp + offset], 1);
-            vm->ip += 4;
+        case SIRVMOpCode_MovRR8: {
+            uint8_t ext = vm->program[vm->ip++];
+            uint8_t reg_a = (ext >> 4) & 0x0f;
+            uint8_t reg_b = ext & 0x0f;
+
+            uint8_t *reg_a_ptr = (uint8_t *)&vm->registers[reg_a];
+            uint8_t *reg_b_ptr = (uint8_t *)&vm->registers[reg_b];
+            *reg_b_ptr = *reg_a_ptr;
             break;
         }
-        case SIRVMOpCode_PushBPRel16_Imm32: {
-            int32_t offset = *((int32_t *)&vm->program[vm->ip]);
-            SIRVMPush(vm, &vm->stack[vm->bp + offset], 2);
-            vm->ip += 4;
+        case SIRVMOpCode_MovRR16: {
+            uint8_t ext = vm->program[vm->ip++];
+            uint8_t reg_a = (ext >> 4) & 0x0f;
+            uint8_t reg_b = ext & 0x0f;
+
+            uint16_t *reg_a_ptr = (uint16_t *)&vm->registers[reg_a];
+            uint16_t *reg_b_ptr = (uint16_t *)&vm->registers[reg_b];
+            *reg_b_ptr = *reg_a_ptr;
             break;
         }
-        case SIRVMOpCode_PushBPRel32_Imm32: {
-            int32_t offset = *((int32_t *)&vm->program[vm->ip]);
-            SIRVMPush(vm, &vm->stack[vm->bp + offset], 4);
-            vm->ip += 4;
+        case SIRVMOpCode_MovRR32: {
+            uint8_t ext = vm->program[vm->ip++];
+            uint8_t reg_a = (ext >> 4) & 0x0f;
+            uint8_t reg_b = ext & 0x0f;
+
+            uint32_t *reg_a_ptr = (uint32_t *)&vm->registers[reg_a];
+            uint32_t *reg_b_ptr = (uint32_t *)&vm->registers[reg_b];
+            *reg_b_ptr = *reg_a_ptr;
             break;
         }
-        case SIRVMOpCode_PushBPRel64_Imm32: {
-            int32_t offset = *((int32_t *)&vm->program[vm->ip]);
-            SIRVMPush(vm, &vm->stack[vm->bp + offset], 8);
-            vm->ip += 4;
+        case SIRVMOpCode_MovRR64: {
+            uint8_t ext = vm->program[vm->ip++];
+            uint8_t reg_a = (ext >> 4) & 0x0f;
+            uint8_t reg_b = ext & 0x0f;
+
+            uint64_t *reg_a_ptr = (uint64_t *)&vm->registers[reg_a];
+            uint64_t *reg_b_ptr = (uint64_t *)&vm->registers[reg_b];
+            *reg_b_ptr = *reg_a_ptr;
             break;
         }
 
-        case SIRVMOpCode_PopBPRel8_Imm32: {
-            int32_t offset = *((int32_t *)&vm->program[vm->ip]);
-            uint8_t val = SIRVMPopI8(vm);
-            uint8_t *ptr = (uint8_t *)&vm->stack[vm->bp + offset];
+        case SIRVMOpCode_MovRA8: {
+            uint8_t ext = vm->program[vm->ip++];
+            uint8_t reg_a = (ext >> 4) & 0x0f;
+            uint8_t reg_b = ext & 0x0f;
+
+            uint8_t val = *(uint8_t *)&vm->registers[reg_a];
+            uint8_t *ptr = (uint8_t *)vm->registers[reg_b];
             *ptr = val;
-            vm->ip += 4;
             break;
         }
-        case SIRVMOpCode_PopBPRel16_Imm32: {
-            int32_t offset = *((int32_t *)&vm->program[vm->ip]);
-            uint16_t val = SIRVMPopI16(vm);
-            uint16_t *ptr = (uint16_t *)&vm->stack[vm->bp + offset];
+        case SIRVMOpCode_MovRA16: {
+            uint8_t ext = vm->program[vm->ip++];
+            uint8_t reg_a = (ext >> 4) & 0x0f;
+            uint8_t reg_b = ext & 0x0f;
+
+            uint16_t val = *(uint16_t *)&vm->registers[reg_a];
+            uint16_t *ptr = (uint16_t *)vm->registers[reg_b];
             *ptr = val;
-            vm->ip += 4;
             break;
         }
-        case SIRVMOpCode_PopBPRel32_Imm32: {
-            int32_t offset = *((int32_t *)&vm->program[vm->ip]);
-            uint32_t val = SIRVMPopI32(vm);
-            uint32_t *ptr = (uint32_t *)&vm->stack[vm->bp + offset];
+        case SIRVMOpCode_MovRA32: {
+            uint8_t ext = vm->program[vm->ip++];
+            uint8_t reg_a = (ext >> 4) & 0x0f;
+            uint8_t reg_b = ext & 0x0f;
+
+            uint32_t val = *(uint32_t *)&vm->registers[reg_a];
+            uint32_t *ptr = (uint32_t *)vm->registers[reg_b];
             *ptr = val;
-            vm->ip += 4;
             break;
         }
-        case SIRVMOpCode_PopBPRel64_Imm32: {
-            int32_t offset = *((int32_t *)&vm->program[vm->ip]);
-            uint64_t val = SIRVMPopI64(vm);
-            uint64_t *ptr = (uint64_t *)&vm->stack[vm->bp + offset];
+        case SIRVMOpCode_MovRA64: {
+            uint8_t ext = vm->program[vm->ip++];
+            uint8_t reg_a = (ext >> 4) & 0x0f;
+            uint8_t reg_b = ext & 0x0f;
+
+            uint64_t val = *(uint64_t *)&vm->registers[reg_a];
+            uint64_t *ptr = (uint64_t *)vm->registers[reg_b];
             *ptr = val;
-            vm->ip += 4;
+            break;
+        }
+
+        case SIRVMOpCode_MovAR8: {
+            uint8_t ext = vm->program[vm->ip++];
+            uint8_t reg_a = (ext >> 4) & 0x0f;
+            uint8_t reg_b = ext & 0x0f;
+
+            uint8_t val = *(uint8_t *)vm->registers[reg_a];
+            uint8_t *ptr = (uint8_t *)&vm->registers[reg_b];
+            *ptr = val;
+            break;
+        }
+        case SIRVMOpCode_MovAR16: {
+            uint8_t ext = vm->program[vm->ip++];
+            uint8_t reg_a = (ext >> 4) & 0x0f;
+            uint8_t reg_b = ext & 0x0f;
+
+            uint16_t val = *(uint16_t *)vm->registers[reg_a];
+            uint16_t *ptr = (uint16_t *)&vm->registers[reg_b];
+            *ptr = val;
+            break;
+        }
+        case SIRVMOpCode_MovAR32: {
+            uint8_t ext = vm->program[vm->ip++];
+            uint8_t reg_a = (ext >> 4) & 0x0f;
+            uint8_t reg_b = ext & 0x0f;
+
+            uint32_t val = *(uint32_t *)vm->registers[reg_a];
+            uint32_t *ptr = (uint32_t *)&vm->registers[reg_b];
+            *ptr = val;
+            break;
+        }
+        case SIRVMOpCode_MovAR64: {
+            uint8_t ext = vm->program[vm->ip++];
+            uint8_t reg_a = (ext >> 4) & 0x0f;
+            uint8_t reg_b = ext & 0x0f;
+
+            uint64_t val = *(uint64_t *)vm->registers[reg_a];
+            uint64_t *ptr = (uint64_t *)&vm->registers[reg_b];
+            *ptr = val;
             break;
         }
 
@@ -313,8 +349,9 @@ SIRVMExitCode SIRVMRun(SIRVM *vm, void **data, size_t *data_size)
             vm->ip = *((uint32_t *)&vm->program[vm->ip]);
             break;
         }
-        case SIRVMOpCode_CondJumpImm32: {
-            uint8_t cond = SIRVMPopI8(vm);
+        case SIRVMOpCode_CondReg_JumpImm32: {
+            uint8_t reg = vm->program[vm->ip++] & 0x0f;
+            uint64_t cond = vm->registers[reg];
             if (cond != 0) {
                 vm->ip = *((uint32_t *)&vm->program[vm->ip]);
                 break;
@@ -323,399 +360,118 @@ SIRVMExitCode SIRVMRun(SIRVM *vm, void **data, size_t *data_size)
             break;
         }
 
-        case SIRVMOpCode_IAdd8: {
-            uint8_t a = SIRVMPopI8(vm);
-            uint8_t b = SIRVMPopI8(vm);
-            SIRVMPushI8(vm, a + b);
-            break;
-        }
-        case SIRVMOpCode_IAdd16: {
-            uint16_t a = SIRVMPopI16(vm);
-            uint16_t b = SIRVMPopI16(vm);
-            SIRVMPushI16(vm, a + b);
-            break;
-        }
-        case SIRVMOpCode_IAdd32: {
-            uint32_t a = SIRVMPopI32(vm);
-            uint32_t b = SIRVMPopI32(vm);
-            SIRVMPushI32(vm, a + b);
-            break;
-        }
-        case SIRVMOpCode_IAdd64: {
-            uint64_t a = SIRVMPopI64(vm);
-            uint64_t b = SIRVMPopI64(vm);
-            SIRVMPushI64(vm, a + b);
-            break;
-        }
+#define REG_BINOP(OPCODE, TYPE, OP)                                            \
+    case OPCODE: {                                                             \
+        uint8_t ext = vm->program[vm->ip++];                                   \
+        uint8_t reg_a = (ext >> 4) & 0x0f;                                     \
+        uint8_t reg_b = ext & 0x0f;                                            \
+        TYPE res = (*(TYPE *)&vm->registers[reg_a])OP(TYPE)(                   \
+            *(TYPE *)&vm->registers[reg_b]);                                   \
+        vm->registers[reg_a] = *(uint64_t *)&res;                              \
+        break;                                                                 \
+    }
 
-        case SIRVMOpCode_ISub8: {
-            uint8_t a = SIRVMPopI8(vm);
-            uint8_t b = SIRVMPopI8(vm);
-            SIRVMPushI8(vm, a - b);
-            break;
-        }
-        case SIRVMOpCode_ISub16: {
-            uint16_t a = SIRVMPopI16(vm);
-            uint16_t b = SIRVMPopI16(vm);
-            SIRVMPushI16(vm, a - b);
-            break;
-        }
-        case SIRVMOpCode_ISub32: {
-            uint32_t a = SIRVMPopI32(vm);
-            uint32_t b = SIRVMPopI32(vm);
-            SIRVMPushI32(vm, a - b);
-            break;
-        }
-        case SIRVMOpCode_ISub64: {
-            uint64_t a = SIRVMPopI64(vm);
-            uint64_t b = SIRVMPopI64(vm);
-            SIRVMPushI64(vm, a - b);
-            break;
-        }
+            REG_BINOP(SIRVMOpCode_IAdd8, uint8_t, +);
+            REG_BINOP(SIRVMOpCode_IAdd16, uint16_t, +);
+            REG_BINOP(SIRVMOpCode_IAdd32, uint32_t, +);
+            REG_BINOP(SIRVMOpCode_IAdd64, uint64_t, +);
 
-        case SIRVMOpCode_IMul8: {
-            uint8_t a = SIRVMPopI8(vm);
-            uint8_t b = SIRVMPopI8(vm);
-            SIRVMPushI8(vm, a * b);
-            break;
-        }
-        case SIRVMOpCode_IMul16: {
-            uint16_t a = SIRVMPopI16(vm);
-            uint16_t b = SIRVMPopI16(vm);
-            SIRVMPushI16(vm, a * b);
-            break;
-        }
-        case SIRVMOpCode_IMul32: {
-            uint32_t a = SIRVMPopI32(vm);
-            uint32_t b = SIRVMPopI32(vm);
-            SIRVMPushI32(vm, a * b);
-            break;
-        }
-        case SIRVMOpCode_IMul64: {
-            uint64_t a = SIRVMPopI64(vm);
-            uint64_t b = SIRVMPopI64(vm);
-            SIRVMPushI64(vm, a * b);
-            break;
-        }
+            REG_BINOP(SIRVMOpCode_ISub8, uint8_t, -)
+            REG_BINOP(SIRVMOpCode_ISub16, uint16_t, -)
+            REG_BINOP(SIRVMOpCode_ISub32, uint32_t, -)
+            REG_BINOP(SIRVMOpCode_ISub64, uint64_t, -)
 
-        case SIRVMOpCode_SDiv8: {
-            int8_t a = SIRVMPopI8(vm);
-            int8_t b = SIRVMPopI8(vm);
-            SIRVMPushI8(vm, a / b);
-            break;
-        }
-        case SIRVMOpCode_SDiv16: {
-            int16_t a = SIRVMPopI16(vm);
-            int16_t b = SIRVMPopI16(vm);
-            SIRVMPushI16(vm, a / b);
-            break;
-        }
-        case SIRVMOpCode_SDiv32: {
-            int32_t a = SIRVMPopI32(vm);
-            int32_t b = SIRVMPopI32(vm);
-            SIRVMPushI32(vm, a / b);
-            break;
-        }
-        case SIRVMOpCode_SDiv64: {
-            int64_t a = SIRVMPopI64(vm);
-            int64_t b = SIRVMPopI64(vm);
-            SIRVMPushI64(vm, a / b);
-            break;
-        }
+            REG_BINOP(SIRVMOpCode_IMul8, uint8_t, *)
+            REG_BINOP(SIRVMOpCode_IMul16, uint16_t, *)
+            REG_BINOP(SIRVMOpCode_IMul32, uint32_t, *)
+            REG_BINOP(SIRVMOpCode_IMul64, uint64_t, *)
 
-        case SIRVMOpCode_UDiv8: {
-            uint8_t a = SIRVMPopI8(vm);
-            uint8_t b = SIRVMPopI8(vm);
-            SIRVMPushI8(vm, a / b);
-            break;
-        }
-        case SIRVMOpCode_UDiv16: {
-            uint16_t a = SIRVMPopI16(vm);
-            uint16_t b = SIRVMPopI16(vm);
-            SIRVMPushI16(vm, a / b);
-            break;
-        }
-        case SIRVMOpCode_UDiv32: {
-            uint32_t a = SIRVMPopI32(vm);
-            uint32_t b = SIRVMPopI32(vm);
-            SIRVMPushI32(vm, a / b);
-            break;
-        }
-        case SIRVMOpCode_UDiv64: {
-            uint64_t a = SIRVMPopI64(vm);
-            uint64_t b = SIRVMPopI64(vm);
-            SIRVMPushI64(vm, a / b);
-            break;
-        }
+            REG_BINOP(SIRVMOpCode_SDiv8, int8_t, /)
+            REG_BINOP(SIRVMOpCode_SDiv16, int16_t, /)
+            REG_BINOP(SIRVMOpCode_SDiv32, int32_t, /)
+            REG_BINOP(SIRVMOpCode_SDiv64, int64_t, /)
 
-        case SIRVMOpCode_SRem8: {
-            int8_t a = SIRVMPopI8(vm);
-            int8_t b = SIRVMPopI8(vm);
-            SIRVMPushI8(vm, a % b);
-            break;
-        }
-        case SIRVMOpCode_SRem16: {
-            int16_t a = SIRVMPopI16(vm);
-            int16_t b = SIRVMPopI16(vm);
-            SIRVMPushI16(vm, a % b);
-            break;
-        }
-        case SIRVMOpCode_SRem32: {
-            int32_t a = SIRVMPopI32(vm);
-            int32_t b = SIRVMPopI32(vm);
-            SIRVMPushI32(vm, a % b);
-            break;
-        }
-        case SIRVMOpCode_SRem64: {
-            int64_t a = SIRVMPopI64(vm);
-            int64_t b = SIRVMPopI64(vm);
-            SIRVMPushI64(vm, a % b);
-            break;
-        }
+            REG_BINOP(SIRVMOpCode_UDiv8, uint8_t, /)
+            REG_BINOP(SIRVMOpCode_UDiv16, uint16_t, /)
+            REG_BINOP(SIRVMOpCode_UDiv32, uint32_t, /)
+            REG_BINOP(SIRVMOpCode_UDiv64, uint64_t, /)
 
-        case SIRVMOpCode_URem8: {
-            uint8_t a = SIRVMPopI8(vm);
-            uint8_t b = SIRVMPopI8(vm);
-            SIRVMPushI8(vm, a % b);
-            break;
-        }
-        case SIRVMOpCode_URem16: {
-            uint16_t a = SIRVMPopI16(vm);
-            uint16_t b = SIRVMPopI16(vm);
-            SIRVMPushI16(vm, a % b);
-            break;
-        }
-        case SIRVMOpCode_URem32: {
-            uint32_t a = SIRVMPopI32(vm);
-            uint32_t b = SIRVMPopI32(vm);
-            SIRVMPushI32(vm, a % b);
-            break;
-        }
-        case SIRVMOpCode_URem64: {
-            uint64_t a = SIRVMPopI64(vm);
-            uint64_t b = SIRVMPopI64(vm);
-            SIRVMPushI64(vm, a % b);
-            break;
-        }
+            REG_BINOP(SIRVMOpCode_SRem8, int8_t, %)
+            REG_BINOP(SIRVMOpCode_SRem16, int16_t, %)
+            REG_BINOP(SIRVMOpCode_SRem32, int32_t, %)
+            REG_BINOP(SIRVMOpCode_SRem64, int64_t, %)
 
-        case SIRVMOpCode_BitAnd8: {
-            uint8_t a = SIRVMPopI8(vm);
-            uint8_t b = SIRVMPopI8(vm);
-            SIRVMPushI8(vm, a & b);
-            break;
-        }
-        case SIRVMOpCode_BitAnd16: {
-            uint16_t a = SIRVMPopI16(vm);
-            uint16_t b = SIRVMPopI16(vm);
-            SIRVMPushI16(vm, a & b);
-            break;
-        }
-        case SIRVMOpCode_BitAnd32: {
-            uint32_t a = SIRVMPopI32(vm);
-            uint32_t b = SIRVMPopI32(vm);
-            SIRVMPushI32(vm, a & b);
-            break;
-        }
-        case SIRVMOpCode_BitAnd64: {
-            uint64_t a = SIRVMPopI64(vm);
-            uint64_t b = SIRVMPopI64(vm);
-            SIRVMPushI64(vm, a & b);
-            break;
-        }
+            REG_BINOP(SIRVMOpCode_URem8, uint8_t, %)
+            REG_BINOP(SIRVMOpCode_URem16, uint16_t, %)
+            REG_BINOP(SIRVMOpCode_URem32, uint32_t, %)
+            REG_BINOP(SIRVMOpCode_URem64, uint64_t, %)
 
-        case SIRVMOpCode_BitOr8: {
-            uint8_t a = SIRVMPopI8(vm);
-            uint8_t b = SIRVMPopI8(vm);
-            SIRVMPushI8(vm, a | b);
-            break;
-        }
-        case SIRVMOpCode_BitOr16: {
-            uint16_t a = SIRVMPopI16(vm);
-            uint16_t b = SIRVMPopI16(vm);
-            SIRVMPushI16(vm, a | b);
-            break;
-        }
-        case SIRVMOpCode_BitOr32: {
-            uint32_t a = SIRVMPopI32(vm);
-            uint32_t b = SIRVMPopI32(vm);
-            SIRVMPushI32(vm, a | b);
-            break;
-        }
-        case SIRVMOpCode_BitOr64: {
-            uint64_t a = SIRVMPopI64(vm);
-            uint64_t b = SIRVMPopI64(vm);
-            SIRVMPushI64(vm, a | b);
-            break;
-        }
+            REG_BINOP(SIRVMOpCode_BitAnd8, uint8_t, &)
+            REG_BINOP(SIRVMOpCode_BitAnd16, uint16_t, &)
+            REG_BINOP(SIRVMOpCode_BitAnd32, uint32_t, &)
+            REG_BINOP(SIRVMOpCode_BitAnd64, uint64_t, &)
 
-        case SIRVMOpCode_BitXor8: {
-            uint8_t a = SIRVMPopI8(vm);
-            uint8_t b = SIRVMPopI8(vm);
-            SIRVMPushI8(vm, a ^ b);
-            break;
-        }
-        case SIRVMOpCode_BitXor16: {
-            uint16_t a = SIRVMPopI16(vm);
-            uint16_t b = SIRVMPopI16(vm);
-            SIRVMPushI16(vm, a ^ b);
-            break;
-        }
-        case SIRVMOpCode_BitXor32: {
-            uint32_t a = SIRVMPopI32(vm);
-            uint32_t b = SIRVMPopI32(vm);
-            SIRVMPushI32(vm, a ^ b);
-            break;
-        }
-        case SIRVMOpCode_BitXor64: {
-            uint64_t a = SIRVMPopI64(vm);
-            uint64_t b = SIRVMPopI64(vm);
-            SIRVMPushI64(vm, a ^ b);
-            break;
-        }
+            REG_BINOP(SIRVMOpCode_BitOr8, uint8_t, |)
+            REG_BINOP(SIRVMOpCode_BitOr16, uint16_t, |)
+            REG_BINOP(SIRVMOpCode_BitOr32, uint32_t, |)
+            REG_BINOP(SIRVMOpCode_BitOr64, uint64_t, |)
 
-        case SIRVMOpCode_AShr8: {
-            int8_t a = SIRVMPopI8(vm);
-            int8_t b = SIRVMPopI8(vm);
-            SIRVMPushI8(vm, a >> b);
-            break;
-        }
-        case SIRVMOpCode_AShr16: {
-            int16_t a = SIRVMPopI16(vm);
-            int16_t b = SIRVMPopI16(vm);
-            SIRVMPushI16(vm, a >> b);
-            break;
-        }
-        case SIRVMOpCode_AShr32: {
-            int32_t a = SIRVMPopI32(vm);
-            int32_t b = SIRVMPopI32(vm);
-            SIRVMPushI32(vm, a >> b);
-            break;
-        }
-        case SIRVMOpCode_AShr64: {
-            int64_t a = SIRVMPopI64(vm);
-            int64_t b = SIRVMPopI64(vm);
-            SIRVMPushI64(vm, a >> b);
-            break;
-        }
+            REG_BINOP(SIRVMOpCode_BitXor8, uint8_t, ^)
+            REG_BINOP(SIRVMOpCode_BitXor16, uint16_t, ^)
+            REG_BINOP(SIRVMOpCode_BitXor32, uint32_t, ^)
+            REG_BINOP(SIRVMOpCode_BitXor64, uint64_t, ^)
 
-        case SIRVMOpCode_LShr8: {
-            uint8_t a = SIRVMPopI8(vm);
-            uint8_t b = SIRVMPopI8(vm);
-            SIRVMPushI8(vm, a >> b);
-            break;
-        }
-        case SIRVMOpCode_LShr16: {
-            uint16_t a = SIRVMPopI16(vm);
-            uint16_t b = SIRVMPopI16(vm);
-            SIRVMPushI16(vm, a >> b);
-            break;
-        }
-        case SIRVMOpCode_LShr32: {
-            uint32_t a = SIRVMPopI32(vm);
-            uint32_t b = SIRVMPopI32(vm);
-            SIRVMPushI32(vm, a >> b);
-            break;
-        }
-        case SIRVMOpCode_LShr64: {
-            uint64_t a = SIRVMPopI64(vm);
-            uint64_t b = SIRVMPopI64(vm);
-            SIRVMPushI64(vm, a >> b);
-            break;
-        }
+            REG_BINOP(SIRVMOpCode_AShr8, int8_t, >>)
+            REG_BINOP(SIRVMOpCode_AShr16, int16_t, >>)
+            REG_BINOP(SIRVMOpCode_AShr32, int32_t, >>)
+            REG_BINOP(SIRVMOpCode_AShr64, int64_t, >>)
 
-        case SIRVMOpCode_Shl8: {
-            uint8_t a = SIRVMPopI8(vm);
-            uint8_t b = SIRVMPopI8(vm);
-            SIRVMPushI8(vm, a << b);
-            break;
-        }
-        case SIRVMOpCode_Shl16: {
-            uint16_t a = SIRVMPopI16(vm);
-            uint16_t b = SIRVMPopI16(vm);
-            SIRVMPushI16(vm, a << b);
-            break;
-        }
-        case SIRVMOpCode_Shl32: {
-            uint32_t a = SIRVMPopI32(vm);
-            uint32_t b = SIRVMPopI32(vm);
-            SIRVMPushI32(vm, a << b);
-            break;
-        }
-        case SIRVMOpCode_Shl64: {
-            uint64_t a = SIRVMPopI64(vm);
-            uint64_t b = SIRVMPopI64(vm);
-            SIRVMPushI64(vm, a << b);
-            break;
-        }
+            REG_BINOP(SIRVMOpCode_LShr8, uint8_t, >>)
+            REG_BINOP(SIRVMOpCode_LShr16, uint16_t, >>)
+            REG_BINOP(SIRVMOpCode_LShr32, uint32_t, >>)
+            REG_BINOP(SIRVMOpCode_LShr64, uint64_t, >>)
 
-        case SIRVMOpCode_FAdd32: {
-            float a = SIRVMPopF32(vm);
-            float b = SIRVMPopF32(vm);
-            SIRVMPushF32(vm, a + b);
-            break;
-        }
-        case SIRVMOpCode_FAdd64: {
-            double a = SIRVMPopF64(vm);
-            double b = SIRVMPopF64(vm);
-            SIRVMPushF64(vm, a + b);
-            break;
-        }
+            REG_BINOP(SIRVMOpCode_Shl8, uint8_t, <<)
+            REG_BINOP(SIRVMOpCode_Shl16, uint16_t, <<)
+            REG_BINOP(SIRVMOpCode_Shl32, uint32_t, <<)
+            REG_BINOP(SIRVMOpCode_Shl64, uint64_t, <<)
 
-        case SIRVMOpCode_FSub32: {
-            float a = SIRVMPopF32(vm);
-            float b = SIRVMPopF32(vm);
-            SIRVMPushF32(vm, a - b);
-            break;
-        }
-        case SIRVMOpCode_FSub64: {
-            double a = SIRVMPopF64(vm);
-            double b = SIRVMPopF64(vm);
-            SIRVMPushF64(vm, a - b);
-            break;
-        }
+            REG_BINOP(SIRVMOpCode_FAdd32, float, +)
+            REG_BINOP(SIRVMOpCode_FAdd64, double, +)
 
-        case SIRVMOpCode_FMul32: {
-            float a = SIRVMPopF32(vm);
-            float b = SIRVMPopF32(vm);
-            SIRVMPushF32(vm, a * b);
-            break;
-        }
-        case SIRVMOpCode_FMul64: {
-            double a = SIRVMPopF64(vm);
-            double b = SIRVMPopF64(vm);
-            SIRVMPushF64(vm, a * b);
-            break;
-        }
+            REG_BINOP(SIRVMOpCode_FSub32, float, -)
+            REG_BINOP(SIRVMOpCode_FSub64, double, -)
 
-        case SIRVMOpCode_FDiv32: {
-            float a = SIRVMPopF32(vm);
-            float b = SIRVMPopF32(vm);
-            SIRVMPushF32(vm, a / b);
-            break;
-        }
-        case SIRVMOpCode_FDiv64: {
-            double a = SIRVMPopF64(vm);
-            double b = SIRVMPopF64(vm);
-            SIRVMPushF64(vm, a / b);
-            break;
-        }
+            REG_BINOP(SIRVMOpCode_FMul32, float, *)
+            REG_BINOP(SIRVMOpCode_FMul64, double, *)
+
+            REG_BINOP(SIRVMOpCode_FDiv32, float, /)
+            REG_BINOP(SIRVMOpCode_FDiv64, double, /)
 
         case SIRVMOpCode_FRem32: {
-            float a = SIRVMPopF32(vm);
-            float b = SIRVMPopF32(vm);
-            SIRVMPushF32(vm, fmodf(a, b));
+            uint8_t ext = vm->program[vm->ip++];
+            uint8_t reg_a = (ext >> 4) & 0xff;
+            uint8_t reg_b = ext & 0xff;
+            float res = fmodf(
+                (*(float *)&vm->registers[reg_a]),
+                (*(float *)&vm->registers[reg_b]));
+            vm->registers[reg_a] = *(uint64_t *)&res;
             break;
         }
         case SIRVMOpCode_FRem64: {
-            double a = SIRVMPopF64(vm);
-            double b = SIRVMPopF64(vm);
-            SIRVMPushF64(vm, fmod(a, b));
+            uint8_t ext = vm->program[vm->ip++];
+            uint8_t reg_a = (ext >> 4) & 0xff;
+            uint8_t reg_b = ext & 0xff;
+            double res = fmod(
+                (*(double *)&vm->registers[reg_a]),
+                (*(double *)&vm->registers[reg_b]));
+            vm->registers[reg_a] = *(uint64_t *)&res;
             break;
         }
         }
     }
 
-    *data = vm->stack.ptr;
-    *data_size = vm->stack.len;
+    *data = NULL;
+    *data_size = 0;
     return vm->exit_code;
 }

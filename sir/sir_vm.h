@@ -13,31 +13,62 @@ typedef enum SIRVMExitCode {
     SIRVMExitCode_ExecutionError,
 } SIRVMExitCode;
 
+typedef enum SIRVMRegister {
+    SIRVMRegister_1,
+    SIRVMRegister_2,
+    SIRVMRegister_3,
+    SIRVMRegister_4,
+    SIRVMRegister_5,
+    SIRVMRegister_6,
+    SIRVMRegister_7,
+    SIRVMRegister_8,
+    SIRVMRegister_BP,
+    SIRVMRegister_SP,
+    SIRVMRegister_MAX,
+} SIRVMRegister;
+
 typedef enum SIRVMOpCode {
     SIRVMOpCode_NOP = 0,
 
     SIRVMOpCode_Halt,
     SIRVMOpCode_HaltError,
 
-    SIRVMOpCode_PushImm8,
-    SIRVMOpCode_PushImm16,
-    SIRVMOpCode_PushImm32,
-    SIRVMOpCode_PushImm64,
+    // Stores bp+offset32 to reg
+    SIRVMOpCode_LEASR, // op reg offset32
 
-    // Pushes value stored in bp+imm_offset
-    SIRVMOpCode_PushBPRel8_Imm32,
-    SIRVMOpCode_PushBPRel16_Imm32,
-    SIRVMOpCode_PushBPRel32_Imm32,
-    SIRVMOpCode_PushBPRel64_Imm32,
+    // Stores address of global at offset32 to reg
+    SIRVMOpCode_LEAGR, // op reg offset32
 
-    // Pops value and stores it to bp+imm_offset
-    SIRVMOpCode_PopBPRel8_Imm32,
-    SIRVMOpCode_PopBPRel16_Imm32,
-    SIRVMOpCode_PopBPRel32_Imm32,
-    SIRVMOpCode_PopBPRel64_Imm32,
+    // Moves immediate to register
+    // op reg imm
+    SIRVMOpCode_MovIR8,
+    SIRVMOpCode_MovIR16,
+    SIRVMOpCode_MovIR32,
+    SIRVMOpCode_MovIR64,
+
+    // Moves register to register
+    // op reg/reg
+    SIRVMOpCode_MovRR8,
+    SIRVMOpCode_MovRR16,
+    SIRVMOpCode_MovRR32,
+    SIRVMOpCode_MovRR64,
+
+    // Moves from register to address stored in register
+    // op reg/reg
+    SIRVMOpCode_MovRA8,
+    SIRVMOpCode_MovRA16,
+    SIRVMOpCode_MovRA32,
+    SIRVMOpCode_MovRA64,
+
+    // Moves from address stored in register to register
+    // op reg/reg
+    SIRVMOpCode_MovAR8,
+    SIRVMOpCode_MovAR16,
+    SIRVMOpCode_MovAR32,
+    SIRVMOpCode_MovAR64,
 
     SIRVMOpCode_JumpImm32,
-    SIRVMOpCode_CondJumpImm32,
+    SIRVMOpCode_CondReg_JumpImm32,
 
     SIRVMOpCode_IAdd8,
     SIRVMOpCode_IAdd16,

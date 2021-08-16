@@ -46,6 +46,9 @@ add_library(
   sir/sir_vm.h
   sir/sir_vm.cpp
 
+  sir/sir_interp.h
+  sir/sir_interp.cpp
+
   sir/sir_x64.cpp
   sir/sir_x64_encoder.c
   sir/sir_x64_encoder.h
@@ -71,3 +74,11 @@ if (TRACY_ENABLE)
 	target_link_libraries(compiler PRIVATE tracy_client)
 endif()
 
+add_executable(
+	experiments
+	experiments/main.cpp
+)
+target_link_libraries(experiments PRIVATE sir)
+if (TRACY_ENABLE)
+	target_link_libraries(experiments PRIVATE tracy_client)
+endif()

@@ -1668,20 +1668,12 @@ void X64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
         MetaValue ptr_value = create_int_register_value(8, RegisterIndex_RAX);
         this->encode_lea(&accessed_value, &ptr_value);
 
-        size_t index_size = SIRTypeSizeOf(
-            this->module,
-            SIRModuleGetInst(this->module, inst.extract_array_elem.index_ref)
-                .type);
-
-        MetaValue index_value =
-            create_int_register_value(index_size, RegisterIndex_RCX);
-        this->encode_mnem(
-            Mnem_MOV,
-            &this->meta_insts[inst.extract_array_elem.index_ref.id],
-            &index_value);
-
         MetaValue value_addr = create_int_register_memory_value(
-            value_size, RegisterIndex_RAX, value_size, RegisterIndex_RCX, 0);
+            value_size,
+            RegisterIndex_RAX,
+            value_size * inst.extract_array_elem.elem_index,
+            RegisterIndex_None,
+            0);
 
         switch (value_size) {
         case 1:

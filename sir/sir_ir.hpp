@@ -118,7 +118,7 @@ struct SIRInst {
         } struct_elem_ptr;
         struct {
             SIRInstRef accessed_ref;
-            SIRInstRef index_ref;
+            uint32_t elem_index;
         } extract_array_elem;
         struct {
             SIRInstRef accessed_ref;

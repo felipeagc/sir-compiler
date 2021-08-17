@@ -218,12 +218,12 @@ print_instruction(SIRModule *module, SIRInstRef inst_ref, SIRStringBuilder *sb)
     case SIRInstKind_ExtractArrayElem: {
         SIRString type_string = SIRTypeToString(module, inst.type);
         sb->sprintf(
-            "%%r%u = extract_array_elem %.*s %%r%u %%r%u",
+            "%%r%u = extract_array_elem %.*s %%r%u %u",
             inst_ref.id,
             (int)type_string.len,
             type_string.ptr,
             inst.extract_array_elem.accessed_ref.id,
-            inst.extract_array_elem.index_ref.id);
+            inst.extract_array_elem.elem_index);
         break;
     }
 
@@ -980,7 +980,7 @@ SIRInstRef SIRBuilderInsertStructElemPtr(
 }
 
 SIRInstRef SIRBuilderInsertExtractArrayElem(
-    SIRBuilder *builder, SIRInstRef accessed_ref, SIRInstRef index_ref)
+    SIRBuilder *builder, SIRInstRef accessed_ref, uint32_t elem_index)
 {
     ZoneScoped;
 
@@ -991,7 +991,7 @@ SIRInstRef SIRBuilderInsertExtractArrayElem(
     inst.kind = SIRInstKind_ExtractArrayElem;
     inst.type = accessed_inst.type->array.sub;
     inst.extract_array_elem.accessed_ref = accessed_ref;
-    inst.extract_array_elem.index_ref = index_ref;
+    inst.extract_array_elem.elem_index = elem_index;
 
     return builder_insert_inst(builder, inst);
 }

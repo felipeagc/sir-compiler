@@ -477,12 +477,13 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
                     indexed_ref.inst_ref,
                     load_lvalue(ctx, index_ref))};
         } else {
-            value = {
-                false,
-                SIRBuilderInsertExtractArrayElem(
-                    ctx->builder,
-                    indexed_ref.inst_ref,
-                    load_lvalue(ctx, index_ref))};
+            LANG_ASSERT(!"TODO: handle non lvalues");
+            /* value = { */
+            /*     false, */
+            /*     SIRBuilderInsertExtractArrayElem( */
+            /*         ctx->builder, */
+            /*         indexed_ref.inst_ref, */
+            /*         load_lvalue(ctx, index_ref))}; */
         }
 
         break;

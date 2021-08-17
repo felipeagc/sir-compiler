@@ -25,20 +25,30 @@ int main()
 
     SIRBuilder *builder = SIRBuilderCreate(mod);
 
+    SIRInstRef ss0 =
+        SIRModuleAddStackSlot(mod, my_func, SIRModuleGetI64Type(mod));
+
     SIRInstRef start_block = SIRModuleInsertBlockAtEnd(mod, my_func);
     SIRInstRef other_block1 = SIRModuleInsertBlockAtEnd(mod, my_func);
     SIRInstRef other_block2 = SIRModuleInsertBlockAtEnd(mod, my_func);
     SIRBuilderSetFunction(builder, my_func);
-    SIRBuilderPositionAtEnd(builder, start_block);
 
-    SIRInstRef cond_ref = SIRBuilderInsertImmBool(builder, true);
-    SIRBuilderInsertBranch(builder, cond_ref, other_block1, other_block2);
+    {
+        SIRBuilderPositionAtEnd(builder, start_block);
+
+        SIRBuilderInsertStore(
+            builder,
+            ss0,
+            SIRBuilderInsertImmInt(builder, SIRModuleGetI64Type(mod), 123));
+
+        SIRInstRef cond_ref = SIRBuilderInsertImmBool(builder, true);
+        SIRBuilderInsertBranch(builder, cond_ref, other_block1, other_block2);
+    }
 
     {
         SIRBuilderPositionAtEnd(builder, other_block1);
 
-        SIRInstRef ret_value =
-            SIRBuilderInsertImmInt(builder, SIRModuleGetI64Type(mod), 123);
+        SIRInstRef ret_value = SIRBuilderInsertLoad(builder, ss0);
         SIRBuilderInsertReturnValue(builder, ret_value);
     }
 

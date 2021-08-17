@@ -212,7 +212,7 @@ SIRInstRef SIRBuilderInsertStructElemPtr(
     SIRBuilder *builder, SIRInstRef accessed_ref, uint32_t field_index);
 
 SIRInstRef SIRBuilderInsertExtractArrayElem(
-    SIRBuilder *builder, SIRInstRef accessed_ref, SIRInstRef index_ref);
+    SIRBuilder *builder, SIRInstRef accessed_ref, uint32_t elem_index);
 SIRInstRef SIRBuilderInsertExtractStructElem(
     SIRBuilder *builder, SIRInstRef accessed_ref, uint32_t field_index);
 

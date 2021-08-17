@@ -573,39 +573,33 @@ static void analyze_expr(
 
             break;
         }
-        case BuiltinFunction_PtrCast: {
+        case BuiltinFunction_BitCast: {
             if (expr.builtin_call.param_refs.len != 2) {
                 compiler->add_error(
                     compiler->expr_locs[expr_ref],
-                    "expected 2 parameters for @ptrcast");
+                    "expected 2 parameters for @bitcast");
                 break;
             }
-
-            analyze_expr(
-                compiler,
-                state,
-                expr.builtin_call.param_refs[0],
-                compiler->type_type);
-
-            analyze_expr(compiler, state, expr.builtin_call.param_refs[1]);
 
             ExprRef param0 = expr.builtin_call.param_refs[0];
-            if (compiler->expr_as_types[param0].get(compiler).kind !=
-                TypeKind_Pointer) {
+            ExprRef param1 = expr.builtin_call.param_refs[1];
+
+            analyze_expr(compiler, state, param0, compiler->type_type);
+            analyze_expr(compiler, state, param1);
+
+            TypeRef dest_type_ref = compiler->expr_as_types[param0];
+            TypeRef source_type_ref = compiler->expr_types[param1];
+
+            Type dest_type = dest_type_ref.get(compiler);
+            Type source_type = source_type_ref.get(compiler);
+
+            if (dest_type.size_of(compiler) != source_type.size_of(compiler)) {
                 compiler->add_error(
-                    compiler->expr_locs[param0], "expected pointer type");
-                break;
+                    compiler->expr_locs[expr_ref],
+                    "@bitcast types have different sizes");
             }
 
-            if (compiler->expr_as_types[param0].get(compiler).kind !=
-                TypeKind_Pointer) {
-                compiler->add_error(
-                    compiler->expr_locs[param0],
-                    "expected expression of pointer type");
-                break;
-            }
-
-            compiler->expr_types[expr_ref] = compiler->expr_as_types[param0];
+            compiler->expr_types[expr_ref] = dest_type_ref;
             break;
         }
         case BuiltinFunction_Defined: {

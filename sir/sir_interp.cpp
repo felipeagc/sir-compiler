@@ -226,8 +226,8 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
         SIR_ASSERT(!"unimplemented func_call");
         break;
     }
-    case SIRInstKind_PtrCast: {
-        SIR_ASSERT(!"unimplemented ptr_cast");
+    case SIRInstKind_BitCast: {
+        SIR_ASSERT(!"unimplemented bit_cast");
         break;
     }
     case SIRInstKind_ZExt: {

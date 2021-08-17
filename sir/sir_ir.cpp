@@ -123,14 +123,14 @@ print_instruction(SIRModule *module, SIRInstRef inst_ref, SIRStringBuilder *sb)
         break;
     }
 
-    case SIRInstKind_PtrCast: {
+    case SIRInstKind_BitCast: {
         SIRString type_string = SIRTypeToString(module, inst.type);
         sb->sprintf(
-            "%%r%u = ptr_cast %.*s %%r%u",
+            "%%r%u = bit_cast %.*s %%r%u",
             inst_ref.id,
             (int)type_string.len,
             type_string.ptr,
-            inst.ptr_cast.inst_ref.id);
+            inst.bit_cast.inst_ref.id);
         break;
     }
 
@@ -1045,17 +1045,20 @@ SIRInstRef SIRBuilderInsertLoad(SIRBuilder *builder, SIRInstRef ptr_ref)
     return builder_insert_inst(builder, inst);
 }
 
-SIRInstRef SIRBuilderInsertPtrCast(
+SIRInstRef SIRBuilderInsertBitCast(
     SIRBuilder *builder, SIRType *dest_type, SIRInstRef inst_ref)
 {
     ZoneScoped;
 
-    SIR_ASSERT(dest_type->kind == SIRTypeKind_Pointer);
+    SIR_ASSERT(
+        SIRTypeSizeOf(builder->module, dest_type) ==
+        SIRTypeSizeOf(
+            builder->module, SIRModuleGetInst(builder->module, inst_ref).type));
 
     SIRInst inst = {};
-    inst.kind = SIRInstKind_PtrCast;
+    inst.kind = SIRInstKind_BitCast;
     inst.type = dest_type;
-    inst.ptr_cast = {inst_ref};
+    inst.bit_cast = {inst_ref};
 
     return builder_insert_inst(builder, inst);
 }

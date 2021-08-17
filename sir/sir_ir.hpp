@@ -107,7 +107,7 @@ struct SIRInst {
         } func_call;
         struct {
             SIRInstRef inst_ref;
-        } ptr_cast;
+        } bit_cast;
         struct {
             SIRInstRef accessed_ref;
             SIRInstRef index_ref;

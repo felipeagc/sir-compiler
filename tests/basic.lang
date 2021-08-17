@@ -55,12 +55,12 @@ fn export main() {
 	}
 
 	{
-		ptr := @ptrcast(*i32, malloc(@sizeof(i32)));
+		ptr := @bitcast(*i32, malloc(@sizeof(i32)));
 		ptr.* = 1;
 		printf("ptr.* = %d\n", ptr.*);
 		ptr.* = 2;
 		printf("ptr.* = %d\n", ptr.*);
-		free(@ptrcast(*void, ptr));
+		free(@bitcast(*void, ptr));
 	}
 
 	{
@@ -82,7 +82,7 @@ fn export main() {
 	}
 
 	{
-		array_ptr := @ptrcast(*[32]i32, malloc(@sizeof([32]i32)));
+		array_ptr := @bitcast(*[32]i32, malloc(@sizeof([32]i32)));
 
 		array_ptr.*[0] = 1;
 		printf("array_ptr.*[0] = %d\n", array_ptr.*[0]);
@@ -92,7 +92,7 @@ fn export main() {
 		printf("array_ptr.*[1] = %d\n", array_ptr.*[1]);
 		printf("array_ptr.*[0] = %d\n", array_ptr.*[0]);
 
-		free(@ptrcast(*void, array_ptr));
+		free(@bitcast(*void, array_ptr));
 	}
 
 	{

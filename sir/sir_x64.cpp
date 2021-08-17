@@ -781,8 +781,8 @@ void X64AsmBuilder::move_inst_rvalue(
         this->encode_lea(&this->meta_insts[inst_ref.id], dest_value);
         break;
     }
-    case SIRInstKind_PtrCast: {
-        this->move_inst_rvalue(inst.ptr_cast.inst_ref, dest_value);
+    case SIRInstKind_BitCast: {
+        this->move_inst_rvalue(inst.bit_cast.inst_ref, dest_value);
         break;
     }
     default: {
@@ -896,9 +896,9 @@ void X64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
         break;
     }
 
-    case SIRInstKind_PtrCast: {
+    case SIRInstKind_BitCast: {
         this->meta_insts[inst_ref.id] =
-            this->meta_insts[inst.ptr_cast.inst_ref.id];
+            this->meta_insts[inst.bit_cast.inst_ref.id];
         break;
     }
 
@@ -2635,7 +2635,7 @@ void X64AsmBuilder::generate_function(SIRInstRef func_ref)
             case SIRInstKind_ImmediateInt:
             case SIRInstKind_ImmediateFloat:
             case SIRInstKind_ImmediateBool:
-            case SIRInstKind_PtrCast: break;
+            case SIRInstKind_BitCast: break;
 
             // Create stack space for these kinds:
             case SIRInstKind_Phi:

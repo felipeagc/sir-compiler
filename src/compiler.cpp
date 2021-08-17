@@ -211,7 +211,7 @@ Compiler Compiler::create()
 
     builtin_function_map.set("sizeof", BuiltinFunction_Sizeof);
     builtin_function_map.set("alignof", BuiltinFunction_Alignof);
-    builtin_function_map.set("ptrcast", BuiltinFunction_PtrCast);
+    builtin_function_map.set("bitcast", BuiltinFunction_BitCast);
     builtin_function_map.set("defined", BuiltinFunction_Defined);
 
     Compiler compiler = {

@@ -431,16 +431,16 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
 
             break;
         }
-        case BuiltinFunction_PtrCast: {
-            CodegenValue ptr_value =
+        case BuiltinFunction_BitCast: {
+            CodegenValue cast_value =
                 codegen_expr(compiler, ctx, expr.builtin_call.param_refs[1]);
 
             value = {
                 false,
-                SIRBuilderInsertPtrCast(
+                SIRBuilderInsertBitCast(
                     ctx->builder,
                     ctx->type_values[type_ref],
-                    load_lvalue(ctx, ptr_value))};
+                    load_lvalue(ctx, cast_value))};
 
             break;
         }

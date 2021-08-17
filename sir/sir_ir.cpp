@@ -1484,3 +1484,20 @@ uint32_t SIRTypeAlignOf(SIRModule *module, SIRType *type)
 
     return type->alignment;
 }
+
+uint32_t SIRTypeStructOffsetOf(SIRModule *module, SIRType *struct_type, uint32_t field_index)
+{
+    uint32_t field_offset = 0;
+    for (uint32_t i = 0; i <= field_index; ++i) {
+        SIRType *field_type = struct_type->struct_.fields[i];
+        uint32_t field_align = SIRTypeAlignOf(module, field_type);
+        field_offset =
+            SIR_ROUND_UP(field_align, field_offset); // Add padding
+
+        if (i != field_index) {
+            field_offset += SIRTypeSizeOf(module, field_type);
+        }
+    }
+
+    return field_offset;
+}

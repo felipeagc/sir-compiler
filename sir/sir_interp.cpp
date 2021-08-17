@@ -124,14 +124,10 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
         break;
     }
     case SIRInstKind_ReturnVoid: {
-        ctx->func_stack.pop();
-        ctx->block_stack.pop();
         returned = true;
         break;
     }
     case SIRInstKind_ReturnValue: {
-        ctx->func_stack.pop();
-        ctx->block_stack.pop();
         value_addr = ctx->value_addrs[inst.return_value.inst_ref.id];
         returned = true;
         break;
@@ -219,7 +215,7 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
         break;
     }
     case SIRInstKind_Phi: {
-        // Phi is generated somewhere else
+        // Phi is generated in jump/branch instructions
         break;
     }
     case SIRInstKind_FuncCall: {
@@ -227,19 +223,104 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
         break;
     }
     case SIRInstKind_BitCast: {
-        SIR_ASSERT(!"unimplemented bit_cast");
+        value_addr = ctx->value_addrs[inst.bit_cast.inst_ref.id];
         break;
     }
     case SIRInstKind_ZExt: {
-        SIR_ASSERT(!"unimplemented zext");
+        SIRType *source_type =
+            SIRModuleGetInstType(ctx->mod, inst.zext.inst_ref);
+        size_t source_size = SIRTypeSizeOf(ctx->mod, source_type);
+        SIRType *dest_type = SIRModuleGetInstType(ctx->mod, inst_ref);
+        size_t dest_size = SIRTypeSizeOf(ctx->mod, dest_type);
+
+        SIR_ASSERT(dest_size >= source_size);
+
+        uint64_t source_addr = ctx->value_addrs[inst.zext.inst_ref.id];
+
+        value_addr = SIRInterpAllocVal(
+            ctx, dest_size, SIRTypeAlignOf(ctx->mod, dest_type));
+
+        uint64_t value = 0;
+        switch (source_size) {
+        case 1: value = *(uint8_t *)&ctx->memory[source_addr];
+        case 2: value = *(uint16_t *)&ctx->memory[source_addr];
+        case 4: value = *(uint32_t *)&ctx->memory[source_addr];
+        case 8: value = *(uint64_t *)&ctx->memory[source_addr];
+        default: SIR_ASSERT(0);
+        }
+
+        switch (dest_size) {
+        case 1: *(uint8_t *)&ctx->memory[value_addr] = value;
+        case 2: *(uint16_t *)&ctx->memory[value_addr] = value;
+        case 4: *(uint32_t *)&ctx->memory[value_addr] = value;
+        case 8: *(uint64_t *)&ctx->memory[value_addr] = value;
+        default: SIR_ASSERT(0);
+        }
         break;
     }
     case SIRInstKind_SExt: {
-        SIR_ASSERT(!"unimplemented sext");
+        SIRType *source_type =
+            SIRModuleGetInstType(ctx->mod, inst.sext.inst_ref);
+        size_t source_size = SIRTypeSizeOf(ctx->mod, source_type);
+        SIRType *dest_type = SIRModuleGetInstType(ctx->mod, inst_ref);
+        size_t dest_size = SIRTypeSizeOf(ctx->mod, dest_type);
+
+        SIR_ASSERT(dest_size >= source_size);
+
+        uint64_t source_addr = ctx->value_addrs[inst.sext.inst_ref.id];
+
+        value_addr = SIRInterpAllocVal(
+            ctx, dest_size, SIRTypeAlignOf(ctx->mod, dest_type));
+
+        int64_t value = 0;
+        switch (source_size) {
+        case 1: value = *(int8_t *)&ctx->memory[source_addr];
+        case 2: value = *(int16_t *)&ctx->memory[source_addr];
+        case 4: value = *(int32_t *)&ctx->memory[source_addr];
+        case 8: value = *(int64_t *)&ctx->memory[source_addr];
+        default: SIR_ASSERT(0);
+        }
+
+        switch (dest_size) {
+        case 1: *(int8_t *)&ctx->memory[value_addr] = value;
+        case 2: *(int16_t *)&ctx->memory[value_addr] = value;
+        case 4: *(int32_t *)&ctx->memory[value_addr] = value;
+        case 8: *(int64_t *)&ctx->memory[value_addr] = value;
+        default: SIR_ASSERT(0);
+        }
         break;
     }
     case SIRInstKind_Trunc: {
-        SIR_ASSERT(!"unimplemented trunc");
+        SIRType *source_type =
+            SIRModuleGetInstType(ctx->mod, inst.trunc.inst_ref);
+        size_t source_size = SIRTypeSizeOf(ctx->mod, source_type);
+        SIRType *dest_type = SIRModuleGetInstType(ctx->mod, inst_ref);
+        size_t dest_size = SIRTypeSizeOf(ctx->mod, dest_type);
+
+        SIR_ASSERT(dest_size <= source_size);
+
+        uint64_t source_addr = ctx->value_addrs[inst.trunc.inst_ref.id];
+
+        value_addr = SIRInterpAllocVal(
+            ctx, dest_size, SIRTypeAlignOf(ctx->mod, dest_type));
+
+        uint64_t value = 0;
+        switch (source_size) {
+        case 1: value = *(uint8_t *)&ctx->memory[source_addr];
+        case 2: value = *(uint16_t *)&ctx->memory[source_addr];
+        case 4: value = *(uint32_t *)&ctx->memory[source_addr];
+        case 8: value = *(uint64_t *)&ctx->memory[source_addr];
+        default: SIR_ASSERT(0);
+        }
+
+        switch (dest_size) {
+        case 1: *(uint8_t *)&ctx->memory[value_addr] = value;
+        case 2: *(uint16_t *)&ctx->memory[value_addr] = value;
+        case 4: *(uint32_t *)&ctx->memory[value_addr] = value;
+        case 8: *(uint64_t *)&ctx->memory[value_addr] = value;
+        default: SIR_ASSERT(0);
+        }
+
         break;
     }
     case SIRInstKind_ArrayElemPtr: {
@@ -284,12 +365,30 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
         break;
     }
     case SIRInstKind_StructElemPtr: {
-        SIR_ASSERT(!"unimplemented struct_elem_ptr");
+        SIRType *struct_ptr_type =
+            SIRModuleGetInstType(ctx->mod, inst.struct_elem_ptr.accessed_ref);
+        SIRType *struct_type = struct_ptr_type->pointer.sub;
+
+        SIR_ASSERT(struct_ptr_type->kind == SIRTypeKind_Pointer);
+        SIR_ASSERT(struct_type->kind == SIRTypeKind_Struct);
+
+        uint64_t struct_addr =
+            *(uint64_t *)&ctx->memory
+                 [ctx->value_addrs[inst.struct_elem_ptr.accessed_ref.id]];
+
+        uint32_t field_offset = SIRTypeStructOffsetOf(
+            ctx->mod, struct_type, inst.struct_elem_ptr.field_index);
+
+        uint64_t field_addr = struct_addr + field_offset;
+
+        value_addr =
+            SIRInterpAllocVal(ctx, sizeof(uint64_t), alignof(uint64_t));
+        *(uint64_t *)&ctx->memory[value_addr] = field_addr;
         break;
     }
     case SIRInstKind_ExtractArrayElem: {
-        SIRType *array_type =
-            SIRModuleGetInstType(ctx->mod, inst.array_elem_ptr.accessed_ref);
+        SIRType *array_type = SIRModuleGetInstType(
+            ctx->mod, inst.extract_array_elem.accessed_ref);
 
         SIR_ASSERT(array_type->kind == SIRTypeKind_Array);
 
@@ -307,7 +406,28 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
         break;
     }
     case SIRInstKind_ExtractStructElem: {
-        SIR_ASSERT(!"unimplemented extract_struct_elem");
+        SIRType *struct_type = SIRModuleGetInstType(
+            ctx->mod, inst.extract_struct_elem.accessed_ref);
+
+        SIR_ASSERT(struct_type->kind == SIRTypeKind_Struct);
+
+        uint32_t field_index = inst.struct_elem_ptr.field_index;
+
+        uint32_t field_offset =
+            SIRTypeStructOffsetOf(ctx->mod, struct_type, field_index);
+
+        size_t field_size =
+            SIRTypeSizeOf(ctx->mod, struct_type->struct_.fields[field_index]);
+        size_t field_align =
+            SIRTypeAlignOf(ctx->mod, struct_type->struct_.fields[field_index]);
+
+        uint64_t struct_addr =
+            ctx->value_addrs[inst.extract_struct_elem.accessed_ref.id];
+
+        uint64_t field_addr = struct_addr + field_offset;
+        value_addr = SIRInterpAllocVal(ctx, field_size, field_align);
+        memcpy(&ctx->memory[value_addr], &ctx->memory[field_addr], field_size);
+
         break;
     }
     case SIRInstKind_Binop: {
@@ -465,7 +585,6 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
         case SIRBinaryOperation_Or: SIR_INTERP_UINT_BINOP(|); break;
         case SIRBinaryOperation_Xor: SIR_INTERP_UINT_BINOP(^); break;
         }
-        SIR_ASSERT(!"unimplemented binop");
         break;
     }
     }
@@ -509,6 +628,9 @@ void SIRInterpFunction(SIRInterpContext *ctx, SIRInstRef func_ref, void *result)
             }
         }
     }
+
+    ctx->block_stack.pop();
+    ctx->func_stack.pop();
 
     memcpy(
         result,

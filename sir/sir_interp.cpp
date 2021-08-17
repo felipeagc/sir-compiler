@@ -1,6 +1,7 @@
 #include "sir_interp.h"
 #include "sir_base.hpp"
 #include "sir_ir.hpp"
+#include <math.h>
 
 struct SIRInterpContext {
     SIRModule *mod;
@@ -310,6 +311,160 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
         break;
     }
     case SIRInstKind_Binop: {
+        SIRType *type = inst.type;
+        size_t value_size = SIRTypeSizeOf(ctx->mod, type);
+        value_addr =
+            SIRInterpAllocVal(ctx, value_size, SIRTypeAlignOf(ctx->mod, type));
+
+        uint32_t left_addr = ctx->value_addrs[inst.binop.left_ref.id];
+        uint32_t right_addr = ctx->value_addrs[inst.binop.right_ref.id];
+
+#define SIR_INTERP_BINOP(RESULT_TYPE, OP_TYPE, OP)                             \
+    (*(RESULT_TYPE *)&ctx->memory[value_addr]) =                               \
+        (*(OP_TYPE *)&ctx->memory[left_addr])OP(                               \
+            *(OP_TYPE *)&ctx->memory[right_addr])
+
+#define SIR_INTERP_UINT_CMP_BINOP(OP)                                          \
+    switch (value_size) {                                                      \
+    case 1: SIR_INTERP_BINOP(bool, uint8_t, OP); break;                        \
+    case 2: SIR_INTERP_BINOP(bool, uint16_t, OP); break;                       \
+    case 4: SIR_INTERP_BINOP(bool, uint32_t, OP); break;                       \
+    case 8: SIR_INTERP_BINOP(bool, uint64_t, OP); break;                       \
+    }
+
+#define SIR_INTERP_INT_CMP_BINOP(OP)                                           \
+    switch (value_size) {                                                      \
+    case 1: SIR_INTERP_BINOP(bool, int8_t, OP); break;                         \
+    case 2: SIR_INTERP_BINOP(bool, int16_t, OP); break;                        \
+    case 4: SIR_INTERP_BINOP(bool, int32_t, OP); break;                        \
+    case 8: SIR_INTERP_BINOP(bool, int64_t, OP); break;                        \
+    }
+
+#define SIR_INTERP_FLOAT_CMP_BINOP(OP)                                         \
+    switch (value_size) {                                                      \
+    case 4: SIR_INTERP_BINOP(bool, float, OP); break;                          \
+    case 8: SIR_INTERP_BINOP(bool, double, OP); break;                         \
+    }
+
+#define SIR_INTERP_UINT_BINOP(OP)                                              \
+    switch (value_size) {                                                      \
+    case 1: SIR_INTERP_BINOP(uint8_t, uint8_t, OP); break;                     \
+    case 2: SIR_INTERP_BINOP(uint16_t, uint16_t, OP); break;                   \
+    case 4: SIR_INTERP_BINOP(uint32_t, uint32_t, OP); break;                   \
+    case 8: SIR_INTERP_BINOP(uint64_t, uint64_t, OP); break;                   \
+    }
+
+#define SIR_INTERP_INT_BINOP(OP)                                               \
+    switch (value_size) {                                                      \
+    case 1: SIR_INTERP_BINOP(int8_t, int8_t, OP); break;                       \
+    case 2: SIR_INTERP_BINOP(int16_t, int16_t, OP); break;                     \
+    case 4: SIR_INTERP_BINOP(int32_t, int32_t, OP); break;                     \
+    case 8: SIR_INTERP_BINOP(int64_t, int64_t, OP); break;                     \
+    }
+
+#define SIR_INTERP_FLOAT_BINOP(OP)                                             \
+    switch (value_size) {                                                      \
+    case 4: SIR_INTERP_BINOP(float, float, OP); break;                         \
+    case 8: SIR_INTERP_BINOP(double, double, OP); break;                       \
+    }
+
+        switch (inst.binop.op) {
+        case SIRBinaryOperation_Unknown:
+        case SIRBinaryOperation_MAX: SIR_ASSERT(0); break;
+
+        case SIRBinaryOperation_IAdd: {
+            SIR_INTERP_UINT_BINOP(+);
+            break;
+        }
+        case SIRBinaryOperation_ISub: {
+            SIR_INTERP_UINT_BINOP(-);
+            break;
+        }
+        case SIRBinaryOperation_IMul: {
+            SIR_INTERP_UINT_BINOP(*);
+            break;
+        }
+        case SIRBinaryOperation_UDiv: {
+            SIR_INTERP_UINT_BINOP(/);
+            break;
+        }
+        case SIRBinaryOperation_SDiv: {
+            SIR_INTERP_INT_BINOP(/);
+            break;
+        }
+        case SIRBinaryOperation_URem: {
+            SIR_INTERP_UINT_BINOP(%);
+            break;
+        }
+        case SIRBinaryOperation_SRem: {
+            SIR_INTERP_INT_BINOP(%);
+            break;
+        }
+        case SIRBinaryOperation_FAdd: {
+            SIR_INTERP_FLOAT_BINOP(+);
+            break;
+        }
+        case SIRBinaryOperation_FSub: {
+            SIR_INTERP_FLOAT_BINOP(-);
+            break;
+        }
+        case SIRBinaryOperation_FMul: {
+            SIR_INTERP_FLOAT_BINOP(*);
+            break;
+        }
+        case SIRBinaryOperation_FDiv: {
+            SIR_INTERP_FLOAT_BINOP(/);
+            break;
+        }
+        case SIRBinaryOperation_FRem: {
+            switch (value_size) {
+            case 4:
+                *(float *)&ctx->memory[value_addr] = fmodf(
+                    *(float *)&ctx->memory[left_addr],
+                    *(float *)&ctx->memory[right_addr]);
+                break;
+            case 8:
+                *(double *)&ctx->memory[value_addr] = fmod(
+                    *(double *)&ctx->memory[left_addr],
+                    *(double *)&ctx->memory[right_addr]);
+                break;
+            }
+            break;
+        }
+        case SIRBinaryOperation_BEQ: {
+            SIR_INTERP_BINOP(bool, bool, ==);
+            break;
+        }
+        case SIRBinaryOperation_BNE: {
+            SIR_INTERP_BINOP(bool, bool, !=);
+            break;
+        }
+        case SIRBinaryOperation_IEQ: SIR_INTERP_UINT_CMP_BINOP(==); break;
+        case SIRBinaryOperation_INE: SIR_INTERP_UINT_CMP_BINOP(!=); break;
+        case SIRBinaryOperation_UGT: SIR_INTERP_UINT_CMP_BINOP(>); break;
+        case SIRBinaryOperation_UGE: SIR_INTERP_UINT_CMP_BINOP(>=); break;
+        case SIRBinaryOperation_ULT: SIR_INTERP_UINT_CMP_BINOP(<); break;
+        case SIRBinaryOperation_ULE: SIR_INTERP_UINT_CMP_BINOP(<=); break;
+        case SIRBinaryOperation_SGT: SIR_INTERP_INT_CMP_BINOP(>); break;
+        case SIRBinaryOperation_SGE: SIR_INTERP_INT_CMP_BINOP(>=); break;
+        case SIRBinaryOperation_SLT: SIR_INTERP_INT_CMP_BINOP(<); break;
+        case SIRBinaryOperation_SLE: SIR_INTERP_INT_CMP_BINOP(<=); break;
+
+        case SIRBinaryOperation_FEQ: SIR_INTERP_FLOAT_CMP_BINOP(==); break;
+        case SIRBinaryOperation_FNE: SIR_INTERP_FLOAT_CMP_BINOP(!=); break;
+        case SIRBinaryOperation_FGT: SIR_INTERP_FLOAT_CMP_BINOP(>); break;
+        case SIRBinaryOperation_FGE: SIR_INTERP_FLOAT_CMP_BINOP(>=); break;
+        case SIRBinaryOperation_FLT: SIR_INTERP_FLOAT_CMP_BINOP(<); break;
+        case SIRBinaryOperation_FLE: SIR_INTERP_FLOAT_CMP_BINOP(<=); break;
+
+        case SIRBinaryOperation_Shl: SIR_INTERP_UINT_BINOP(<<); break;
+        case SIRBinaryOperation_LShr: SIR_INTERP_UINT_BINOP(>>); break;
+        case SIRBinaryOperation_AShr: SIR_INTERP_INT_BINOP(>>); break;
+
+        case SIRBinaryOperation_And: SIR_INTERP_UINT_BINOP(&); break;
+        case SIRBinaryOperation_Or: SIR_INTERP_UINT_BINOP(|); break;
+        case SIRBinaryOperation_Xor: SIR_INTERP_UINT_BINOP(^); break;
+        }
         SIR_ASSERT(!"unimplemented binop");
         break;
     }

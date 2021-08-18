@@ -5,10 +5,10 @@
 
 struct SIRInterpContext {
     SIRModule *mod;
-    uint32_t ret_addr;
+    char *ret_addr;
     SIRArray<SIRInstRef> func_stack;
     SIRArray<SIRInstRef> block_stack;
-    SIRArray<uint32_t> value_addrs;
+    SIRArray<char *> value_addrs;
     char *memory;
     size_t memory_size;
     size_t memory_used;
@@ -22,7 +22,7 @@ SIRInterpContext *SIRInterpContextCreate(SIRModule *mod)
     ctx->memory_used = 0;
     ctx->memory_size = 1 << 24;
     ctx->memory = SIRAllocSlice(&SIR_MALLOC_ALLOCATOR, char, ctx->memory_size);
-    ctx->value_addrs = SIRArray<uint32_t>::create(&SIR_MALLOC_ALLOCATOR);
+    ctx->value_addrs = SIRArray<char *>::create(&SIR_MALLOC_ALLOCATOR);
     ctx->func_stack = SIRArray<SIRInstRef>::create(&SIR_MALLOC_ALLOCATOR);
     ctx->block_stack = SIRArray<SIRInstRef>::create(&SIR_MALLOC_ALLOCATOR);
     return ctx;
@@ -37,11 +37,11 @@ void SIRInterpContextDestroy(SIRInterpContext *ctx)
     SIRFree(&SIR_MALLOC_ALLOCATOR, ctx);
 }
 
-uint32_t SIRInterpAllocVal(SIRInterpContext *ctx, size_t size, size_t alignment)
+char *SIRInterpAllocVal(SIRInterpContext *ctx, size_t size, size_t alignment)
 {
     // TODO: check for out-of-memory
     ctx->memory_used = SIR_ROUND_UP(alignment, ctx->memory_used);
-    uint32_t addr = ctx->memory_used;
+    char *addr = ctx->memory + ctx->memory_used;
     ctx->memory_used += size;
     return addr;
 }
@@ -51,7 +51,7 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
     SIRModule *mod = ctx->mod;
 
     SIRInst inst = SIRModuleGetInst(mod, inst_ref);
-    uint32_t value_addr = {};
+    char *value_addr = NULL;
     bool returned = false;
 
     switch (inst.kind) {
@@ -72,40 +72,36 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
     }
     case SIRInstKind_StackSlot: {
         SIRType *type = inst.type;
-        uint64_t addr = SIRInterpAllocVal(
+        char *addr = SIRInterpAllocVal(
             ctx, SIRTypeSizeOf(ctx->mod, type), SIRTypeAlignOf(ctx->mod, type));
 
-        value_addr =
-            SIRInterpAllocVal(ctx, sizeof(uint64_t), alignof(uint64_t));
-        uint64_t *ptr = (uint64_t *)&ctx->memory[value_addr];
-        *ptr = addr;
+        value_addr = SIRInterpAllocVal(ctx, sizeof(char *), alignof(char *));
+        *(char **)value_addr = addr;
         break;
     }
     case SIRInstKind_ImmediateBool: {
         value_addr = SIRInterpAllocVal(ctx, sizeof(bool), alignof(bool));
-        bool *ptr = (bool *)&ctx->memory[value_addr];
-        *ptr = inst.imm_bool.value;
+        *(bool *)value_addr = inst.imm_bool.value;
         break;
     }
     case SIRInstKind_ImmediateInt: {
         SIRType *type = inst.type;
         value_addr = SIRInterpAllocVal(
             ctx, SIRTypeSizeOf(ctx->mod, type), SIRTypeAlignOf(ctx->mod, type));
-        char *ptr = &ctx->memory[value_addr];
         if (type->int_.is_signed) {
             switch (type->int_.bits) {
-            case 8: *((int8_t *)ptr) = inst.imm_int.u64; break;
-            case 16: *((int16_t *)ptr) = inst.imm_int.u64; break;
-            case 32: *((int32_t *)ptr) = inst.imm_int.u64; break;
-            case 64: *((int64_t *)ptr) = inst.imm_int.u64; break;
+            case 8: *((int8_t *)value_addr) = inst.imm_int.u64; break;
+            case 16: *((int16_t *)value_addr) = inst.imm_int.u64; break;
+            case 32: *((int32_t *)value_addr) = inst.imm_int.u64; break;
+            case 64: *((int64_t *)value_addr) = inst.imm_int.u64; break;
             default: SIR_ASSERT(0); break;
             }
         } else {
             switch (type->int_.bits) {
-            case 8: *((uint8_t *)ptr) = inst.imm_int.u64; break;
-            case 16: *((uint16_t *)ptr) = inst.imm_int.u64; break;
-            case 32: *((uint32_t *)ptr) = inst.imm_int.u64; break;
-            case 64: *((uint64_t *)ptr) = inst.imm_int.u64; break;
+            case 8: *((uint8_t *)value_addr) = inst.imm_int.u64; break;
+            case 16: *((uint16_t *)value_addr) = inst.imm_int.u64; break;
+            case 32: *((uint32_t *)value_addr) = inst.imm_int.u64; break;
+            case 64: *((uint64_t *)value_addr) = inst.imm_int.u64; break;
             default: SIR_ASSERT(0); break;
             }
         }
@@ -115,10 +111,9 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
         SIRType *type = inst.type;
         value_addr = SIRInterpAllocVal(
             ctx, SIRTypeSizeOf(ctx->mod, type), SIRTypeAlignOf(ctx->mod, type));
-        char *ptr = &ctx->memory[value_addr];
         switch (type->float_.bits) {
-        case 32: *((float *)ptr) = inst.imm_float.f64; break;
-        case 64: *((double *)ptr) = inst.imm_float.f64; break;
+        case 32: *((float *)value_addr) = inst.imm_float.f64; break;
+        case 64: *((double *)value_addr) = inst.imm_float.f64; break;
         default: SIR_ASSERT(0); break;
         }
         break;
@@ -137,12 +132,11 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
         size_t size = SIRTypeSizeOf(ctx->mod, type);
         value_addr =
             SIRInterpAllocVal(ctx, size, SIRTypeAlignOf(ctx->mod, type));
-        char *ptr = &ctx->memory[value_addr];
 
         SIRInstRef loaded_inst = inst.load.ptr_ref;
-        uint64_t loaded_addr =
-            *(uint64_t *)&ctx->memory[ctx->value_addrs[loaded_inst.id]];
-        memcpy(ptr, &ctx->memory[loaded_addr], size);
+        SIR_ASSERT(ctx->value_addrs[loaded_inst.id]);
+        char *loaded_addr = *(char **)ctx->value_addrs[loaded_inst.id];
+        memcpy(value_addr, loaded_addr, size);
         break;
     }
     case SIRInstKind_Store: {
@@ -150,12 +144,8 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
         size_t size = SIRTypeSizeOf(ctx->mod, type);
         SIRInstRef stored_inst = inst.store.value_ref;
         SIRInstRef ptr_inst = inst.store.ptr_ref;
-        uint64_t addr_to_store =
-            *(uint64_t *)&ctx->memory[ctx->value_addrs[ptr_inst.id]];
-        memcpy(
-            &ctx->memory[addr_to_store],
-            &ctx->memory[ctx->value_addrs[stored_inst.id]],
-            size);
+        char *addr_to_store = *(char **)ctx->value_addrs[ptr_inst.id];
+        memcpy(addr_to_store, ctx->value_addrs[stored_inst.id], size);
         break;
     }
     case SIRInstKind_Jump: {
@@ -186,13 +176,13 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
     }
     case SIRInstKind_Branch: {
         value_addr = ctx->value_addrs[inst.branch.cond_inst_ref.id];
-        bool *ptr = (bool *)&ctx->memory[value_addr];
 
         SIRInstRef current_block_ref =
             ctx->block_stack[ctx->block_stack.len - 1];
 
-        SIRInstRef next_block_ref =
-            (*ptr) ? inst.branch.true_block_ref : inst.branch.false_block_ref;
+        SIRInstRef next_block_ref = (*(bool *)value_addr)
+                                        ? inst.branch.true_block_ref
+                                        : inst.branch.false_block_ref;
         SIRInst next_block = SIRModuleGetInst(ctx->mod, next_block_ref);
 
         if (next_block.block.inst_refs.len > 0) {
@@ -219,7 +209,50 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
         break;
     }
     case SIRInstKind_FuncCall: {
-        SIR_ASSERT(!"unimplemented func_call");
+        SIRInstRef called_func_ref = inst.func_call.func_ref;
+
+        SIRInst called_func = SIRModuleGetInst(ctx->mod, called_func_ref);
+
+        SIR_ASSERT(
+            called_func.func->param_insts.len == inst.func_call.params_len);
+
+        for (size_t i = 0; i < called_func.func->param_insts.len; ++i) {
+            SIRInstRef passed_param_ref = inst.func_call.params[i];
+            SIRInstRef param_ref = called_func.func->param_insts[i];
+
+            ctx->value_addrs[param_ref.id] =
+                ctx->value_addrs[passed_param_ref.id];
+        }
+
+        SIRInstRef starting_block_ref = called_func.func->blocks[0];
+
+        ctx->func_stack.push_back(called_func_ref);
+        ctx->block_stack.push_back(starting_block_ref);
+
+        for (size_t i = 0; i < called_func.func->stack_slots.len; ++i) {
+            SIRInstRef stack_slot = called_func.func->stack_slots[i];
+            SIRInterpInst(ctx, stack_slot);
+        }
+
+        bool returned = false;
+        while (!returned) {
+            SIRInstRef block_ref = ctx->block_stack[ctx->block_stack.len - 1];
+            SIRInst block = SIRModuleGetInst(mod, block_ref);
+            for (size_t i = 0; i < block.block.inst_refs.len; ++i) {
+                SIRInstRef inst_ref = block.block.inst_refs[i];
+                returned = SIRInterpInst(ctx, inst_ref);
+                if (returned) {
+                    ctx->ret_addr = ctx->value_addrs[inst_ref.id];
+                    break;
+                }
+            }
+        }
+
+        ctx->block_stack.pop();
+        ctx->func_stack.pop();
+
+        value_addr = ctx->ret_addr;
+
         break;
     }
     case SIRInstKind_BitCast: {
@@ -235,26 +268,26 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
 
         SIR_ASSERT(dest_size >= source_size);
 
-        uint64_t source_addr = ctx->value_addrs[inst.zext.inst_ref.id];
+        char *source_addr = ctx->value_addrs[inst.zext.inst_ref.id];
 
         value_addr = SIRInterpAllocVal(
             ctx, dest_size, SIRTypeAlignOf(ctx->mod, dest_type));
 
         uint64_t value = 0;
         switch (source_size) {
-        case 1: value = *(uint8_t *)&ctx->memory[source_addr];
-        case 2: value = *(uint16_t *)&ctx->memory[source_addr];
-        case 4: value = *(uint32_t *)&ctx->memory[source_addr];
-        case 8: value = *(uint64_t *)&ctx->memory[source_addr];
-        default: SIR_ASSERT(0);
+        case 1: value = *(uint8_t *)source_addr; break;
+        case 2: value = *(uint16_t *)source_addr; break;
+        case 4: value = *(uint32_t *)source_addr; break;
+        case 8: value = *(uint64_t *)source_addr; break;
+        default: SIR_ASSERT(0); break;
         }
 
         switch (dest_size) {
-        case 1: *(uint8_t *)&ctx->memory[value_addr] = value;
-        case 2: *(uint16_t *)&ctx->memory[value_addr] = value;
-        case 4: *(uint32_t *)&ctx->memory[value_addr] = value;
-        case 8: *(uint64_t *)&ctx->memory[value_addr] = value;
-        default: SIR_ASSERT(0);
+        case 1: *(uint8_t *)value_addr = value; break;
+        case 2: *(uint16_t *)value_addr = value; break;
+        case 4: *(uint32_t *)value_addr = value; break;
+        case 8: *(uint64_t *)value_addr = value; break;
+        default: SIR_ASSERT(0); break;
         }
         break;
     }
@@ -267,26 +300,26 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
 
         SIR_ASSERT(dest_size >= source_size);
 
-        uint64_t source_addr = ctx->value_addrs[inst.sext.inst_ref.id];
+        char *source_addr = ctx->value_addrs[inst.sext.inst_ref.id];
 
         value_addr = SIRInterpAllocVal(
             ctx, dest_size, SIRTypeAlignOf(ctx->mod, dest_type));
 
         int64_t value = 0;
         switch (source_size) {
-        case 1: value = *(int8_t *)&ctx->memory[source_addr];
-        case 2: value = *(int16_t *)&ctx->memory[source_addr];
-        case 4: value = *(int32_t *)&ctx->memory[source_addr];
-        case 8: value = *(int64_t *)&ctx->memory[source_addr];
-        default: SIR_ASSERT(0);
+        case 1: value = *(int8_t *)source_addr; break;
+        case 2: value = *(int16_t *)source_addr; break;
+        case 4: value = *(int32_t *)source_addr; break;
+        case 8: value = *(int64_t *)source_addr; break;
+        default: SIR_ASSERT(0); break;
         }
 
         switch (dest_size) {
-        case 1: *(int8_t *)&ctx->memory[value_addr] = value;
-        case 2: *(int16_t *)&ctx->memory[value_addr] = value;
-        case 4: *(int32_t *)&ctx->memory[value_addr] = value;
-        case 8: *(int64_t *)&ctx->memory[value_addr] = value;
-        default: SIR_ASSERT(0);
+        case 1: *(int8_t *)value_addr = value; break;
+        case 2: *(int16_t *)value_addr = value; break;
+        case 4: *(int32_t *)value_addr = value; break;
+        case 8: *(int64_t *)value_addr = value; break;
+        default: SIR_ASSERT(0); break;
         }
         break;
     }
@@ -299,25 +332,25 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
 
         SIR_ASSERT(dest_size <= source_size);
 
-        uint64_t source_addr = ctx->value_addrs[inst.trunc.inst_ref.id];
+        char *source_addr = ctx->value_addrs[inst.trunc.inst_ref.id];
 
         value_addr = SIRInterpAllocVal(
             ctx, dest_size, SIRTypeAlignOf(ctx->mod, dest_type));
 
         uint64_t value = 0;
         switch (source_size) {
-        case 1: value = *(uint8_t *)&ctx->memory[source_addr];
-        case 2: value = *(uint16_t *)&ctx->memory[source_addr];
-        case 4: value = *(uint32_t *)&ctx->memory[source_addr];
-        case 8: value = *(uint64_t *)&ctx->memory[source_addr];
+        case 1: value = *(uint8_t *)source_addr; break;
+        case 2: value = *(uint16_t *)source_addr; break;
+        case 4: value = *(uint32_t *)source_addr; break;
+        case 8: value = *(uint64_t *)source_addr; break;
         default: SIR_ASSERT(0);
         }
 
         switch (dest_size) {
-        case 1: *(uint8_t *)&ctx->memory[value_addr] = value;
-        case 2: *(uint16_t *)&ctx->memory[value_addr] = value;
-        case 4: *(uint32_t *)&ctx->memory[value_addr] = value;
-        case 8: *(uint64_t *)&ctx->memory[value_addr] = value;
+        case 1: *(uint8_t *)value_addr = value; break;
+        case 2: *(uint16_t *)value_addr = value; break;
+        case 4: *(uint32_t *)value_addr = value; break;
+        case 8: *(uint64_t *)value_addr = value; break;
         default: SIR_ASSERT(0);
         }
 
@@ -335,33 +368,24 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
         SIR_ASSERT(array_type->kind == SIRTypeKind_Array);
         SIR_ASSERT(index_type->kind == SIRTypeKind_Int);
 
-        uint64_t array_addr =
-            *(uint64_t *)&ctx->memory
-                 [ctx->value_addrs[inst.array_elem_ptr.accessed_ref.id]];
+        char *array_addr =
+            *(char **)ctx->value_addrs[inst.array_elem_ptr.accessed_ref.id];
 
         uint64_t index = 0;
 
         switch (index_type->int_.bits) {
-        case 8:
-            index = *(uint8_t *)&ctx->memory[ctx->value_addrs[index_ref.id]];
-            break;
-        case 16:
-            index = *(uint16_t *)&ctx->memory[ctx->value_addrs[index_ref.id]];
-            break;
-        case 32:
-            index = *(uint32_t *)&ctx->memory[ctx->value_addrs[index_ref.id]];
-            break;
-        case 64:
-            index = *(uint64_t *)&ctx->memory[ctx->value_addrs[index_ref.id]];
-            break;
+        case 8: index = *(uint8_t *)ctx->value_addrs[index_ref.id]; break;
+        case 16: index = *(uint16_t *)ctx->value_addrs[index_ref.id]; break;
+        case 32: index = *(uint32_t *)ctx->value_addrs[index_ref.id]; break;
+        case 64: index = *(uint64_t *)ctx->value_addrs[index_ref.id]; break;
         }
 
-        uint64_t elem_addr =
+        char *elem_addr =
             array_addr + index * SIRTypeSizeOf(ctx->mod, array_type->array.sub);
 
         value_addr =
             SIRInterpAllocVal(ctx, sizeof(uint64_t), alignof(uint64_t));
-        *(uint64_t *)&ctx->memory[value_addr] = elem_addr;
+        *(char **)value_addr = elem_addr;
         break;
     }
     case SIRInstKind_StructElemPtr: {
@@ -372,18 +396,17 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
         SIR_ASSERT(struct_ptr_type->kind == SIRTypeKind_Pointer);
         SIR_ASSERT(struct_type->kind == SIRTypeKind_Struct);
 
-        uint64_t struct_addr =
-            *(uint64_t *)&ctx->memory
-                 [ctx->value_addrs[inst.struct_elem_ptr.accessed_ref.id]];
+        char *struct_addr =
+            *(char **)ctx->value_addrs[inst.struct_elem_ptr.accessed_ref.id];
 
         uint32_t field_offset = SIRTypeStructOffsetOf(
             ctx->mod, struct_type, inst.struct_elem_ptr.field_index);
 
-        uint64_t field_addr = struct_addr + field_offset;
+        char *field_addr = struct_addr + field_offset;
 
         value_addr =
             SIRInterpAllocVal(ctx, sizeof(uint64_t), alignof(uint64_t));
-        *(uint64_t *)&ctx->memory[value_addr] = field_addr;
+        *(char **)value_addr = field_addr;
         break;
     }
     case SIRInstKind_ExtractArrayElem: {
@@ -392,17 +415,17 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
 
         SIR_ASSERT(array_type->kind == SIRTypeKind_Array);
 
-        uint64_t array_addr =
+        char *array_addr =
             ctx->value_addrs[inst.extract_array_elem.accessed_ref.id];
         uint64_t index = inst.extract_array_elem.elem_index;
 
         size_t elem_size = SIRTypeSizeOf(ctx->mod, array_type->array.sub);
 
-        uint64_t elem_addr = array_addr + index * elem_size;
+        char *elem_addr = array_addr + index * elem_size;
 
         value_addr = SIRInterpAllocVal(
             ctx, elem_size, SIRTypeAlignOf(ctx->mod, array_type->array.sub));
-        memcpy(&ctx->memory[value_addr], &ctx->memory[elem_addr], elem_size);
+        memcpy(value_addr, elem_addr, elem_size);
         break;
     }
     case SIRInstKind_ExtractStructElem: {
@@ -421,12 +444,12 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
         size_t field_align =
             SIRTypeAlignOf(ctx->mod, struct_type->struct_.fields[field_index]);
 
-        uint64_t struct_addr =
+        char *struct_addr =
             ctx->value_addrs[inst.extract_struct_elem.accessed_ref.id];
 
-        uint64_t field_addr = struct_addr + field_offset;
+        char *field_addr = struct_addr + field_offset;
         value_addr = SIRInterpAllocVal(ctx, field_size, field_align);
-        memcpy(&ctx->memory[value_addr], &ctx->memory[field_addr], field_size);
+        memcpy(value_addr, field_addr, field_size);
 
         break;
     }
@@ -436,13 +459,12 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
         value_addr =
             SIRInterpAllocVal(ctx, value_size, SIRTypeAlignOf(ctx->mod, type));
 
-        uint32_t left_addr = ctx->value_addrs[inst.binop.left_ref.id];
-        uint32_t right_addr = ctx->value_addrs[inst.binop.right_ref.id];
+        char *left_addr = ctx->value_addrs[inst.binop.left_ref.id];
+        char *right_addr = ctx->value_addrs[inst.binop.right_ref.id];
 
 #define SIR_INTERP_BINOP(RESULT_TYPE, OP_TYPE, OP)                             \
-    (*(RESULT_TYPE *)&ctx->memory[value_addr]) =                               \
-        (*(OP_TYPE *)&ctx->memory[left_addr])OP(                               \
-            *(OP_TYPE *)&ctx->memory[right_addr])
+    (*(RESULT_TYPE *)value_addr) =                                             \
+        (*(OP_TYPE *)left_addr)OP(*(OP_TYPE *)right_addr)
 
 #define SIR_INTERP_UINT_CMP_BINOP(OP)                                          \
     switch (value_size) {                                                      \
@@ -539,14 +561,12 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
         case SIRBinaryOperation_FRem: {
             switch (value_size) {
             case 4:
-                *(float *)&ctx->memory[value_addr] = fmodf(
-                    *(float *)&ctx->memory[left_addr],
-                    *(float *)&ctx->memory[right_addr]);
+                *(float *)value_addr =
+                    fmodf(*(float *)left_addr, *(float *)right_addr);
                 break;
             case 8:
-                *(double *)&ctx->memory[value_addr] = fmod(
-                    *(double *)&ctx->memory[left_addr],
-                    *(double *)&ctx->memory[right_addr]);
+                *(double *)value_addr =
+                    fmod(*(double *)left_addr, *(double *)right_addr);
                 break;
             }
             break;
@@ -617,12 +637,14 @@ void SIRInterpFunction(SIRInterpContext *ctx, SIRInstRef func_ref, void *result)
         SIRInterpInst(ctx, stack_slot);
     }
 
-    while (ctx->func_stack.len > 0) {
+    bool returned = false;
+    while (!returned) {
         SIRInstRef block_ref = ctx->block_stack[ctx->block_stack.len - 1];
         SIRInst block = SIRModuleGetInst(mod, block_ref);
         for (size_t i = 0; i < block.block.inst_refs.len; ++i) {
             SIRInstRef inst_ref = block.block.inst_refs[i];
-            if (SIRInterpInst(ctx, inst_ref)) {
+            returned = SIRInterpInst(ctx, inst_ref);
+            if (returned) {
                 ctx->ret_addr = ctx->value_addrs[inst_ref.id];
                 break;
             }
@@ -632,8 +654,5 @@ void SIRInterpFunction(SIRInterpContext *ctx, SIRInstRef func_ref, void *result)
     ctx->block_stack.pop();
     ctx->func_stack.pop();
 
-    memcpy(
-        result,
-        &ctx->memory[ctx->ret_addr],
-        SIRTypeSizeOf(ctx->mod, func_ret_type));
+    memcpy(result, ctx->ret_addr, SIRTypeSizeOf(ctx->mod, func_ret_type));
 }

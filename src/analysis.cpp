@@ -2,115 +2,10 @@
 
 struct AnalyzerState {
     FileRef file_ref;
+    CodegenContext *codegen_ctx;
     Array<Scope *> scope_stack;
     Array<DeclRef> func_stack;
 };
-
-static bool
-interp_expr(Compiler *compiler, ExprRef expr_ref, InterpValue *out_value)
-{
-    InterpValue value = {};
-    Expr expr = expr_ref.get(compiler);
-
-    switch (expr.kind) {
-    case ExprKind_IntLiteral: {
-        value.type_ref = compiler->untyped_int_type;
-        value.i64 = expr.int_literal.u64;
-        *out_value = value;
-        return true;
-    }
-    case ExprKind_FloatLiteral: {
-        value.type_ref = compiler->untyped_float_type;
-        value.f64 = expr.float_literal.f64;
-        *out_value = value;
-        return true;
-    }
-    case ExprKind_BoolLiteral: {
-        value.type_ref = compiler->bool_type;
-        value.boolean = expr.bool_literal.bool_;
-        *out_value = value;
-        return true;
-    }
-    case ExprKind_BuiltinCall: {
-        switch (expr.builtin_call.builtin) {
-        case BuiltinFunction_Sizeof: {
-            ExprRef param0_ref = expr.builtin_call.param_refs[0];
-            LANG_ASSERT(compiler->expr_as_types[param0_ref.id].id);
-
-            uint32_t size =
-                compiler->expr_as_types[param0_ref.id].get(compiler).size_of(
-                    compiler);
-
-            value.type_ref = compiler->untyped_int_type;
-            value.i64 = size;
-            *out_value = value;
-            return true;
-        }
-        case BuiltinFunction_Alignof: {
-            ExprRef param0_ref = expr.builtin_call.param_refs[0];
-            LANG_ASSERT(compiler->expr_as_types[param0_ref.id].id);
-
-            uint32_t alignment =
-                compiler->expr_as_types[param0_ref.id].get(compiler).align_of(
-                    compiler);
-
-            value.type_ref = compiler->untyped_int_type;
-            value.i64 = alignment;
-            *out_value = value;
-            return true;
-        }
-        case BuiltinFunction_Defined: {
-            ExprRef param0_ref = expr.builtin_call.param_refs[0];
-            Expr param0 = param0_ref.get(compiler);
-            LANG_ASSERT(param0.kind == ExprKind_StringLiteral);
-
-            value.type_ref = compiler->bool_type;
-            value.boolean = compiler->defines.get(param0.str_literal.str);
-            *out_value = value;
-            return true;
-        }
-        default: break;
-        }
-        break;
-    }
-    case ExprKind_Binary: {
-        InterpValue left = {};
-        InterpValue right = {};
-        if (!interp_expr(compiler, expr.binary.left_ref, &left)) {
-            return false;
-        }
-        if (!interp_expr(compiler, expr.binary.right_ref, &right)) {
-            return false;
-        }
-
-        LANG_ASSERT(left.type_ref.id == right.type_ref.id);
-
-        switch (expr.binary.op) {
-        case BinaryOp_Unknown:
-        case BinaryOp_MAX: LANG_ASSERT(0); break;
-
-        default: return false;
-
-        case BinaryOp_And: {
-            value.type_ref = compiler->bool_type;
-            value.boolean = left.boolean && right.boolean;
-            *out_value = value;
-            return true;
-        }
-        case BinaryOp_Or: {
-            value.type_ref = compiler->bool_type;
-            value.boolean = left.boolean || right.boolean;
-            *out_value = value;
-            return true;
-        }
-        }
-        break;
-    }
-    default: break;
-    }
-
-    return false;
-}
 
 static void
 analyze_stmt(Compiler *compiler, AnalyzerState *state, StmtRef stmt_ref);
@@ -257,25 +152,31 @@ static void analyze_expr(
             compiler,
             state,
             expr.array_type.size_expr_ref,
-            compiler->untyped_int_type);
+            compiler->usize_type);
 
         TypeRef sub_type =
             compiler->expr_as_types[expr.array_type.subtype_expr_ref];
         if (sub_type.id) {
-            InterpValue interp_value = {};
-            if (interp_expr(
-                    compiler, expr.array_type.size_expr_ref, &interp_value)) {
-                LANG_ASSERT(
-                    interp_value.type_ref.id == compiler->untyped_int_type.id);
-                compiler->expr_types[expr_ref] = compiler->type_type;
-                compiler->expr_as_types[expr_ref] =
-                    compiler->create_array_type(sub_type, interp_value.i64);
-            } else {
+            SIRInterpResult err_code = {};
+            size_t interp_value_size = 0;
+            uint64_t *interp_value = (uint64_t *)codegen_interp_expr(
+                compiler,
+                state->codegen_ctx,
+                expr.array_type.size_expr_ref,
+                &err_code,
+                &interp_value_size);
+
+            if (interp_value_size != sizeof(uint64_t) ||
+                err_code != SIRInterpResult_Success) {
                 compiler->add_error(
                     compiler->expr_locs[expr.array_type.size_expr_ref],
-                    "array size expression does not evaluate to a compile-time "
-                    "integer");
+                    "could not evaluate compile time expression");
+                break;
             }
+
+            compiler->expr_types[expr_ref] = compiler->type_type;
+            compiler->expr_as_types[expr_ref] =
+                compiler->create_array_type(sub_type, *interp_value);
         }
         break;
     }
@@ -1209,16 +1110,24 @@ analyze_stmt(Compiler *compiler, AnalyzerState *state, StmtRef stmt_ref)
         TypeRef bool_type = compiler->bool_type;
         analyze_expr(compiler, state, stmt.when.cond_expr_ref, bool_type);
 
-        InterpValue value = {};
-        if (!interp_expr(compiler, stmt.when.cond_expr_ref, &value)) {
+        SIRInterpResult err_code = {};
+        size_t interp_value_size = 0;
+        bool *interp_value = (bool *)codegen_interp_expr(
+            compiler,
+            state->codegen_ctx,
+            stmt.when.cond_expr_ref,
+            &err_code,
+            &interp_value_size);
+
+        if (interp_value_size != sizeof(bool) ||
+            err_code != SIRInterpResult_Success) {
             compiler->add_error(
                 compiler->expr_locs[stmt.when.cond_expr_ref],
                 "could not evaluate compile time expression");
             break;
         }
 
-        LANG_ASSERT(value.type_ref.id == bool_type.id);
-        stmt.when.cond_value = value.boolean;
+        stmt.when.cond_value = *interp_value;
 
         if (stmt.when.cond_value) {
             analyze_stmt(compiler, state, stmt.when.true_stmt_ref);
@@ -1465,6 +1374,7 @@ void analyze_file(Compiler *compiler, FileRef file_ref)
     state.file_ref = file_ref;
     state.scope_stack = Array<Scope *>::create(compiler->arena);
     state.func_stack = Array<DeclRef>::create(compiler->arena);
+    state.codegen_ctx = CodegenContextCreate();
 
     state.scope_stack.push_back(file.scope);
 
@@ -1481,6 +1391,7 @@ void analyze_file(Compiler *compiler, FileRef file_ref)
 
     LANG_ASSERT(state.scope_stack.len == 0);
 
+    CodegenContextDestroy(state.codegen_ctx);
     compiler->files[file_ref.id] = file;
 
     if (compiler->errors.len > 0) {

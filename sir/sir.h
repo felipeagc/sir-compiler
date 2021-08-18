@@ -184,7 +184,8 @@ SIRType *SIRModuleGetInstType(SIRModule *module, SIRInstRef inst_ref);
 SIRTypeKind SIRModuleGetTypeKind(SIRModule *module, SIRType *type);
 uint32_t SIRTypeSizeOf(SIRModule *module, SIRType *type);
 uint32_t SIRTypeAlignOf(SIRModule *module, SIRType *type);
-uint32_t SIRTypeStructOffsetOf(SIRModule *module, SIRType *type, uint32_t field_index);
+uint32_t
+SIRTypeStructOffsetOf(SIRModule *module, SIRType *type, uint32_t field_index);
 uint32_t
 SIRModuleGetBlockInstructionCount(SIRModule *module, SIRInstRef block_ref);
 SIRInstRef SIRModuleGetBlockInstruction(
@@ -249,9 +250,7 @@ void SIRBuilderInsertBranch(
     SIRInstRef true_block_ref,
     SIRInstRef false_block_ref);
 
-SIRInstRef SIRBuilderInsertPhi(
-    SIRBuilder *builder,
-    SIRType *type);
+SIRInstRef SIRBuilderInsertPhi(SIRBuilder *builder, SIRType *type);
 
 void SIRPhiAddIncoming(
     SIRBuilder *builder,

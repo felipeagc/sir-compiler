@@ -2,6 +2,7 @@
 
 #include "base.hpp"
 #include <sir.h>
+#include <sir_interp.h>
 
 struct Compiler;
 struct File;
@@ -708,8 +709,12 @@ void CodegenContextDestroy(CodegenContext *ctx);
 void parse_file(Compiler *compiler, FileRef file_ref);
 void analyze_file(Compiler *compiler, FileRef file_ref);
 void codegen_file(Compiler *compiler, CodegenContext *ctx, FileRef file_ref);
-SIRInstRef codegen_isolated_expr_into_func(
-    Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref);
+void *codegen_interp_expr(
+    Compiler *compiler,
+    CodegenContext *ctx,
+    ExprRef expr_ref,
+    SIRInterpResult *err_code,
+    size_t *out_size);
 
 inline Decl DeclRef::get(Compiler *compiler) const
 {

@@ -2,8 +2,10 @@
 #include "sir_base.hpp"
 #include "sir_ir.hpp"
 #include <math.h>
+#include <setjmp.h>
 
 struct SIRInterpContext {
+    SIRInterpResult err_code;
     SIRModule *mod;
     SIRArray<SIRInstRef> func_stack;
     SIRArray<SIRInstRef> block_stack;
@@ -12,6 +14,7 @@ struct SIRInterpContext {
     char *stack_memory;
     size_t stack_memory_size;
     size_t stack_memory_used;
+    jmp_buf jump_buf;
 };
 
 SIRInterpContext *SIRInterpContextCreate(SIRModule *mod)
@@ -40,13 +43,19 @@ void SIRInterpContextDestroy(SIRInterpContext *ctx)
     SIRFree(&SIR_MALLOC_ALLOCATOR, ctx);
 }
 
-char *
+static void
+SIRInterpContextAbort(SIRInterpContext *ctx, SIRInterpResult err_code)
+{
+    ctx->err_code = err_code;
+    longjmp(ctx->jump_buf, 1);
+}
+
+static char *
 SIRInterpAllocStackVal(SIRInterpContext *ctx, size_t size, size_t alignment)
 {
     ctx->stack_memory_used = SIR_ROUND_UP(alignment, ctx->stack_memory_used);
     if (ctx->stack_memory_used + size > ctx->stack_memory_size) {
-        // TODO: gracefully handle stack overflow
-        SIR_ASSERT(!"stack overflow in interpreted code");
+        SIRInterpContextAbort(ctx, SIRInterpResult_StackOverflow);
         return NULL;
     }
 
@@ -76,7 +85,7 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
         break;
     }
     case SIRInstKind_Global: {
-        SIR_ASSERT(!"global values not supported in interpreter");
+        SIRInterpContextAbort(ctx, SIRInterpResult_CannotBeInterpreted);
         break;
     }
     case SIRInstKind_StackSlot: {
@@ -223,6 +232,14 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
 
         SIRInst called_func = SIRModuleGetInst(ctx->mod, called_func_ref);
         SIRType *func_ret_type = called_func.func->return_type;
+
+        if (called_func.func->blocks.len == 0) {
+            SIRInterpContextAbort(ctx, SIRInterpResult_CannotBeInterpreted);
+        }
+
+        if (called_func.func->variadic) {
+            SIRInterpContextAbort(ctx, SIRInterpResult_CannotBeInterpreted);
+        }
 
         SIR_ASSERT(
             called_func.func->param_insts.len == inst.func_call.params_len);
@@ -404,7 +421,7 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
             array_addr + index * SIRTypeSizeOf(ctx->mod, array_type->array.sub);
 
         value_addr =
-            SIRInterpAllocStackVal(ctx, sizeof(uint64_t), alignof(uint64_t));
+            SIRInterpAllocStackVal(ctx, sizeof(char *), alignof(char *));
         *(char **)value_addr = elem_addr;
         break;
     }
@@ -425,7 +442,7 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
         char *field_addr = struct_addr + field_offset;
 
         value_addr =
-            SIRInterpAllocStackVal(ctx, sizeof(uint64_t), alignof(uint64_t));
+            SIRInterpAllocStackVal(ctx, sizeof(char *), alignof(char *));
         *(char **)value_addr = field_addr;
         break;
     }
@@ -634,7 +651,8 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
     return returned;
 }
 
-void SIRInterpFunction(SIRInterpContext *ctx, SIRInstRef func_ref, void *result)
+SIRInterpResult
+SIRInterpFunction(SIRInterpContext *ctx, SIRInstRef func_ref, void *result)
 {
     SIRModule *mod = ctx->mod;
 
@@ -642,6 +660,10 @@ void SIRInterpFunction(SIRInterpContext *ctx, SIRInstRef func_ref, void *result)
     ctx->value_addrs.resize(ctx->mod->insts.len);
     ctx->func_stack.resize(0);
     ctx->block_stack.resize(0);
+
+    if (setjmp(ctx->jump_buf)) {
+        return ctx->err_code;
+    }
 
     SIRInst func = SIRModuleGetInst(mod, func_ref);
     SIRType *func_ret_type = func.func->return_type;
@@ -683,4 +705,6 @@ void SIRInterpFunction(SIRInterpContext *ctx, SIRInstRef func_ref, void *result)
     ctx->func_stack.pop();
 
     memcpy(result, ret_addr, SIRTypeSizeOf(ctx->mod, func_ret_type));
+
+    return SIRInterpResult_Success;
 }

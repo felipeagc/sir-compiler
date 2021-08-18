@@ -1,6 +1,7 @@
 #include "compiler.hpp"
 
 #include <sir.h>
+#include <sir_interp.h>
 
 struct CodegenContext;
 
@@ -12,6 +13,7 @@ struct CodegenValue {
 struct CodegenContext {
     SIRModule *module;
     SIRBuilder *builder;
+    SIRInterpContext *interp_ctx;
     Array<SIRType *> type_values;
     Array<CodegenValue> expr_values;
     Array<CodegenValue> decl_values;
@@ -62,9 +64,15 @@ get_ir_type(Compiler *compiler, SIRModule *module, const Type &type)
     case TypeKind_Unknown:
     case TypeKind_MAX:
     case TypeKind_Function:
-    case TypeKind_UntypedInt:
-    case TypeKind_UntypedFloat:
     case TypeKind_Type: return nullptr;
+
+    case TypeKind_UntypedInt: {
+        return SIRModuleGetI64Type(module);
+    }
+
+    case TypeKind_UntypedFloat: {
+        return SIRModuleGetF64Type(module);
+    }
 
     case TypeKind_Void: {
         return SIRModuleGetVoidType(module);
@@ -1214,6 +1222,7 @@ CodegenContext *CodegenContextCreate()
     ctx->module =
         SIRModuleCreate(SIRTargetArch_X86_64, SIREndianness_LittleEndian);
     ctx->builder = SIRBuilderCreate(ctx->module);
+    ctx->interp_ctx = SIRInterpContextCreate(ctx->module);
 
     ctx->type_values = Array<SIRType *>::create(allocator);
     ctx->decl_values = Array<CodegenValue>::create(allocator);
@@ -1234,6 +1243,7 @@ void CodegenContextDestroy(CodegenContext *ctx)
     ctx->expr_values.destroy();
     ctx->function_stack.destroy();
 
+    SIRInterpContextDestroy(ctx->interp_ctx);
     SIRModuleDestroy(ctx->module);
     allocator->free(ctx);
 }
@@ -1241,19 +1251,22 @@ void CodegenContextDestroy(CodegenContext *ctx)
 SIRInstRef codegen_isolated_expr_into_func(
     Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
 {
+    size_t prev_types_len = ctx->type_values.len;
     ctx->type_values.resize(compiler->types.len);
-    for (size_t i = 0; i < compiler->types.len; ++i) {
+    for (size_t i = prev_types_len; i < compiler->types.len; ++i) {
         ctx->type_values[i] =
             get_ir_type(compiler, ctx->module, compiler->types[i]);
     }
 
+    size_t prev_decls_len = compiler->decls.len;
     ctx->decl_values.resize(compiler->decls.len);
-    for (size_t i = 0; i < compiler->decls.len; ++i) {
+    for (size_t i = prev_decls_len; i < compiler->decls.len; ++i) {
         ctx->decl_values[i] = {};
     }
 
+    size_t prev_exprs_len = compiler->exprs.len;
     ctx->expr_values.resize(compiler->exprs.len);
-    for (size_t i = 0; i < compiler->exprs.len; ++i) {
+    for (size_t i = prev_exprs_len; i < compiler->exprs.len; ++i) {
         ctx->expr_values[i] = {};
     }
 
@@ -1284,6 +1297,26 @@ SIRInstRef codegen_isolated_expr_into_func(
     ctx->function_stack.pop();
 
     return wrapper_func;
+}
+
+void *codegen_interp_expr(
+    Compiler *compiler,
+    CodegenContext *ctx,
+    ExprRef expr_ref,
+    SIRInterpResult *err_code,
+    size_t *out_size)
+{
+    SIRInstRef func_ref =
+        codegen_isolated_expr_into_func(compiler, ctx, expr_ref);
+    TypeRef expr_type_ref = compiler->expr_types[expr_ref];
+    Type expr_type = expr_type_ref.get(compiler);
+
+    *out_size = expr_type.size_of(compiler);
+    // TODO: ensure alignment
+    void *result = compiler->arena->alloc_bytes(*out_size);
+
+    *err_code = SIRInterpFunction(ctx->interp_ctx, func_ref, result);
+    return result;
 }
 
 void codegen_file(Compiler *compiler, CodegenContext *ctx, FileRef file_ref)

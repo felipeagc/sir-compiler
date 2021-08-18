@@ -5,9 +5,9 @@
 
 struct SIRInterpContext {
     SIRModule *mod;
-    char *ret_addr;
     SIRArray<SIRInstRef> func_stack;
     SIRArray<SIRInstRef> block_stack;
+    SIRArray<size_t> stack_usage_stack;
     SIRArray<char *> value_addrs;
     char *stack_memory;
     size_t stack_memory_size;
@@ -23,6 +23,7 @@ SIRInterpContext *SIRInterpContextCreate(SIRModule *mod)
     ctx->stack_memory_size = 1 << 23;
     ctx->stack_memory =
         SIRAllocSlice(&SIR_MALLOC_ALLOCATOR, char, ctx->stack_memory_size);
+    ctx->stack_usage_stack = SIRArray<size_t>::create(&SIR_MALLOC_ALLOCATOR);
     ctx->value_addrs = SIRArray<char *>::create(&SIR_MALLOC_ALLOCATOR);
     ctx->func_stack = SIRArray<SIRInstRef>::create(&SIR_MALLOC_ALLOCATOR);
     ctx->block_stack = SIRArray<SIRInstRef>::create(&SIR_MALLOC_ALLOCATOR);
@@ -31,6 +32,7 @@ SIRInterpContext *SIRInterpContextCreate(SIRModule *mod)
 
 void SIRInterpContextDestroy(SIRInterpContext *ctx)
 {
+    ctx->stack_usage_stack.destroy();
     ctx->value_addrs.destroy();
     ctx->func_stack.destroy();
     ctx->block_stack.destroy();
@@ -220,6 +222,7 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
         SIRInstRef called_func_ref = inst.func_call.func_ref;
 
         SIRInst called_func = SIRModuleGetInst(ctx->mod, called_func_ref);
+        SIRType *func_ret_type = called_func.func->return_type;
 
         SIR_ASSERT(
             called_func.func->param_insts.len == inst.func_call.params_len);
@@ -234,8 +237,13 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
 
         SIRInstRef starting_block_ref = called_func.func->blocks[0];
 
+        size_t ret_type_size = SIRTypeSizeOf(ctx->mod, func_ret_type);
+        value_addr = SIRInterpAllocStackVal(
+            ctx, ret_type_size, SIRTypeAlignOf(ctx->mod, func_ret_type));
+
         ctx->func_stack.push_back(called_func_ref);
         ctx->block_stack.push_back(starting_block_ref);
+        ctx->stack_usage_stack.push_back(ctx->stack_memory_used);
 
         for (size_t i = 0; i < called_func.func->stack_slots.len; ++i) {
             SIRInstRef stack_slot = called_func.func->stack_slots[i];
@@ -250,16 +258,20 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
                 SIRInstRef inst_ref = block.block.inst_refs[i];
                 returned = SIRInterpInst(ctx, inst_ref);
                 if (returned) {
-                    ctx->ret_addr = ctx->value_addrs[inst_ref.id];
+                    memcpy(
+                        value_addr,
+                        ctx->value_addrs[inst_ref.id],
+                        ret_type_size);
                     break;
                 }
             }
         }
 
+        ctx->stack_memory_used =
+            ctx->stack_usage_stack[ctx->stack_usage_stack.len - 1];
+        ctx->stack_usage_stack.pop();
         ctx->block_stack.pop();
         ctx->func_stack.pop();
-
-        value_addr = ctx->ret_addr;
 
         break;
     }
@@ -637,8 +649,13 @@ void SIRInterpFunction(SIRInterpContext *ctx, SIRInstRef func_ref, void *result)
 
     SIRInstRef starting_block_ref = func.func->blocks[0];
 
+    size_t ret_type_size = SIRTypeSizeOf(ctx->mod, func_ret_type);
+    char *ret_addr = SIRInterpAllocStackVal(
+        ctx, ret_type_size, SIRTypeAlignOf(ctx->mod, func_ret_type));
+
     ctx->func_stack.push_back(func_ref);
     ctx->block_stack.push_back(starting_block_ref);
+    ctx->stack_usage_stack.push_back(ctx->stack_memory_used);
 
     for (size_t i = 0; i < func.func->stack_slots.len; ++i) {
         SIRInstRef stack_slot = func.func->stack_slots[i];
@@ -653,14 +670,17 @@ void SIRInterpFunction(SIRInterpContext *ctx, SIRInstRef func_ref, void *result)
             SIRInstRef inst_ref = block.block.inst_refs[i];
             returned = SIRInterpInst(ctx, inst_ref);
             if (returned) {
-                ctx->ret_addr = ctx->value_addrs[inst_ref.id];
+                memcpy(ret_addr, ctx->value_addrs[inst_ref.id], ret_type_size);
                 break;
             }
         }
     }
 
+    ctx->stack_memory_used =
+        ctx->stack_usage_stack[ctx->stack_usage_stack.len - 1];
+    ctx->stack_usage_stack.pop();
     ctx->block_stack.pop();
     ctx->func_stack.pop();
 
-    memcpy(result, ctx->ret_addr, SIRTypeSizeOf(ctx->mod, func_ret_type));
+    memcpy(result, ret_addr, SIRTypeSizeOf(ctx->mod, func_ret_type));
 }

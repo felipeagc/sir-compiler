@@ -71,6 +71,7 @@ interp_expr(Compiler *compiler, ExprRef expr_ref, InterpValue *out_value)
         }
         default: break;
         }
+        break;
     }
     case ExprKind_Binary: {
         InterpValue left = {};

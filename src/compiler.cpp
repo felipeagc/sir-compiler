@@ -120,7 +120,8 @@ Compiler Compiler::create()
 
     StringBuilder sb = StringBuilder::create(MallocAllocator::get_instance());
 
-    StringMap<bool> defines = StringMap<bool>::create(MallocAllocator::get_instance());
+    StringMap<bool> defines =
+        StringMap<bool>::create(MallocAllocator::get_instance());
     defines.set("linux", true);
 
     Array<File> files = Array<File>::create(MallocAllocator::get_instance());
@@ -539,8 +540,10 @@ void Compiler::compile(String path)
         print_time_taken("Analysis", phase_clock.elapsed());
 
         phase_clock.start();
-        codegen_file(this, file_ref);
+        CodegenContext *codegen_ctx = CodegenContextCreate();
+        codegen_file(this, codegen_ctx, file_ref);
         print_time_taken("Codegen", phase_clock.elapsed());
+        CodegenContextDestroy(codegen_ctx);
 
         {
             File *file = &this->files[file_ref.id];

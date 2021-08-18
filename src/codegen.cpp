@@ -10,7 +10,6 @@ struct CodegenValue {
 };
 
 struct CodegenContext {
-    FileRef file_ref;
     SIRModule *module;
     SIRBuilder *builder;
     Array<SIRType *> type_values;
@@ -275,12 +274,19 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
 
         Decl decl = expr.ident.decl_ref.get(compiler);
         switch (decl.kind) {
-        case DeclKind_Function:
+        case DeclKind_Function: {
+            value = ctx->decl_values[expr.ident.decl_ref.id];
+            if (value.inst_ref.id == 0) {
+                codegen_decl(compiler, ctx, expr.ident.decl_ref);
+                value = ctx->decl_values[expr.ident.decl_ref.id];
+                LANG_ASSERT(value.inst_ref.id);
+            }
+            break;
+        }
         case DeclKind_FunctionParameter: {
             value = ctx->decl_values[expr.ident.decl_ref.id];
             break;
         }
-
         case DeclKind_GlobalVarDecl: {
             value = ctx->decl_values[expr.ident.decl_ref.id];
             break;
@@ -290,7 +296,6 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
             value = ctx->decl_values[expr.ident.decl_ref.id];
             break;
         }
-
         default: LANG_ASSERT(0); break;
         }
 
@@ -1104,7 +1109,8 @@ codegen_decl(Compiler *compiler, CodegenContext *ctx, DeclRef decl_ref)
         if (!(decl.func->flags & FunctionFlags_Extern)) {
             SIRBuilderSetFunction(ctx->builder, value.inst_ref);
 
-            auto block = SIRModuleInsertBlockAtEnd(module, value.inst_ref);
+            SIRInstRef block =
+                SIRModuleInsertBlockAtEnd(module, value.inst_ref);
             SIRBuilderPositionAtEnd(ctx->builder, block);
 
             for (StmtRef stmt_ref : decl.func->body_stmts) {
@@ -1197,44 +1203,113 @@ codegen_decl(Compiler *compiler, CodegenContext *ctx, DeclRef decl_ref)
     }
 }
 
-void codegen_file(Compiler *compiler, FileRef file_ref)
+CodegenContext *CodegenContextCreate()
 {
     ZoneScoped;
 
-    CodegenContext ctx = {};
+    Allocator *allocator = MallocAllocator::get_instance();
+
+    CodegenContext *ctx = allocator->alloc<CodegenContext>();
+
+    ctx->module =
+        SIRModuleCreate(SIRTargetArch_X86_64, SIREndianness_LittleEndian);
+    ctx->builder = SIRBuilderCreate(ctx->module);
+
+    ctx->type_values = Array<SIRType *>::create(allocator);
+    ctx->decl_values = Array<CodegenValue>::create(allocator);
+    ctx->expr_values = Array<CodegenValue>::create(allocator);
+    ctx->function_stack = Array<SIRInstRef>::create(allocator);
+
+    return ctx;
+}
+
+void CodegenContextDestroy(CodegenContext *ctx)
+{
+    ZoneScoped;
+
+    Allocator *allocator = MallocAllocator::get_instance();
+
+    ctx->type_values.destroy();
+    ctx->decl_values.destroy();
+    ctx->expr_values.destroy();
+    ctx->function_stack.destroy();
+
+    SIRModuleDestroy(ctx->module);
+    allocator->free(ctx);
+}
+
+SIRInstRef codegen_isolated_expr_into_func(
+    Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
+{
+    ctx->type_values.resize(compiler->types.len);
+    for (size_t i = 0; i < compiler->types.len; ++i) {
+        ctx->type_values[i] =
+            get_ir_type(compiler, ctx->module, compiler->types[i]);
+    }
+
+    ctx->decl_values.resize(compiler->decls.len);
+    for (size_t i = 0; i < compiler->decls.len; ++i) {
+        ctx->decl_values[i] = {};
+    }
+
+    ctx->expr_values.resize(compiler->exprs.len);
+    for (size_t i = 0; i < compiler->exprs.len; ++i) {
+        ctx->expr_values[i] = {};
+    }
+
+    String func_name = "sir.wrapper";
+    SIRInstRef wrapper_func = SIRModuleAddFunction(
+        ctx->module,
+        func_name.ptr,
+        func_name.len,
+        SIRCallingConvention_SystemV,
+        SIRLinkage_Internal,
+        false,
+        NULL,
+        0,
+        ctx->type_values[compiler->expr_types[expr_ref]]);
+
+    ctx->function_stack.push_back(wrapper_func);
+
+    SIRBuilderSetFunction(ctx->builder, wrapper_func);
+
+    SIRInstRef block = SIRModuleInsertBlockAtEnd(ctx->module, wrapper_func);
+    SIRBuilderPositionAtEnd(ctx->builder, block);
+
+    SIRInstRef returned_value =
+        load_lvalue(ctx, codegen_expr(compiler, ctx, expr_ref));
+
+    SIRBuilderInsertReturnValue(ctx->builder, returned_value);
+
+    ctx->function_stack.pop();
+
+    return wrapper_func;
+}
+
+void codegen_file(Compiler *compiler, CodegenContext *ctx, FileRef file_ref)
+{
+    ZoneScoped;
 
     File file = compiler->files[file_ref.id];
 
-    ctx.file_ref = file_ref;
-    ctx.module =
-        SIRModuleCreate(SIRTargetArch_X86_64, SIREndianness_LittleEndian);
-    ctx.builder = SIRBuilderCreate(ctx.module);
-
-    ctx.type_values = Array<SIRType *>::create(MallocAllocator::get_instance());
-    ctx.type_values.resize(compiler->types.len);
+    ctx->type_values.resize(compiler->types.len);
     for (size_t i = 0; i < compiler->types.len; ++i) {
-        ctx.type_values[i] =
-            get_ir_type(compiler, ctx.module, compiler->types[i]);
+        ctx->type_values[i] =
+            get_ir_type(compiler, ctx->module, compiler->types[i]);
     }
 
-    ctx.decl_values =
-        Array<CodegenValue>::create(MallocAllocator::get_instance());
-    ctx.decl_values.resize(compiler->decls.len);
+    ctx->decl_values.resize(compiler->decls.len);
     for (size_t i = 0; i < compiler->decls.len; ++i) {
-        ctx.decl_values[i] = {};
+        ctx->decl_values[i] = {};
     }
 
-    ctx.expr_values =
-        Array<CodegenValue>::create(MallocAllocator::get_instance());
-    ctx.expr_values.resize(compiler->exprs.len);
+    ctx->expr_values.resize(compiler->exprs.len);
     for (size_t i = 0; i < compiler->exprs.len; ++i) {
-        ctx.expr_values[i] = {};
+        ctx->expr_values[i] = {};
     }
-
-    ctx.function_stack = Array<SIRInstRef>::create(compiler->arena);
 
     for (DeclRef decl_ref : file.top_level_decls) {
-        codegen_decl(compiler, &ctx, decl_ref);
+        codegen_decl(compiler, ctx, decl_ref);
     }
 
     if (compiler->errors.len > 0) {
@@ -1244,14 +1319,14 @@ void codegen_file(Compiler *compiler, FileRef file_ref)
 #if !NDEBUG
     {
         size_t str_len = 0;
-        char *str = SIRModulePrintToString(ctx.module, &str_len);
+        char *str = SIRModulePrintToString(ctx->module, &str_len);
         printf("%.*s", (int)str_len, str);
         free(str);
     }
 #endif
 
-    SIRObjectBuilder *obj_builder = SIRCreateELF64Builder(ctx.module);
-    SIRAsmBuilder *asm_builder = SIRCreateX64Builder(ctx.module, obj_builder);
+    SIRObjectBuilder *obj_builder = SIRCreateELF64Builder(ctx->module);
+    SIRAsmBuilder *asm_builder = SIRCreateX64Builder(ctx->module, obj_builder);
 
     SIRAsmBuilderGenerate(asm_builder);
 
@@ -1260,10 +1335,4 @@ void codegen_file(Compiler *compiler, FileRef file_ref)
 
     SIRAsmBuilderDestroy(asm_builder);
     SIRObjectBuilderDestroy(obj_builder);
-
-    ctx.type_values.destroy();
-    ctx.decl_values.destroy();
-    ctx.expr_values.destroy();
-
-    SIRModuleDestroy(ctx.module);
 }

@@ -9,9 +9,9 @@ struct SIRInterpContext {
     SIRArray<SIRInstRef> func_stack;
     SIRArray<SIRInstRef> block_stack;
     SIRArray<char *> value_addrs;
-    char *memory;
-    size_t memory_size;
-    size_t memory_used;
+    char *stack_memory;
+    size_t stack_memory_size;
+    size_t stack_memory_used;
 };
 
 SIRInterpContext *SIRInterpContextCreate(SIRModule *mod)
@@ -19,9 +19,10 @@ SIRInterpContext *SIRInterpContextCreate(SIRModule *mod)
     SIRInterpContext *ctx =
         SIRAllocInit(&SIR_MALLOC_ALLOCATOR, SIRInterpContext);
     ctx->mod = mod;
-    ctx->memory_used = 0;
-    ctx->memory_size = 1 << 24;
-    ctx->memory = SIRAllocSlice(&SIR_MALLOC_ALLOCATOR, char, ctx->memory_size);
+    ctx->stack_memory_used = 0;
+    ctx->stack_memory_size = 1 << 23;
+    ctx->stack_memory =
+        SIRAllocSlice(&SIR_MALLOC_ALLOCATOR, char, ctx->stack_memory_size);
     ctx->value_addrs = SIRArray<char *>::create(&SIR_MALLOC_ALLOCATOR);
     ctx->func_stack = SIRArray<SIRInstRef>::create(&SIR_MALLOC_ALLOCATOR);
     ctx->block_stack = SIRArray<SIRInstRef>::create(&SIR_MALLOC_ALLOCATOR);
@@ -33,16 +34,22 @@ void SIRInterpContextDestroy(SIRInterpContext *ctx)
     ctx->value_addrs.destroy();
     ctx->func_stack.destroy();
     ctx->block_stack.destroy();
-    SIRFree(&SIR_MALLOC_ALLOCATOR, ctx->memory);
+    SIRFree(&SIR_MALLOC_ALLOCATOR, ctx->stack_memory);
     SIRFree(&SIR_MALLOC_ALLOCATOR, ctx);
 }
 
-char *SIRInterpAllocVal(SIRInterpContext *ctx, size_t size, size_t alignment)
+char *
+SIRInterpAllocStackVal(SIRInterpContext *ctx, size_t size, size_t alignment)
 {
-    // TODO: check for out-of-memory
-    ctx->memory_used = SIR_ROUND_UP(alignment, ctx->memory_used);
-    char *addr = ctx->memory + ctx->memory_used;
-    ctx->memory_used += size;
+    ctx->stack_memory_used = SIR_ROUND_UP(alignment, ctx->stack_memory_used);
+    if (ctx->stack_memory_used + size > ctx->stack_memory_size) {
+        // TODO: gracefully handle stack overflow
+        SIR_ASSERT(!"stack overflow in interpreted code");
+        return NULL;
+    }
+
+    char *addr = ctx->stack_memory + ctx->stack_memory_used;
+    ctx->stack_memory_used += size;
     return addr;
 }
 
@@ -72,21 +79,22 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
     }
     case SIRInstKind_StackSlot: {
         SIRType *type = inst.type;
-        char *addr = SIRInterpAllocVal(
+        char *addr = SIRInterpAllocStackVal(
             ctx, SIRTypeSizeOf(ctx->mod, type), SIRTypeAlignOf(ctx->mod, type));
 
-        value_addr = SIRInterpAllocVal(ctx, sizeof(char *), alignof(char *));
+        value_addr =
+            SIRInterpAllocStackVal(ctx, sizeof(char *), alignof(char *));
         *(char **)value_addr = addr;
         break;
     }
     case SIRInstKind_ImmediateBool: {
-        value_addr = SIRInterpAllocVal(ctx, sizeof(bool), alignof(bool));
+        value_addr = SIRInterpAllocStackVal(ctx, sizeof(bool), alignof(bool));
         *(bool *)value_addr = inst.imm_bool.value;
         break;
     }
     case SIRInstKind_ImmediateInt: {
         SIRType *type = inst.type;
-        value_addr = SIRInterpAllocVal(
+        value_addr = SIRInterpAllocStackVal(
             ctx, SIRTypeSizeOf(ctx->mod, type), SIRTypeAlignOf(ctx->mod, type));
         if (type->int_.is_signed) {
             switch (type->int_.bits) {
@@ -109,7 +117,7 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
     }
     case SIRInstKind_ImmediateFloat: {
         SIRType *type = inst.type;
-        value_addr = SIRInterpAllocVal(
+        value_addr = SIRInterpAllocStackVal(
             ctx, SIRTypeSizeOf(ctx->mod, type), SIRTypeAlignOf(ctx->mod, type));
         switch (type->float_.bits) {
         case 32: *((float *)value_addr) = inst.imm_float.f64; break;
@@ -131,7 +139,7 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
         SIRType *type = inst.type;
         size_t size = SIRTypeSizeOf(ctx->mod, type);
         value_addr =
-            SIRInterpAllocVal(ctx, size, SIRTypeAlignOf(ctx->mod, type));
+            SIRInterpAllocStackVal(ctx, size, SIRTypeAlignOf(ctx->mod, type));
 
         SIRInstRef loaded_inst = inst.load.ptr_ref;
         SIR_ASSERT(ctx->value_addrs[loaded_inst.id]);
@@ -270,7 +278,7 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
 
         char *source_addr = ctx->value_addrs[inst.zext.inst_ref.id];
 
-        value_addr = SIRInterpAllocVal(
+        value_addr = SIRInterpAllocStackVal(
             ctx, dest_size, SIRTypeAlignOf(ctx->mod, dest_type));
 
         uint64_t value = 0;
@@ -302,7 +310,7 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
 
         char *source_addr = ctx->value_addrs[inst.sext.inst_ref.id];
 
-        value_addr = SIRInterpAllocVal(
+        value_addr = SIRInterpAllocStackVal(
             ctx, dest_size, SIRTypeAlignOf(ctx->mod, dest_type));
 
         int64_t value = 0;
@@ -334,7 +342,7 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
 
         char *source_addr = ctx->value_addrs[inst.trunc.inst_ref.id];
 
-        value_addr = SIRInterpAllocVal(
+        value_addr = SIRInterpAllocStackVal(
             ctx, dest_size, SIRTypeAlignOf(ctx->mod, dest_type));
 
         uint64_t value = 0;
@@ -384,7 +392,7 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
             array_addr + index * SIRTypeSizeOf(ctx->mod, array_type->array.sub);
 
         value_addr =
-            SIRInterpAllocVal(ctx, sizeof(uint64_t), alignof(uint64_t));
+            SIRInterpAllocStackVal(ctx, sizeof(uint64_t), alignof(uint64_t));
         *(char **)value_addr = elem_addr;
         break;
     }
@@ -405,7 +413,7 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
         char *field_addr = struct_addr + field_offset;
 
         value_addr =
-            SIRInterpAllocVal(ctx, sizeof(uint64_t), alignof(uint64_t));
+            SIRInterpAllocStackVal(ctx, sizeof(uint64_t), alignof(uint64_t));
         *(char **)value_addr = field_addr;
         break;
     }
@@ -423,7 +431,7 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
 
         char *elem_addr = array_addr + index * elem_size;
 
-        value_addr = SIRInterpAllocVal(
+        value_addr = SIRInterpAllocStackVal(
             ctx, elem_size, SIRTypeAlignOf(ctx->mod, array_type->array.sub));
         memcpy(value_addr, elem_addr, elem_size);
         break;
@@ -448,7 +456,7 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
             ctx->value_addrs[inst.extract_struct_elem.accessed_ref.id];
 
         char *field_addr = struct_addr + field_offset;
-        value_addr = SIRInterpAllocVal(ctx, field_size, field_align);
+        value_addr = SIRInterpAllocStackVal(ctx, field_size, field_align);
         memcpy(value_addr, field_addr, field_size);
 
         break;
@@ -456,8 +464,8 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
     case SIRInstKind_Binop: {
         SIRType *type = inst.type;
         size_t value_size = SIRTypeSizeOf(ctx->mod, type);
-        value_addr =
-            SIRInterpAllocVal(ctx, value_size, SIRTypeAlignOf(ctx->mod, type));
+        value_addr = SIRInterpAllocStackVal(
+            ctx, value_size, SIRTypeAlignOf(ctx->mod, type));
 
         char *left_addr = ctx->value_addrs[inst.binop.left_ref.id];
         char *right_addr = ctx->value_addrs[inst.binop.right_ref.id];
@@ -618,7 +626,7 @@ void SIRInterpFunction(SIRInterpContext *ctx, SIRInstRef func_ref, void *result)
 {
     SIRModule *mod = ctx->mod;
 
-    ctx->memory_used = 1; // Must be 1 so 0 is the null pointer
+    ctx->stack_memory_used = 0;
     ctx->value_addrs.resize(ctx->mod->insts.len);
     ctx->func_stack.resize(0);
     ctx->block_stack.resize(0);

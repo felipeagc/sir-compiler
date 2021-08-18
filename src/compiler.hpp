@@ -1,9 +1,11 @@
 #pragma once
 
 #include "base.hpp"
+#include <sir.h>
 
 struct Compiler;
 struct File;
+struct CodegenContext;
 
 struct Expr;
 struct Stmt;
@@ -699,9 +701,15 @@ struct Compiler {
 };
 
 void init_parser_tables();
+
+CodegenContext *CodegenContextCreate();
+void CodegenContextDestroy(CodegenContext *ctx);
+
 void parse_file(Compiler *compiler, FileRef file_ref);
 void analyze_file(Compiler *compiler, FileRef file_ref);
-void codegen_file(Compiler *compiler, FileRef file_ref);
+void codegen_file(Compiler *compiler, CodegenContext *ctx, FileRef file_ref);
+SIRInstRef codegen_isolated_expr_into_func(
+    Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref);
 
 inline Decl DeclRef::get(Compiler *compiler) const
 {

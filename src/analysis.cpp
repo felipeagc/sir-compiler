@@ -7,6 +7,17 @@ struct AnalyzerState {
     Array<DeclRef> func_stack;
 };
 
+static const char *get_sir_interp_err_string(SIRInterpResult res)
+{
+    switch (res) {
+    case SIRInterpResult_Success: return "<no error>";
+    case SIRInterpResult_StackOverflow: return "stack overflow";
+    case SIRInterpResult_CannotBeInterpreted: return "cannot be interpreted";
+    }
+
+    return "<unknown reason>";
+}
+
 static void
 analyze_stmt(Compiler *compiler, AnalyzerState *state, StmtRef stmt_ref);
 static void
@@ -170,7 +181,8 @@ static void analyze_expr(
                 err_code != SIRInterpResult_Success) {
                 compiler->add_error(
                     compiler->expr_locs[expr.array_type.size_expr_ref],
-                    "could not evaluate compile time expression");
+                    "could not evaluate compile time expression: \"%s\"",
+                    get_sir_interp_err_string(err_code));
                 break;
             }
 
@@ -1110,6 +1122,10 @@ analyze_stmt(Compiler *compiler, AnalyzerState *state, StmtRef stmt_ref)
         TypeRef bool_type = compiler->bool_type;
         analyze_expr(compiler, state, stmt.when.cond_expr_ref, bool_type);
 
+        if (compiler->expr_types[stmt.when.cond_expr_ref].id == 0) {
+            break;
+        }
+
         SIRInterpResult err_code = {};
         size_t interp_value_size = 0;
         bool *interp_value = (bool *)codegen_interp_expr(
@@ -1123,7 +1139,8 @@ analyze_stmt(Compiler *compiler, AnalyzerState *state, StmtRef stmt_ref)
             err_code != SIRInterpResult_Success) {
             compiler->add_error(
                 compiler->expr_locs[stmt.when.cond_expr_ref],
-                "could not evaluate compile time expression");
+                "could not evaluate compile time expression: \"%s\"",
+                get_sir_interp_err_string(err_code));
             break;
         }
 

@@ -42,6 +42,10 @@ fn test_large_params(s: StructParam) {
 	printf("s.a = %d, s.b = %d, s.c = %d\n", s.a, s.b, s.c);
 }
 
+fn sum(a: i32, b: i32): i32 {
+	return a + b;
+}
+
 fn export main() {
 	printf("Hello, world!\n");
 	printf("%d\n", i32(123));
@@ -219,5 +223,9 @@ fn export main() {
 		s.c = 333;
 
 		test_large_params(s);
+	}
+
+	when (sum(2, 1) < 0) {
+		printf("Do not print\n");
 	}
 }

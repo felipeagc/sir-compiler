@@ -85,6 +85,7 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
         break;
     }
     case SIRInstKind_Global: {
+        // Globals cannot be used in interpreter
         SIRInterpContextAbort(ctx, SIRInterpResult_CannotBeInterpreted);
         break;
     }
@@ -235,10 +236,12 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
 
         if (called_func.func->blocks.len == 0) {
             SIRInterpContextAbort(ctx, SIRInterpResult_CannotBeInterpreted);
+            break;
         }
 
         if (called_func.func->variadic) {
             SIRInterpContextAbort(ctx, SIRInterpResult_CannotBeInterpreted);
+            break;
         }
 
         SIR_ASSERT(
@@ -551,50 +554,17 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
         case SIRBinaryOperation_Unknown:
         case SIRBinaryOperation_MAX: SIR_ASSERT(0); break;
 
-        case SIRBinaryOperation_IAdd: {
-            SIR_INTERP_UINT_BINOP(+);
-            break;
-        }
-        case SIRBinaryOperation_ISub: {
-            SIR_INTERP_UINT_BINOP(-);
-            break;
-        }
-        case SIRBinaryOperation_IMul: {
-            SIR_INTERP_UINT_BINOP(*);
-            break;
-        }
-        case SIRBinaryOperation_UDiv: {
-            SIR_INTERP_UINT_BINOP(/);
-            break;
-        }
-        case SIRBinaryOperation_SDiv: {
-            SIR_INTERP_INT_BINOP(/);
-            break;
-        }
-        case SIRBinaryOperation_URem: {
-            SIR_INTERP_UINT_BINOP(%);
-            break;
-        }
-        case SIRBinaryOperation_SRem: {
-            SIR_INTERP_INT_BINOP(%);
-            break;
-        }
-        case SIRBinaryOperation_FAdd: {
-            SIR_INTERP_FLOAT_BINOP(+);
-            break;
-        }
-        case SIRBinaryOperation_FSub: {
-            SIR_INTERP_FLOAT_BINOP(-);
-            break;
-        }
-        case SIRBinaryOperation_FMul: {
-            SIR_INTERP_FLOAT_BINOP(*);
-            break;
-        }
-        case SIRBinaryOperation_FDiv: {
-            SIR_INTERP_FLOAT_BINOP(/);
-            break;
-        }
+        case SIRBinaryOperation_IAdd: SIR_INTERP_UINT_BINOP(+); break;
+        case SIRBinaryOperation_ISub: SIR_INTERP_UINT_BINOP(-); break;
+        case SIRBinaryOperation_IMul: SIR_INTERP_UINT_BINOP(*); break;
+        case SIRBinaryOperation_UDiv: SIR_INTERP_UINT_BINOP(/); break;
+        case SIRBinaryOperation_SDiv: SIR_INTERP_INT_BINOP(/); break;
+        case SIRBinaryOperation_URem: SIR_INTERP_UINT_BINOP(%); break;
+        case SIRBinaryOperation_SRem: SIR_INTERP_INT_BINOP(%); break;
+        case SIRBinaryOperation_FAdd: SIR_INTERP_FLOAT_BINOP(+); break;
+        case SIRBinaryOperation_FSub: SIR_INTERP_FLOAT_BINOP(-); break;
+        case SIRBinaryOperation_FMul: SIR_INTERP_FLOAT_BINOP(*); break;
+        case SIRBinaryOperation_FDiv: SIR_INTERP_FLOAT_BINOP(/); break;
         case SIRBinaryOperation_FRem: {
             switch (value_size) {
             case 4:

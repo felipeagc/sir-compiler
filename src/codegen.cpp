@@ -1071,6 +1071,9 @@ codegen_decl(Compiler *compiler, CodegenContext *ctx, DeclRef decl_ref)
     }
 
     case DeclKind_Function: {
+        SIRInstRef prev_curr_func = SIRBuilderGetCurrentFunction(ctx->builder);
+        SIRInstRef prev_curr_block = SIRBuilderGetCurrentBlock(ctx->builder);
+
         String decl_name = compiler->decl_names[decl_ref];
         TypeRef func_type_ref = compiler->decl_types[decl_ref];
         Type func_type = func_type_ref.get(compiler);
@@ -1155,6 +1158,9 @@ codegen_decl(Compiler *compiler, CodegenContext *ctx, DeclRef decl_ref)
         }
 
         ctx->function_stack.pop();
+
+        SIRBuilderSetFunction(ctx->builder, prev_curr_func);
+        SIRBuilderPositionAtEnd(ctx->builder, prev_curr_block);
 
         break;
     }
@@ -1251,6 +1257,8 @@ void CodegenContextDestroy(CodegenContext *ctx)
 SIRInstRef codegen_isolated_expr_into_func(
     Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
 {
+    ZoneScoped;
+
     size_t prev_types_len = ctx->type_values.len;
     ctx->type_values.resize(compiler->types.len);
     for (size_t i = prev_types_len; i < compiler->types.len; ++i) {
@@ -1258,13 +1266,13 @@ SIRInstRef codegen_isolated_expr_into_func(
             get_ir_type(compiler, ctx->module, compiler->types[i]);
     }
 
-    size_t prev_decls_len = compiler->decls.len;
+    size_t prev_decls_len = ctx->decl_values.len;
     ctx->decl_values.resize(compiler->decls.len);
     for (size_t i = prev_decls_len; i < compiler->decls.len; ++i) {
         ctx->decl_values[i] = {};
     }
 
-    size_t prev_exprs_len = compiler->exprs.len;
+    size_t prev_exprs_len = ctx->expr_values.len;
     ctx->expr_values.resize(compiler->exprs.len);
     for (size_t i = prev_exprs_len; i < compiler->exprs.len; ++i) {
         ctx->expr_values[i] = {};
@@ -1306,6 +1314,8 @@ void *codegen_interp_expr(
     SIRInterpResult *err_code,
     size_t *out_size)
 {
+    ZoneScoped;
+
     SIRInstRef func_ref =
         codegen_isolated_expr_into_func(compiler, ctx, expr_ref);
     TypeRef expr_type_ref = compiler->expr_types[expr_ref];

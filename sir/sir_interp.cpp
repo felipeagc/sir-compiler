@@ -19,6 +19,8 @@ struct SIRInterpContext {
 
 SIRInterpContext *SIRInterpContextCreate(SIRModule *mod)
 {
+    ZoneScoped;
+
     SIRInterpContext *ctx =
         SIRAllocInit(&SIR_MALLOC_ALLOCATOR, SIRInterpContext);
     ctx->mod = mod;
@@ -35,6 +37,8 @@ SIRInterpContext *SIRInterpContextCreate(SIRModule *mod)
 
 void SIRInterpContextDestroy(SIRInterpContext *ctx)
 {
+    ZoneScoped;
+
     ctx->stack_usage_stack.destroy();
     ctx->value_addrs.destroy();
     ctx->func_stack.destroy();
@@ -53,6 +57,8 @@ SIRInterpContextAbort(SIRInterpContext *ctx, SIRInterpResult err_code)
 static char *
 SIRInterpAllocStackVal(SIRInterpContext *ctx, size_t size, size_t alignment)
 {
+    ZoneScoped;
+
     ctx->stack_memory_used = SIR_ROUND_UP(alignment, ctx->stack_memory_used);
     if (ctx->stack_memory_used + size > ctx->stack_memory_size) {
         SIRInterpContextAbort(ctx, SIRInterpResult_StackOverflow);
@@ -66,6 +72,8 @@ SIRInterpAllocStackVal(SIRInterpContext *ctx, size_t size, size_t alignment)
 
 bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
 {
+    ZoneScoped;
+
     SIRModule *mod = ctx->mod;
 
     SIRInst inst = SIRModuleGetInst(mod, inst_ref);
@@ -624,6 +632,8 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
 SIRInterpResult
 SIRInterpFunction(SIRInterpContext *ctx, SIRInstRef func_ref, void *result)
 {
+    ZoneScoped;
+
     SIRModule *mod = ctx->mod;
 
     ctx->stack_memory_used = 0;

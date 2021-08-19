@@ -14,6 +14,7 @@ struct CodegenContext {
     SIRModule *module;
     SIRBuilder *builder;
     SIRInterpContext *interp_ctx;
+    uint64_t interp_wrapper_func_count;
     Array<SIRType *> type_values;
     Array<CodegenValue> expr_values;
     Array<CodegenValue> decl_values;
@@ -1278,11 +1279,12 @@ SIRInstRef codegen_isolated_expr_into_func(
         ctx->expr_values[i] = {};
     }
 
-    String func_name = "sir.wrapper";
+    /* String func_name = compiler->arena->sprintf( */
+    /*     "sir.wrapper%zu", ctx->interp_wrapper_func_count++); */
     SIRInstRef wrapper_func = SIRModuleAddFunction(
         ctx->module,
-        func_name.ptr,
-        func_name.len,
+        NULL,
+        0,
         SIRCallingConvention_SystemV,
         SIRLinkage_Internal,
         false,

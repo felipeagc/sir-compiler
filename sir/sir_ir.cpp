@@ -697,16 +697,18 @@ SIRInstRef SIRModuleAddFunction(
 {
     ZoneScoped;
 
-    SIRString func_name;
-    func_name.ptr =
-        (const char *)SIRAllocSliceClone(module->arena, name, name_len);
-    func_name.len = name_len;
+    SIRString func_name = {};
+    if (name_len > 0) {
+        func_name.ptr =
+            (const char *)SIRAllocSliceClone(module->arena, name, name_len);
+        func_name.len = name_len;
 
-    uint32_t func_index = 0;
-    while (SIRStringMapGet(&module->function_map, func_name, NULL)) {
-        func_index++;
-        func_name = SIRAllocSprintf(
-            module->arena, "%.*s.%u", (int)name_len, name, func_index);
+        uint32_t func_index = 0;
+        while (SIRStringMapGet(&module->function_map, func_name, NULL)) {
+            func_index++;
+            func_name = SIRAllocSprintf(
+                module->arena, "%.*s.%u", (int)name_len, name, func_index);
+        }
     }
 
     SIRFunction *function = SIRAlloc(module->arena, SIRFunction);
@@ -744,8 +746,11 @@ SIRInstRef SIRModuleAddFunction(
     SIRInstRef func_ref = module_add_inst(module, func_inst);
 
     module->functions.push_back(func_ref);
-    SIRStringMapSet(
-        &module->function_map, function->name, (uintptr_t)func_ref.id);
+
+    if (function->name.len > 0) {
+        SIRStringMapSet(
+            &module->function_map, function->name, (uintptr_t)func_ref.id);
+    }
 
     return func_ref;
 }
@@ -1485,14 +1490,14 @@ uint32_t SIRTypeAlignOf(SIRModule *module, SIRType *type)
     return type->alignment;
 }
 
-uint32_t SIRTypeStructOffsetOf(SIRModule *module, SIRType *struct_type, uint32_t field_index)
+uint32_t SIRTypeStructOffsetOf(
+    SIRModule *module, SIRType *struct_type, uint32_t field_index)
 {
     uint32_t field_offset = 0;
     for (uint32_t i = 0; i <= field_index; ++i) {
         SIRType *field_type = struct_type->struct_.fields[i];
         uint32_t field_align = SIRTypeAlignOf(module, field_type);
-        field_offset =
-            SIR_ROUND_UP(field_align, field_offset); // Add padding
+        field_offset = SIR_ROUND_UP(field_align, field_offset); // Add padding
 
         if (i != field_index) {
             field_offset += SIRTypeSizeOf(module, field_type);

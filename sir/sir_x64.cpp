@@ -2482,22 +2482,24 @@ void X64AsmBuilder::generate_function(SIRInstRef func_ref)
     }
     }
 
-    if (func->blocks.len == 0) {
-        // Function without body
-        meta_func->symbol_ref = this->obj_builder->add_symbol(
-            this->obj_builder,
-            func->name,
-            SIRSectionType_None,
-            SIRSymbolType_None,
-            SIRLinkage_External);
-    } else {
-        // Function with body
-        meta_func->symbol_ref = this->obj_builder->add_symbol(
-            this->obj_builder,
-            func->name,
-            SIRSectionType_Text,
-            SIRSymbolType_Function,
-            SIRLinkage_External);
+    if (func->name.len > 0) {
+        if (func->blocks.len == 0) {
+            // Function without body
+            meta_func->symbol_ref = this->obj_builder->add_symbol(
+                this->obj_builder,
+                func->name,
+                SIRSectionType_None,
+                SIRSymbolType_None,
+                SIRLinkage_External);
+        } else {
+            // Function with body
+            meta_func->symbol_ref = this->obj_builder->add_symbol(
+                this->obj_builder,
+                func->name,
+                SIRSectionType_Text,
+                SIRSymbolType_Function,
+                SIRLinkage_External);
+        }
     }
 
     MetaValue *func_meta_inst = &this->meta_insts[func_ref.id];

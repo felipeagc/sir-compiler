@@ -43,8 +43,8 @@ value_into_bool(CodegenContext *ctx, const Type &type, SIRInstRef inst_ref)
             ctx->builder,
             SIRBinaryOperation_INE,
             inst_ref,
-            SIRBuilderInsertImmInt(
-                ctx->builder, SIRModuleGetInstType(ctx->module, inst_ref), 0));
+            SIRModuleAddConstInt(
+                ctx->module, SIRModuleGetInstType(ctx->module, inst_ref), 0));
         break;
     }
     case TypeKind_Bool: {
@@ -194,8 +194,7 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
             SIRBuilderInsertZext(
                 ctx->builder,
                 ctx->type_values[type_ref.id],
-                SIRBuilderInsertImmBool(
-                    ctx->builder, expr.bool_literal.bool_))};
+                SIRModuleAddConstBool(ctx->module, expr.bool_literal.bool_))};
         break;
     }
 
@@ -207,8 +206,8 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
         case TypeKind_Int: {
             value = {
                 false,
-                SIRBuilderInsertImmInt(
-                    ctx->builder,
+                SIRModuleAddConstInt(
+                    ctx->module,
                     ctx->type_values[type_ref.id],
                     expr.int_literal.u64),
             };
@@ -217,8 +216,8 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
         case TypeKind_Float: {
             value = {
                 false,
-                SIRBuilderInsertImmFloat(
-                    ctx->builder,
+                SIRModuleAddConstFloat(
+                    ctx->module,
                     ctx->type_values[type_ref.id],
                     (double)expr.int_literal.u64),
             };
@@ -237,8 +236,8 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
 
         value = {
             false,
-            SIRBuilderInsertImmFloat(
-                ctx->builder,
+            SIRModuleAddConstFloat(
+                ctx->module,
                 ctx->type_values[compiler->expr_types[expr_ref].id],
                 (double)expr.float_literal.f64)};
 
@@ -427,21 +426,21 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
 
             value = {
                 false,
-                SIRBuilderInsertImmInt(
-                    ctx->builder, ctx->type_values[type_ref], size)};
+                SIRModuleAddConstInt(
+                    ctx->module, ctx->type_values[type_ref], size)};
 
             break;
         }
         case BuiltinFunction_Alignof: {
             ExprRef param0_ref = expr.builtin_call.param_refs[0];
-            uint64_t size =
+            uint64_t align =
                 compiler->expr_as_types[param0_ref].get(compiler).align_of(
                     compiler);
 
             value = {
                 false,
-                SIRBuilderInsertImmInt(
-                    ctx->builder, ctx->type_values[type_ref], size)};
+                SIRModuleAddConstInt(
+                    ctx->module, ctx->type_values[type_ref], align)};
 
             break;
         }
@@ -467,8 +466,8 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
                 SIRBuilderInsertZext(
                     ctx->builder,
                     ctx->type_values[type_ref.id],
-                    SIRBuilderInsertImmBool(
-                        ctx->builder, compiler->defines.get(define)))};
+                    SIRModuleAddConstBool(
+                        ctx->module, compiler->defines.get(define)))};
 
             break;
         }
@@ -1055,6 +1054,11 @@ codegen_decl(Compiler *compiler, CodegenContext *ctx, DeclRef decl_ref)
 {
     ZoneScoped;
 
+    if (ctx->decl_values[decl_ref].inst_ref.id > 0) {
+        // Value is already generated
+        return;
+    }
+
     SIRModule *module = ctx->module;
     Decl decl = decl_ref.get(compiler);
     CodegenValue value = {};
@@ -1279,14 +1283,12 @@ SIRInstRef codegen_isolated_expr_into_func(
         ctx->expr_values[i] = {};
     }
 
-    /* String func_name = compiler->arena->sprintf( */
-    /*     "sir.wrapper%zu", ctx->interp_wrapper_func_count++); */
     SIRInstRef wrapper_func = SIRModuleAddFunction(
         ctx->module,
         NULL,
         0,
         SIRCallingConvention_SystemV,
-        SIRLinkage_Internal,
+        SIRLinkage_Interpeter,
         false,
         NULL,
         0,

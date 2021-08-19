@@ -74,13 +74,13 @@ struct SIRInst {
         } func_param;
         struct {
             uint64_t u64;
-        } imm_int;
+        } const_int;
         struct {
             double f64;
-        } imm_float;
+        } const_float;
         struct {
             bool value;
-        } imm_bool;
+        } const_bool;
         struct {
             const uint8_t *data;
             size_t data_len;
@@ -160,6 +160,7 @@ struct SIRModule {
     SIRArenaAllocator *arena;
     SIRArray<SIRInst> insts;
     SIRArray<SIRInstRef> globals;
+    SIRArray<SIRInstRef> consts;
     SIRArray<SIRInstRef> functions;
     SIRStringMap function_map;
     SIRStringMap global_string_map;

@@ -203,6 +203,8 @@ static void elf_output_symbol(Elf64Builder *builder, size_t symbol_index)
     ZoneScoped;
 
     Symbol *symbol = &builder->symbols[symbol_index];
+    if (symbol->linkage == SIRLinkage_Interpeter) return;
+
     uint16_t section_index = 0;
     switch (symbol->section_type) {
     case SIRSectionType_None: section_index = builder->null_index; break;
@@ -218,6 +220,7 @@ static void elf_output_symbol(Elf64Builder *builder, size_t symbol_index)
     switch (symbol->linkage) {
     case SIRLinkage_Internal: binding = Elf64SymbolBinding_Local; break;
     case SIRLinkage_External: binding = Elf64SymbolBinding_Global; break;
+    case SIRLinkage_Interpeter: SIR_ASSERT(0); break;
     }
 
     switch (symbol->type) {

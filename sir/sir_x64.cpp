@@ -256,6 +256,7 @@ struct X64AsmBuilder {
     size_t encode_direct_call(SIRInstRef func_ref);
     void encode_function_ending(SIRInstRef func_ref);
 
+    void generate_const(SIRInstRef inst_ref);
     MetaValue
     generate_global(uint32_t flags, const uint8_t *data, size_t data_len);
     void generate_function(SIRInstRef global_ref);
@@ -833,53 +834,69 @@ void X64AsmBuilder::encode_memcpy(
     }
 }
 
-void X64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
+void X64AsmBuilder::generate_const(SIRInstRef inst_ref)
 {
     ZoneScoped;
-
-    MetaFunction *meta_func = this->meta_insts[func_ref.id].func;
 
     SIRInst inst = SIRModuleGetInst(this->module, inst_ref);
 
     switch (inst.kind) {
-    case SIRInstKind_Unknown: SIR_ASSERT(0); break;
-    case SIRInstKind_Function: SIR_ASSERT(0); break;
-    case SIRInstKind_Block: SIR_ASSERT(0); break;
-    case SIRInstKind_FunctionParameter: SIR_ASSERT(0); break;
-    case SIRInstKind_Global: SIR_ASSERT(0); break;
-    case SIRInstKind_StackSlot: SIR_ASSERT(0); break;
+    case SIRInstKind_Unknown:
+    case SIRInstKind_Alias:
+    case SIRInstKind_Global:
+    case SIRInstKind_StackSlot:
+    case SIRInstKind_Block:
+    case SIRInstKind_Function:
+    case SIRInstKind_FunctionParameter:
+    case SIRInstKind_ReturnVoid:
+    case SIRInstKind_ReturnValue:
+    case SIRInstKind_Load:
+    case SIRInstKind_Store:
+    case SIRInstKind_Jump:
+    case SIRInstKind_Branch:
+    case SIRInstKind_Phi:
+    case SIRInstKind_FuncCall:
+    case SIRInstKind_BitCast:
+    case SIRInstKind_ZExt:
+    case SIRInstKind_SExt:
+    case SIRInstKind_Trunc:
+    case SIRInstKind_ArrayElemPtr:
+    case SIRInstKind_StructElemPtr:
+    case SIRInstKind_ExtractArrayElem:
+    case SIRInstKind_ExtractStructElem:
+    case SIRInstKind_Binop: SIR_ASSERT(0); break;
 
-    case SIRInstKind_Alias: {
+    case SIRInstKind_ConstBool: {
         this->meta_insts[inst_ref.id] =
-            this->meta_insts[inst.alias.inst_ref.id];
+            create_imm_int_value(1, inst.const_bool.value ? 1 : 0);
         break;
     }
 
-    case SIRInstKind_ImmediateInt: {
+    case SIRInstKind_ConstInt: {
         uint8_t data[8];
 
         size_t byte_size = inst.type->int_.bits >> 3;
-        if (byte_size == 8 && inst.imm_int.u64 > UINT32_MAX) {
-            *((uint64_t *)data) = inst.imm_int.u64;
+        if (byte_size == 8 && inst.const_int.u64 > UINT32_MAX) {
+            *((uint64_t *)data) = inst.const_int.u64;
             this->meta_insts[inst_ref.id] = generate_global(
                 SIRGlobalFlags_Initialized | SIRGlobalFlags_ReadOnly,
                 &data[0],
                 byte_size);
         } else {
             this->meta_insts[inst_ref.id] =
-                create_imm_int_value(byte_size, inst.imm_int.u64);
+                create_imm_int_value(byte_size, inst.const_int.u64);
         }
 
         break;
     }
 
-    case SIRInstKind_ImmediateFloat: {
+    case SIRInstKind_ConstFloat: {
         uint8_t data[8];
         size_t byte_size = inst.type->float_.bits >> 3;
 
         switch (byte_size) {
-        case 4: *((float *)data) = (float)inst.imm_float.f64; break;
-        case 8: *((double *)data) = (double)inst.imm_float.f64; break;
+        case 4: *((float *)data) = (float)inst.const_float.f64; break;
+        case 8: *((double *)data) = (double)inst.const_float.f64; break;
         }
 
         this->meta_insts[inst_ref.id] = generate_global(
@@ -889,10 +906,31 @@ void X64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
 
         break;
     }
+    }
+}
 
-    case SIRInstKind_ImmediateBool: {
+void X64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
+{
+    ZoneScoped;
+
+    MetaFunction *meta_func = this->meta_insts[func_ref.id].func;
+
+    SIRInst inst = SIRModuleGetInst(this->module, inst_ref);
+
+    switch (inst.kind) {
+    case SIRInstKind_Unknown:
+    case SIRInstKind_Function:
+    case SIRInstKind_Block:
+    case SIRInstKind_FunctionParameter:
+    case SIRInstKind_Global:
+    case SIRInstKind_StackSlot:
+    case SIRInstKind_ConstBool:
+    case SIRInstKind_ConstInt:
+    case SIRInstKind_ConstFloat: SIR_ASSERT(0); break;
+
+    case SIRInstKind_Alias: {
         this->meta_insts[inst_ref.id] =
-            create_imm_int_value(1, inst.imm_bool.value ? 1 : 0);
+            this->meta_insts[inst.alias.inst_ref.id];
         break;
     }
 
@@ -2616,9 +2654,9 @@ void X64AsmBuilder::generate_function(SIRInstRef func_ref)
 
             // Data already stored somewhere else:
             case SIRInstKind_Alias:
-            case SIRInstKind_ImmediateInt:
-            case SIRInstKind_ImmediateFloat:
-            case SIRInstKind_ImmediateBool:
+            case SIRInstKind_ConstInt:
+            case SIRInstKind_ConstFloat:
+            case SIRInstKind_ConstBool:
             case SIRInstKind_BitCast: break;
 
             // Create stack space for these kinds:
@@ -2925,6 +2963,11 @@ static void generate(SIRAsmBuilder *asm_builder)
 {
     ZoneScoped;
     X64AsmBuilder *builder = (X64AsmBuilder *)asm_builder;
+
+    // Generate constants
+    for (SIRInstRef const_ref : builder->module->consts) {
+        builder->generate_const(const_ref);
+    }
 
     // Generate globals
     for (SIRInstRef global_ref : builder->module->globals) {

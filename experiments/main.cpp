@@ -70,14 +70,14 @@ int main()
         SIRBuilderPositionAtEnd(builder, start_block);
 
         SIRInstRef params[2] = {
-            SIRBuilderInsertImmInt(builder, SIRModuleGetI64Type(mod), 100),
-            SIRBuilderInsertImmInt(builder, SIRModuleGetI64Type(mod), 23),
+            SIRModuleAddConstInt(mod, SIRModuleGetI64Type(mod), 100),
+            SIRModuleAddConstInt(mod, SIRModuleGetI64Type(mod), 23),
         };
         SIRInstRef sum = SIRBuilderInsertFuncCall(builder, sum_func, params, 2);
 
         SIRBuilderInsertStore(builder, ss0, sum);
 
-        SIRInstRef cond_ref = SIRBuilderInsertImmBool(builder, true);
+        SIRInstRef cond_ref = SIRModuleAddConstBool(mod, true);
         SIRBuilderInsertBranch(builder, cond_ref, other_block1, other_block2);
     }
 
@@ -92,7 +92,7 @@ int main()
         SIRBuilderPositionAtEnd(builder, other_block2);
 
         SIRInstRef ret_value =
-            SIRBuilderInsertImmInt(builder, SIRModuleGetI64Type(mod), 321);
+            SIRModuleAddConstInt(mod, SIRModuleGetI64Type(mod), 321);
         SIRBuilderInsertReturnValue(builder, ret_value);
     }
 

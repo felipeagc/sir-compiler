@@ -15,6 +15,7 @@ SIRString SIRLinkageToString(SIRLinkage linkage)
     switch (linkage) {
     case SIRLinkage_Internal: return SIR_STR("internal");
     case SIRLinkage_External: return SIR_STR("external");
+    case SIRLinkage_Interpeter: return SIR_STR("interpreted");
     }
 
     SIR_ASSERT(0);
@@ -90,36 +91,36 @@ print_instruction(SIRModule *module, SIRInstRef inst_ref, SIRStringBuilder *sb)
         break;
     }
 
-    case SIRInstKind_ImmediateInt: {
+    case SIRInstKind_ConstInt: {
         SIRString type_string = SIRTypeToString(module, inst.type);
         sb->sprintf(
-            "%%r%u = imm_int %.*s %lu",
+            "%%r%u = const_int %.*s %lu",
             inst_ref.id,
             (int)type_string.len,
             type_string.ptr,
-            inst.imm_int.u64);
+            inst.const_int.u64);
         break;
     }
 
-    case SIRInstKind_ImmediateFloat: {
+    case SIRInstKind_ConstFloat: {
         SIRString type_string = SIRTypeToString(module, inst.type);
         sb->sprintf(
-            "%%r%u = imm_float %.*s %lf",
+            "%%r%u = const_float %.*s %lf",
             inst_ref.id,
             (int)type_string.len,
             type_string.ptr,
-            inst.imm_float.f64);
+            inst.const_float.f64);
         break;
     }
 
-    case SIRInstKind_ImmediateBool: {
+    case SIRInstKind_ConstBool: {
         SIRString type_string = SIRTypeToString(module, inst.type);
         sb->sprintf(
-            "%%r%u = imm_bool %.*s %s",
+            "%%r%u = const_bool %.*s %s",
             inst_ref.id,
             (int)type_string.len,
             type_string.ptr,
-            inst.imm_bool.value ? "true" : "false");
+            inst.const_bool.value ? "true" : "false");
         break;
     }
 
@@ -409,6 +410,7 @@ SIRModule *SIRModuleCreate(SIRTargetArch target_arch, SIREndianness endianness)
     SIRArenaAllocator *arena = SIRArenaAllocatorCreate(&SIR_MALLOC_ALLOCATOR);
     auto insts = SIRArray<SIRInst>::create(&SIR_MALLOC_ALLOCATOR);
     auto globals = SIRArray<SIRInstRef>::create(&SIR_MALLOC_ALLOCATOR);
+    auto consts = SIRArray<SIRInstRef>::create(&SIR_MALLOC_ALLOCATOR);
     auto functions = SIRArray<SIRInstRef>::create(&SIR_MALLOC_ALLOCATOR);
     SIRStringMap function_map = SIRStringMapCreate(&SIR_MALLOC_ALLOCATOR, 0);
     SIRStringMap global_string_map =
@@ -422,6 +424,7 @@ SIRModule *SIRModuleCreate(SIRTargetArch target_arch, SIREndianness endianness)
         .arena = arena,
         .insts = insts,
         .globals = globals,
+        .consts = consts,
         .functions = functions,
         .function_map = function_map,
         .global_string_map = global_string_map,
@@ -539,7 +542,7 @@ SIRModule *SIRModuleCreate(SIRTargetArch target_arch, SIREndianness endianness)
 void SIRModuleDestroy(SIRModule *module)
 {
     module->insts.destroy();
-    module->globals.destroy();
+    module->consts.destroy();
     module->functions.destroy();
     SIRStringMapDestroy(&module->function_map);
     SIRStringMapDestroy(&module->global_string_map);
@@ -555,6 +558,12 @@ char *SIRModulePrintToString(SIRModule *module, size_t *str_len)
     ZoneScoped;
 
     SIRStringBuilder sb = SIRStringBuilder::create(&SIR_MALLOC_ALLOCATOR);
+
+    for (SIRInstRef const_ref : module->consts) {
+        print_instruction(module, const_ref, &sb);
+    }
+
+    sb.append(SIR_STR("\n"));
 
     for (SIRInstRef global_ref : module->globals) {
         print_instruction(module, global_ref, &sb);
@@ -682,6 +691,60 @@ static SIRInstRef module_add_inst(SIRModule *module, const SIRInst &inst)
     SIRInstRef ref = {(uint32_t)module->insts.len};
     module->insts.push_back(inst);
     return ref;
+}
+
+SIRInstRef
+SIRModuleAddConstInt(SIRModule *module, SIRType *type, uint64_t value)
+{
+    ZoneScoped;
+
+    SIR_ASSERT(type->kind == SIRTypeKind_Int);
+
+    SIRInst const_ = {};
+    const_.kind = SIRInstKind_ConstInt;
+    const_.type = type;
+    const_.const_int.u64 = value;
+
+    SIRInstRef const_ref = module_add_inst(module, const_);
+
+    module->consts.push_back(const_ref);
+
+    return const_ref;
+}
+
+SIRInstRef
+SIRModuleAddConstFloat(SIRModule *module, SIRType *type, double value)
+{
+    ZoneScoped;
+
+    SIR_ASSERT(type->kind == SIRTypeKind_Float);
+
+    SIRInst const_ = {};
+    const_.kind = SIRInstKind_ConstFloat;
+    const_.type = type;
+    const_.const_float.f64 = value;
+
+    SIRInstRef const_ref = module_add_inst(module, const_);
+
+    module->consts.push_back(const_ref);
+
+    return const_ref;
+}
+
+SIRInstRef SIRModuleAddConstBool(SIRModule *module, bool value)
+{
+    ZoneScoped;
+
+    SIRInst const_ = {};
+    const_.kind = SIRInstKind_ConstBool;
+    const_.type = SIRModuleGetBoolType(module);
+    const_.const_bool.value = value;
+
+    SIRInstRef const_ref = module_add_inst(module, const_);
+
+    module->consts.push_back(const_ref);
+
+    return const_ref;
 }
 
 SIRInstRef SIRModuleAddFunction(
@@ -905,44 +968,6 @@ static SIRInstRef builder_insert_inst(SIRBuilder *builder, const SIRInst &inst)
     block->block.inst_refs.push_back(ref);
 
     return ref;
-}
-
-SIRInstRef
-SIRBuilderInsertImmInt(SIRBuilder *builder, SIRType *type, uint64_t value)
-{
-    ZoneScoped;
-
-    SIRInst inst = {};
-    inst.kind = SIRInstKind_ImmediateInt;
-    inst.type = type;
-    inst.imm_int.u64 = value;
-
-    return builder_insert_inst(builder, inst);
-}
-
-SIRInstRef
-SIRBuilderInsertImmFloat(SIRBuilder *builder, SIRType *type, double value)
-{
-    ZoneScoped;
-
-    SIRInst inst = {};
-    inst.kind = SIRInstKind_ImmediateFloat;
-    inst.type = type;
-    inst.imm_float.f64 = value;
-
-    return builder_insert_inst(builder, inst);
-}
-
-SIRInstRef SIRBuilderInsertImmBool(SIRBuilder *builder, bool value)
-{
-    ZoneScoped;
-
-    SIRInst inst = {};
-    inst.kind = SIRInstKind_ImmediateBool;
-    inst.type = builder->module->bool_type;
-    inst.imm_bool.value = value;
-
-    return builder_insert_inst(builder, inst);
 }
 
 SIRInstRef SIRBuilderInsertArrayElemPtr(

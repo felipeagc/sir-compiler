@@ -21,6 +21,7 @@ typedef enum SIRCallingConvention {
 typedef enum SIRLinkage {
     SIRLinkage_Internal,
     SIRLinkage_External,
+    SIRLinkage_Interpeter,
 } SIRLinkage;
 
 typedef enum SIRTargetArch {
@@ -87,13 +88,13 @@ typedef enum SIRBinaryOperation {
 
 typedef enum SIRInstKind {
     SIRInstKind_Unknown = 0,
+    SIRInstKind_ConstInt,
+    SIRInstKind_ConstFloat,
+    SIRInstKind_ConstBool,
     SIRInstKind_Alias,
     SIRInstKind_Global,
     SIRInstKind_StackSlot,
     SIRInstKind_Block,
-    SIRInstKind_ImmediateInt,
-    SIRInstKind_ImmediateFloat,
-    SIRInstKind_ImmediateBool,
     SIRInstKind_Function,
     SIRInstKind_FunctionParameter,
     SIRInstKind_ReturnVoid,
@@ -155,6 +156,12 @@ SIRModuleCreateArrayType(SIRModule *module, SIRType *sub, uint64_t count);
 SIRType *SIRModuleCreateStructType(
     SIRModule *module, SIRType **fields, size_t field_count, bool packed);
 
+SIRInstRef
+SIRModuleAddConstInt(SIRModule *module, SIRType *type, uint64_t value);
+SIRInstRef
+SIRModuleAddConstFloat(SIRModule *module, SIRType *type, double value);
+SIRInstRef SIRModuleAddConstBool(SIRModule *module, bool value);
+
 SIRInstRef SIRModuleAddFunction(
     SIRModule *module,
     const char *name,
@@ -201,12 +208,6 @@ void SIRBuilderSetFunction(SIRBuilder *builder, SIRInstRef func_ref);
 void SIRBuilderPositionAtEnd(SIRBuilder *builder, SIRInstRef block_ref);
 SIRInstRef SIRBuilderGetCurrentFunction(SIRBuilder *builder);
 SIRInstRef SIRBuilderGetCurrentBlock(SIRBuilder *builder);
-
-SIRInstRef
-SIRBuilderInsertImmInt(SIRBuilder *builder, SIRType *type, uint64_t value);
-SIRInstRef
-SIRBuilderInsertImmFloat(SIRBuilder *builder, SIRType *type, double value);
-SIRInstRef SIRBuilderInsertImmBool(SIRBuilder *builder, bool value);
 
 SIRInstRef SIRBuilderInsertArrayElemPtr(
     SIRBuilder *builder, SIRInstRef accessed_ref, SIRInstRef index_ref);

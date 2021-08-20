@@ -2,7 +2,7 @@ fn extern malloc(size: u64): *void;
 fn extern free(ptr: *void);
 fn extern vararg printf(_: *u8);
 
-global my_global: i32;
+global my_global: i32 = undefined;
 
 fn factorial(n: i32): i32 {
 	if (n <= i32(0)) return 0;
@@ -51,7 +51,7 @@ fn export main() {
 	printf("%d\n", i32(123));
 
 	{
-		i := i32(0);
+		var i = i32(0);
 		while (i < 10) {
 			printf("iter %d\n", i);
 			i = i + 1;
@@ -59,7 +59,7 @@ fn export main() {
 	}
 
 	{
-		ptr := @bitcast(*i32, malloc(@sizeof(i32)));
+		val ptr = @bitcast(*i32, malloc(@sizeof(i32)));
 		ptr.* = 1;
 		printf("ptr.* = %d\n", ptr.*);
 		ptr.* = 2;
@@ -68,7 +68,7 @@ fn export main() {
 	}
 
 	{
-		array: [32]i32;
+		var array: [32]i32 = undefined;
 		printf("@sizeof(i32) = %d\n", i32(@sizeof(i32)));
 		printf("@sizeof([32]i32) = %d\n", i32(@sizeof([32]i32)));
 
@@ -80,13 +80,13 @@ fn export main() {
 		printf("array[1] = %d\n", array[1]);
 		printf("array[0] = %d\n", array[0]);
 
-		elem_ptr := &array[0];
+		var elem_ptr = &array[0];
 		elem_ptr.* = 1337;
 		printf("array[0] = %d\n", array[0]);
 	}
 
 	{
-		array_ptr := @bitcast(*[32]i32, malloc(@sizeof([32]i32)));
+		var array_ptr = @bitcast(*[32]i32, malloc(@sizeof([32]i32)));
 
 		array_ptr.*[0] = 1;
 		printf("array_ptr.*[0] = %d\n", array_ptr.*[0]);
@@ -100,13 +100,13 @@ fn export main() {
 	}
 
 	{
-		a := i32(1);
-		b := i32(2);
+		var a = i32(1);
+		var b = i32(2);
 		printf("1 + 2 = %d\n", a + b);
 		a = 2;
 		b = 5;
 		printf("2 + 5 = %d\n", a + b);
-		c := &a;
+		var c = &a;
 		c.* = 100;
 		printf("100 + 5 = %d\n", a + b);
 		c.* = b;
@@ -116,7 +116,7 @@ fn export main() {
 	{
 		my_global = 123;
 		printf("my_global = %d\n", my_global);
-		addr := &my_global;
+		var addr = &my_global;
 		addr.* = 321;
 		printf("my_global = %d\n", my_global);
 		if (addr.* > i32(10)) {
@@ -143,15 +143,15 @@ fn export main() {
 	}
 
 	{
-		s: struct {
+		var s: struct {
 			a: i32,
 			b: i64,
-		};
+		} = undefined;
 		s.a = 123;
 		printf("s.a = %d\n", s.a);
 		s.b = 321;
 		printf("s.b = %ld\n", s.b);
-		ptr := &s.a;
+		var ptr = &s.a;
 		ptr.* = i32(s.b);
 		s.b = 123;
 		printf("s.a = %d\n", s.a);
@@ -166,7 +166,7 @@ fn export main() {
 
 		printf("@sizeof(LocalType) = %d\n", i32(@sizeof(LocalType)));
 
-		global local_global: LocalType;
+		global local_global: LocalType = undefined;
 		local_global.a[0] = 321;
 		local_global.a[1] = 123;
 		printf("local_global.a[0] = %d\n", local_global.a[0]);
@@ -187,12 +187,12 @@ fn export main() {
 			c: i32,
 		};
 
-		a: S;
+		var a: S = undefined;
 		a.a = 1;
 		a.b = 2;
 		a.c = 3;
 
-		b: S;
+		var b: S = undefined;
 		b.a = 4;
 		b.b = 5;
 		b.c = 6;
@@ -202,7 +202,7 @@ fn export main() {
 		a = b;
 		printf("a.a = 4, a.b = 5, a.c = 6\n", a.a, a.b, a.c);
 
-		global g: S;
+		global g: S = undefined;
 		g.a = 7;
 		g.b = 8;
 		g.c = 9;
@@ -217,7 +217,7 @@ fn export main() {
 	}
 
 	{
-		s: StructParam;
+		var s: StructParam = undefined;
 		s.a = 111;
 		s.b = 222;
 		s.c = 333;

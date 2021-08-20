@@ -182,8 +182,11 @@ Compiler Compiler::create()
     keyword_map.set("type", TokenKind_Type);
     keyword_map.set("struct", TokenKind_Struct);
     keyword_map.set("global", TokenKind_Global);
+    keyword_map.set("var", TokenKind_Var);
+    keyword_map.set("val", TokenKind_Val);
     keyword_map.set("macro", TokenKind_Macro);
     keyword_map.set("null", TokenKind_Null);
+    keyword_map.set("undefined", TokenKind_Undefined);
     keyword_map.set("true", TokenKind_True);
     keyword_map.set("false", TokenKind_False);
     keyword_map.set("when", TokenKind_When);

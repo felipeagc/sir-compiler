@@ -65,6 +65,8 @@ static inline String token_kind_to_string(TokenKind kind)
     case TokenKind_Export: return "export";
     case TokenKind_VarArg: return "vararg";
     case TokenKind_Global: return "global";
+    case TokenKind_Var: return "var";
+    case TokenKind_Val: return "val";
     case TokenKind_Inline: return "inline";
     case TokenKind_Distinct: return "distinct";
     case TokenKind_Macro: return "macro";
@@ -84,6 +86,7 @@ static inline String token_kind_to_string(TokenKind kind)
     case TokenKind_True: return "true";
     case TokenKind_False: return "false";
     case TokenKind_Null: return "null";
+    case TokenKind_Undefined: return "undefined";
     case TokenKind_U8: return "u8";
     case TokenKind_U16: return "u16";
     case TokenKind_U32: return "u32";
@@ -625,6 +628,13 @@ parse_primary_expr(Compiler *compiler, ParserState *state, Location *expr_loc)
         state->next_token();
 
         expr.kind = ExprKind_NullLiteral;
+        *expr_loc = next_token.loc;
+        break;
+    }
+    case TokenKind_Undefined: {
+        state->next_token();
+
+        expr.kind = ExprKind_UndefinedLiteral;
         *expr_loc = next_token.loc;
         break;
     }
@@ -1470,48 +1480,50 @@ parse_stmt(Compiler *compiler, ParserState *state, Location *stmt_loc)
         state->consume_token(compiler, TokenKind_RCurly);
         break;
     }
+    case TokenKind_Var:
+    case TokenKind_Val:
+    case TokenKind_Const:
     case TokenKind_Global: {
-        state->next_token();
+        Token var_kind_tok = state->next_token();
 
         Token ident_tok = state->consume_token(compiler, TokenKind_Identifier);
-
-        state->consume_token(compiler, TokenKind_Colon);
 
         ExprRef type_expr_ref = {0};
         ExprRef value_expr_ref = {0};
 
         next_token = state->peek_token();
-        if (next_token.kind != TokenKind_Equal) {
+        if (next_token.kind == TokenKind_Colon) {
+            state->next_token();
+
             Location type_expr_loc = {};
             Expr type_expr = parse_expr(compiler, state, &type_expr_loc);
             type_expr_ref = compiler->add_expr(type_expr_loc, type_expr);
-
-            next_token = state->peek_token();
-            if (next_token.kind == TokenKind_Equal) {
-                state->consume_token(compiler, TokenKind_Equal);
-
-                Location value_expr_loc = {};
-                Expr value_expr = parse_expr(compiler, state, &value_expr_loc);
-
-                value_expr_ref = compiler->add_expr(value_expr_loc, value_expr);
-            }
-        } else {
-            state->consume_token(compiler, TokenKind_Equal);
-
-            Location value_expr_loc = {};
-            Expr value_expr = parse_expr(compiler, state, &value_expr_loc);
-
-            value_expr_ref = compiler->add_expr(value_expr_loc, value_expr);
         }
+
+        state->consume_token(compiler, TokenKind_Equal);
+
+        Location value_expr_loc = {};
+        Expr value_expr = parse_expr(compiler, state, &value_expr_loc);
+        value_expr_ref = compiler->add_expr(value_expr_loc, value_expr);
 
         LANG_ASSERT(type_expr_ref.id > 0 || value_expr_ref.id > 0);
 
         Location var_decl_loc = ident_tok.loc;
         String var_decl_name = ident_tok.str;
         Decl var_decl = {};
-        var_decl.kind = DeclKind_GlobalVarDecl;
-        var_decl.local_var_decl.type_expr = type_expr_ref;
-        var_decl.local_var_decl.value_expr = value_expr_ref;
+
+        switch (var_kind_tok.kind) {
+        case TokenKind_Var: var_decl.kind = DeclKind_LocalVarDecl; break;
+        case TokenKind_Val:
+            var_decl.kind = DeclKind_ImmutableLocalVarDecl;
+            break;
+        case TokenKind_Global: var_decl.kind = DeclKind_GlobalVarDecl; break;
+        case TokenKind_Const: var_decl.kind = DeclKind_ConstDecl; break;
+        default: LANG_ASSERT(0); break;
+        }
+
+        var_decl.var_decl.type_expr = type_expr_ref;
+        var_decl.var_decl.value_expr = value_expr_ref;
 
         state->consume_token(compiler, TokenKind_Semicolon);
 
@@ -1547,78 +1559,27 @@ parse_stmt(Compiler *compiler, ParserState *state, Location *stmt_loc)
         break;
     }
     default: {
-        ParserState temp_state = *state;
-        Token ident_tok = temp_state.next_token();
-        Token colon_tok = temp_state.next_token();
+        Location expr_loc = {};
+        Expr expr = parse_expr(compiler, state, &expr_loc);
+        ExprRef expr_ref = compiler->add_expr(expr_loc, expr);
 
-        if (ident_tok.kind == TokenKind_Identifier &&
-            colon_tok.kind == TokenKind_Colon) {
-            ident_tok = state->consume_token(compiler, TokenKind_Identifier);
-            state->consume_token(compiler, TokenKind_Colon);
+        next_token = state->peek_token();
+        if (next_token.kind == TokenKind_Equal) {
+            state->next_token();
 
-            ExprRef type_expr_ref = {0};
-            ExprRef value_expr_ref = {0};
+            *stmt_loc = expr_loc;
+            stmt.kind = StmtKind_Assign;
+            stmt.assign.assigned_expr_ref = expr_ref;
 
-            next_token = state->peek_token();
-            if (next_token.kind != TokenKind_Equal) {
-                Location type_expr_loc = {};
-                Expr type_expr = parse_expr(compiler, state, &type_expr_loc);
-                type_expr_ref = compiler->add_expr(type_expr_loc, type_expr);
+            Location value_expr_loc = {};
+            Expr value_expr = parse_expr(compiler, state, &value_expr_loc);
 
-                next_token = state->peek_token();
-                if (next_token.kind == TokenKind_Equal) {
-                    state->consume_token(compiler, TokenKind_Equal);
-
-                    Location value_expr_loc = {};
-                    Expr value_expr =
-                        parse_expr(compiler, state, &value_expr_loc);
-                    value_expr_ref =
-                        compiler->add_expr(value_expr_loc, value_expr);
-                }
-            } else {
-                state->consume_token(compiler, TokenKind_Equal);
-
-                Location value_expr_loc = {};
-                Expr value_expr = parse_expr(compiler, state, &value_expr_loc);
-                value_expr_ref = compiler->add_expr(value_expr_loc, value_expr);
-            }
-
-            LANG_ASSERT(type_expr_ref.id > 0 || value_expr_ref.id > 0);
-
-            Location var_decl_loc = ident_tok.loc;
-            String var_decl_name = ident_tok.str;
-            Decl var_decl = {};
-            var_decl.kind = DeclKind_LocalVarDecl;
-            var_decl.local_var_decl.type_expr = type_expr_ref;
-            var_decl.local_var_decl.value_expr = value_expr_ref;
-
-            stmt.kind = StmtKind_Decl;
-            *stmt_loc = var_decl_loc;
-            stmt.decl.decl_ref =
-                compiler->add_decl(var_decl_name, var_decl_loc, var_decl);
+            stmt.assign.value_expr_ref =
+                compiler->add_expr(value_expr_loc, value_expr);
         } else {
-            Location expr_loc = {};
-            Expr expr = parse_expr(compiler, state, &expr_loc);
-            ExprRef expr_ref = compiler->add_expr(expr_loc, expr);
-
-            next_token = state->peek_token();
-            if (next_token.kind == TokenKind_Equal) {
-                state->next_token();
-
-                *stmt_loc = expr_loc;
-                stmt.kind = StmtKind_Assign;
-                stmt.assign.assigned_expr_ref = expr_ref;
-
-                Location value_expr_loc = {};
-                Expr value_expr = parse_expr(compiler, state, &value_expr_loc);
-
-                stmt.assign.value_expr_ref =
-                    compiler->add_expr(value_expr_loc, value_expr);
-            } else {
-                stmt.kind = StmtKind_Expr;
-                *stmt_loc = expr_loc;
-                stmt.expr.expr_ref = expr_ref;
-            }
+            stmt.kind = StmtKind_Expr;
+            *stmt_loc = expr_loc;
+            stmt.expr.expr_ref = expr_ref;
         }
 
         state->consume_token(compiler, TokenKind_Semicolon);
@@ -1770,40 +1731,27 @@ static void parse_top_level_decl(
         break;
     }
     case TokenKind_Global: {
-        state->consume_token(compiler, TokenKind_Global);
+        state->next_token();
 
         Token ident_tok = state->consume_token(compiler, TokenKind_Identifier);
-
-        state->consume_token(compiler, TokenKind_Colon);
 
         ExprRef type_expr_ref = {0};
         ExprRef value_expr_ref = {0};
 
         next_token = state->peek_token();
-        if (next_token.kind != TokenKind_Equal) {
+        if (next_token.kind == TokenKind_Colon) {
+            state->next_token();
+
             Location type_expr_loc = {};
             Expr type_expr = parse_expr(compiler, state, &type_expr_loc);
             type_expr_ref = compiler->add_expr(type_expr_loc, type_expr);
-
-            next_token = state->peek_token();
-            if (next_token.kind == TokenKind_Equal) {
-                state->consume_token(compiler, TokenKind_Equal);
-
-                Location value_expr_loc = {};
-                Expr value_expr = parse_expr(compiler, state, &value_expr_loc);
-                value_expr_ref = compiler->add_expr(value_expr_loc, value_expr);
-
-                value_expr_ref = compiler->add_expr(value_expr_loc, value_expr);
-            }
-        } else {
-            state->consume_token(compiler, TokenKind_Equal);
-
-            Location value_expr_loc = {};
-            Expr value_expr = parse_expr(compiler, state, &value_expr_loc);
-            value_expr_ref = compiler->add_expr(value_expr_loc, value_expr);
-
-            value_expr_ref = compiler->add_expr(value_expr_loc, value_expr);
         }
+
+        state->consume_token(compiler, TokenKind_Equal);
+
+        Location value_expr_loc = {};
+        Expr value_expr = parse_expr(compiler, state, &value_expr_loc);
+        value_expr_ref = compiler->add_expr(value_expr_loc, value_expr);
 
         LANG_ASSERT(type_expr_ref.id > 0 || value_expr_ref.id > 0);
 
@@ -1811,8 +1759,8 @@ static void parse_top_level_decl(
         String var_decl_name = ident_tok.str;
         Decl var_decl = {};
         var_decl.kind = DeclKind_GlobalVarDecl;
-        var_decl.local_var_decl.type_expr = type_expr_ref;
-        var_decl.local_var_decl.value_expr = value_expr_ref;
+        var_decl.var_decl.type_expr = type_expr_ref;
+        var_decl.var_decl.value_expr = value_expr_ref;
 
         state->consume_token(compiler, TokenKind_Semicolon);
 

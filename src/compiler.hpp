@@ -150,6 +150,8 @@ enum TokenKind {
 
     TokenKind_Global,
     TokenKind_Const,
+    TokenKind_Var,
+    TokenKind_Val,
     TokenKind_Extern,
     TokenKind_Export,
     TokenKind_Inline,
@@ -174,6 +176,7 @@ enum TokenKind {
     TokenKind_True,
     TokenKind_False,
     TokenKind_Null,
+    TokenKind_Undefined,
     TokenKind_U8,
     TokenKind_U16,
     TokenKind_U32,
@@ -392,6 +395,7 @@ enum ExprKind : uint8_t {
     ExprKind_Function,
     ExprKind_FunctionCall,
     ExprKind_NullLiteral,
+    ExprKind_UndefinedLiteral,
     ExprKind_PointerType,
     ExprKind_DistinctType,
     ExprKind_VoidType,
@@ -536,6 +540,7 @@ enum DeclKind : uint8_t {
     DeclKind_Function,
     DeclKind_FunctionParameter,
     DeclKind_LocalVarDecl,
+    DeclKind_ImmutableLocalVarDecl,
     DeclKind_GlobalVarDecl,
     DeclKind_ConstDecl,
 };
@@ -557,15 +562,7 @@ struct Decl {
         struct {
             ExprRef type_expr;
             ExprRef value_expr;
-        } local_var_decl;
-        struct {
-            ExprRef type_expr;
-            ExprRef value_expr;
-        } global_var_decl;
-        struct {
-            ExprRef type_expr;
-            ExprRef value_expr;
-        } const_decl;
+        } var_decl;
         struct {
             ExprRef type_expr;
         } type_decl;

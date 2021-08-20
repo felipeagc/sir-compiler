@@ -249,6 +249,11 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
         break;
     }
 
+    case ExprKind_UndefinedLiteral: {
+        LANG_ASSERT(0);
+        break;
+    }
+
     case ExprKind_StringLiteral: {
         Type type = compiler->expr_types[expr_ref].get(compiler);
 
@@ -299,7 +304,7 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
             value = ctx->decl_values[expr.ident.decl_ref.id];
             break;
         }
-
+        case DeclKind_ImmutableLocalVarDecl:
         case DeclKind_LocalVarDecl: {
             value = ctx->decl_values[expr.ident.decl_ref.id];
             break;
@@ -1176,6 +1181,7 @@ codegen_decl(Compiler *compiler, CodegenContext *ctx, DeclRef decl_ref)
         break;
     }
 
+    case DeclKind_ImmutableLocalVarDecl:
     case DeclKind_LocalVarDecl: {
         SIRInstRef func_ref = *ctx->function_stack.last();
         SIRType *ir_type = ctx->type_values[compiler->decl_types[decl_ref]];
@@ -1185,9 +1191,10 @@ codegen_decl(Compiler *compiler, CodegenContext *ctx, DeclRef decl_ref)
 
         ctx->decl_values[decl_ref.id] = value;
 
-        if (decl.local_var_decl.value_expr.id) {
+        if (decl.var_decl.value_expr.get(compiler).kind !=
+            ExprKind_UndefinedLiteral) {
             CodegenValue assigned_value =
-                codegen_expr(compiler, ctx, decl.local_var_decl.value_expr);
+                codegen_expr(compiler, ctx, decl.var_decl.value_expr);
 
             SIRBuilderInsertStore(
                 ctx->builder, value.inst_ref, load_lvalue(ctx, assigned_value));
@@ -1213,7 +1220,8 @@ codegen_decl(Compiler *compiler, CodegenContext *ctx, DeclRef decl_ref)
 
         ctx->decl_values[decl_ref.id] = value;
 
-        if (decl.local_var_decl.value_expr.id) {
+        if (decl.var_decl.value_expr.get(compiler).kind !=
+            ExprKind_UndefinedLiteral) {
             LANG_ASSERT(!"unimplemented");
         }
 

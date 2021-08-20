@@ -63,7 +63,7 @@ io.write("fn extern vararg printf(arg: *u8);\n\n")
 for i = 1,func_count do
 	io.write(string.format("fn func%d() {\n", i))
 	for j = 1,stmt_count do
-		io.write(string.format("\ta%d: [1 + 1]i32;\n", j))
+		io.write(string.format("\tvar a%d: [1 + 1]i32 = undefined;\n", j))
 		io.write("\tprintf(\"hello, world!\");\n")
 	end
 	io.write("}\n\n")

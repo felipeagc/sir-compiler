@@ -295,6 +295,11 @@ static void analyze_expr(
         break;
     }
 
+    case ExprKind_UndefinedLiteral: {
+        compiler->expr_types[expr_ref] = expected_type_ref;
+        break;
+    }
+
     case ExprKind_VoidLiteral: {
         compiler->expr_types[expr_ref] = compiler->void_type;
         break;
@@ -1279,26 +1284,23 @@ analyze_decl(Compiler *compiler, AnalyzerState *state, DeclRef decl_ref)
         break;
     }
 
-    case DeclKind_LocalVarDecl: {
+    case DeclKind_LocalVarDecl:
+    case DeclKind_ImmutableLocalVarDecl: {
         Scope *scope = *state->scope_stack.last();
         scope->add(compiler, decl_ref);
 
         TypeRef var_type = {0};
 
-        if (decl.local_var_decl.type_expr.id > 0) {
+        if (decl.var_decl.type_expr.id > 0) {
             analyze_expr(
-                compiler,
-                state,
-                decl.local_var_decl.type_expr,
-                compiler->type_type);
-            var_type = compiler->expr_as_types[decl.local_var_decl.type_expr];
+                compiler, state, decl.var_decl.type_expr, compiler->type_type);
+            var_type = compiler->expr_as_types[decl.var_decl.type_expr];
         }
 
-        if (decl.local_var_decl.value_expr.id > 0) {
-            analyze_expr(
-                compiler, state, decl.local_var_decl.value_expr, var_type);
+        if (decl.var_decl.value_expr.get(compiler).kind != ExprKind_UndefinedLiteral) {
+            analyze_expr(compiler, state, decl.var_decl.value_expr, var_type);
             if (var_type.id == 0) {
-                var_type = compiler->expr_types[decl.local_var_decl.value_expr];
+                var_type = compiler->expr_types[decl.var_decl.value_expr];
             }
         }
 
@@ -1333,20 +1335,17 @@ analyze_decl(Compiler *compiler, AnalyzerState *state, DeclRef decl_ref)
 
         TypeRef var_type = {0};
 
-        if (decl.local_var_decl.type_expr.id > 0) {
+        if (decl.var_decl.type_expr.id > 0) {
             analyze_expr(
-                compiler,
-                state,
-                decl.local_var_decl.type_expr,
-                compiler->type_type);
-            var_type = compiler->expr_as_types[decl.local_var_decl.type_expr];
+                compiler, state, decl.var_decl.type_expr, compiler->type_type);
+            var_type = compiler->expr_as_types[decl.var_decl.type_expr];
         }
 
-        if (decl.local_var_decl.value_expr.id > 0) {
-            analyze_expr(
-                compiler, state, decl.local_var_decl.value_expr, var_type);
+        LANG_ASSERT(decl.var_decl.value_expr.id > 0);
+        if (decl.var_decl.value_expr.get(compiler).kind != ExprKind_UndefinedLiteral) {
+            analyze_expr(compiler, state, decl.var_decl.value_expr, var_type);
             if (var_type.id == 0) {
-                var_type = compiler->expr_types[decl.local_var_decl.value_expr];
+                var_type = compiler->expr_types[decl.var_decl.value_expr];
             }
 
             compiler->add_error(

@@ -88,6 +88,8 @@ enum Mnem : uint8_t {
     Mnem_SSE_DIV,
     Mnem_SSE_UCOMIS,
     Mnem_SSE_CVTS,
+    Mnem_SSE_CVTSI2S,
+    Mnem_SSE_CVTS2SI,
     Mnem_COUNT,
 };
 
@@ -1122,22 +1124,114 @@ void X64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
     }
 
     case SIRInstKind_SIToFP: {
-        SIR_ASSERT(!"unimplemented");
+        MetaValue dest_value = this->meta_insts[inst_ref.id];
+        MetaValue source_value = this->meta_insts[inst.cast.inst_ref.id];
+
+        SIRType *source_type =
+            SIRModuleGetInst(this->module, inst.cast.inst_ref).type;
+
+        uint32_t source_size = SIRTypeSizeOf(this->module, source_type);
+        uint32_t dest_size = SIRTypeSizeOf(this->module, inst.type);
+
+        MetaValue tmp_int_value = {};
+
+        if (source_value.kind == MetaValueKind_ImmInt) {
+            tmp_int_value = create_int_register_value(
+                SIZE_CLASS_SIZES[source_value.size_class], RegisterIndex_RAX);
+            this->encode_mnem2(Mnem_MOV, &tmp_int_value, &source_value);
+            source_value = tmp_int_value;
+        }
+
+        switch (source_size) {
+        case 1:
+        case 2: {
+            tmp_int_value = create_int_register_value(4, RegisterIndex_RAX);
+            this->encode_mnem2(Mnem_MOVSX, &tmp_int_value, &source_value);
+            break;
+        }
+        case 4:
+        case 8: {
+            tmp_int_value = source_value;
+            break;
+        }
+        default: SIR_ASSERT(0); break;
+        }
+
+        MetaValue dest_reg_value =
+            create_float_register_value(dest_size, RegisterIndex_XMM0);
+
+        this->encode_mnem2(Mnem_SSE_CVTSI2S, &dest_reg_value, &tmp_int_value);
+
+        this->encode_mnem2(Mnem_MOV, &dest_value, &dest_reg_value);
         break;
     }
 
     case SIRInstKind_UIToFP: {
-        SIR_ASSERT(!"unimplemented");
+        MetaValue dest_value = this->meta_insts[inst_ref.id];
+        MetaValue source_value = this->meta_insts[inst.cast.inst_ref.id];
+
+        SIRType *source_type =
+            SIRModuleGetInst(this->module, inst.cast.inst_ref).type;
+
+        uint32_t source_size = SIRTypeSizeOf(this->module, source_type);
+        uint32_t dest_size = SIRTypeSizeOf(this->module, inst.type);
+
+        MetaValue tmp_int_value = {};
+
+        if (source_value.kind == MetaValueKind_ImmInt) {
+            tmp_int_value = create_int_register_value(
+                SIZE_CLASS_SIZES[source_value.size_class], RegisterIndex_RAX);
+            this->encode_mnem2(Mnem_MOV, &tmp_int_value, &source_value);
+            source_value = tmp_int_value;
+        }
+
+        switch (source_size) {
+        case 1:
+        case 2: {
+            tmp_int_value = create_int_register_value(4, RegisterIndex_RAX);
+            this->encode_mnem2(Mnem_MOVZX, &tmp_int_value, &source_value);
+            break;
+        }
+        case 4: {
+            tmp_int_value = create_int_register_value(4, RegisterIndex_RAX);
+            this->encode_mnem2(Mnem_MOV, &tmp_int_value, &source_value);
+            tmp_int_value = create_int_register_value(8, RegisterIndex_RAX);
+            break;
+        }
+        case 8: {
+            tmp_int_value = source_value;
+            break;
+        }
+        default: SIR_ASSERT(0); break;
+        }
+
+        MetaValue dest_reg_value =
+            create_float_register_value(dest_size, RegisterIndex_XMM0);
+
+        this->encode_mnem2(Mnem_SSE_CVTSI2S, &dest_reg_value, &tmp_int_value);
+
+        this->encode_mnem2(Mnem_MOV, &dest_value, &dest_reg_value);
+        break;
         break;
     }
 
+    case SIRInstKind_FPToUI:
     case SIRInstKind_FPToSI: {
-        SIR_ASSERT(!"unimplemented");
-        break;
-    }
+        MetaValue dest_value = this->meta_insts[inst_ref.id];
+        MetaValue source_value = this->meta_insts[inst.cast.inst_ref.id];
 
-    case SIRInstKind_FPToUI: {
-        SIR_ASSERT(!"unimplemented");
+        uint32_t dest_size = SIRTypeSizeOf(this->module, inst.type);
+
+        MetaValue dest_reg_value =
+            create_int_register_value(SIR_MAX(dest_size, 4), RegisterIndex_RAX);
+
+        this->encode_mnem2(Mnem_SSE_CVTS2SI, &dest_reg_value, &source_value);
+
+        dest_reg_value =
+            create_int_register_value(dest_size, RegisterIndex_RAX);
+
+        this->encode_mnem2(Mnem_MOV, &dest_value, &dest_reg_value);
+
         break;
     }
 
@@ -3233,6 +3327,20 @@ SIRCreateX64Builder(SIRModule *module, SIRObjectBuilder *obj_builder)
     ENCODING_ENTRIES2[Mnem_MOVSX][OperandKind_Reg][SizeClass_4]
                      [OperandKind_Memory][SizeClass_2] = FE_MOVSXr32m16;
 
+    ENCODING_ENTRIES2[Mnem_MOVSX][OperandKind_Reg][SizeClass_8][OperandKind_Reg]
+                     [SizeClass_4] = FE_MOVSXr64r32;
+    ENCODING_ENTRIES2[Mnem_MOVSX][OperandKind_Reg][SizeClass_8][OperandKind_Reg]
+                     [SizeClass_2] = FE_MOVSXr64r16;
+    ENCODING_ENTRIES2[Mnem_MOVSX][OperandKind_Reg][SizeClass_8][OperandKind_Reg]
+                     [SizeClass_1] = FE_MOVSXr64r8;
+
+    ENCODING_ENTRIES2[Mnem_MOVSX][OperandKind_Reg][SizeClass_8]
+                     [OperandKind_Memory][SizeClass_4] = FE_MOVSXr64m32;
+    ENCODING_ENTRIES2[Mnem_MOVSX][OperandKind_Reg][SizeClass_8]
+                     [OperandKind_Memory][SizeClass_2] = FE_MOVSXr64m16;
+    ENCODING_ENTRIES2[Mnem_MOVSX][OperandKind_Reg][SizeClass_8]
+                     [OperandKind_Memory][SizeClass_1] = FE_MOVSXr64m8;
+
     // MOVZX
 
     ENCODING_ENTRIES2[Mnem_MOVZX][OperandKind_Reg][SizeClass_4][OperandKind_Reg]
@@ -3458,6 +3566,50 @@ SIRCreateX64Builder(SIRModule *module, SIRObjectBuilder *obj_builder)
                      [OperandKind_FReg][SizeClass_8] = FE_SSE_CVTSD2SSrr;
     ENCODING_ENTRIES2[Mnem_SSE_CVTS][OperandKind_FReg][SizeClass_4]
                      [OperandKind_Memory][SizeClass_8] = FE_SSE_CVTSD2SSrm;
+
+    // SSE CVTSI2S
+
+    ENCODING_ENTRIES2[Mnem_SSE_CVTSI2S][OperandKind_FReg][SizeClass_4]
+                     [OperandKind_Reg][SizeClass_4] = FE_SSE_CVTSI2SS32rr;
+    ENCODING_ENTRIES2[Mnem_SSE_CVTSI2S][OperandKind_FReg][SizeClass_4]
+                     [OperandKind_Memory][SizeClass_4] = FE_SSE_CVTSI2SS32rm;
+
+    ENCODING_ENTRIES2[Mnem_SSE_CVTSI2S][OperandKind_FReg][SizeClass_4]
+                     [OperandKind_Reg][SizeClass_8] = FE_SSE_CVTSI2SS64rr;
+    ENCODING_ENTRIES2[Mnem_SSE_CVTSI2S][OperandKind_FReg][SizeClass_4]
+                     [OperandKind_Memory][SizeClass_8] = FE_SSE_CVTSI2SS64rm;
+
+    ENCODING_ENTRIES2[Mnem_SSE_CVTSI2S][OperandKind_FReg][SizeClass_8]
+                     [OperandKind_Reg][SizeClass_4] = FE_SSE_CVTSI2SD32rr;
+    ENCODING_ENTRIES2[Mnem_SSE_CVTSI2S][OperandKind_FReg][SizeClass_8]
+                     [OperandKind_Memory][SizeClass_4] = FE_SSE_CVTSI2SD32rm;
+
+    ENCODING_ENTRIES2[Mnem_SSE_CVTSI2S][OperandKind_FReg][SizeClass_8]
+                     [OperandKind_Reg][SizeClass_8] = FE_SSE_CVTSI2SD64rr;
+    ENCODING_ENTRIES2[Mnem_SSE_CVTSI2S][OperandKind_FReg][SizeClass_8]
+                     [OperandKind_Memory][SizeClass_8] = FE_SSE_CVTSI2SD64rm;
+
+    // SSE CVTS2SI
+
+    ENCODING_ENTRIES2[Mnem_SSE_CVTS2SI][OperandKind_Reg][SizeClass_4]
+                     [OperandKind_FReg][SizeClass_4] = FE_SSE_CVTSS2SI32rr;
+    ENCODING_ENTRIES2[Mnem_SSE_CVTS2SI][OperandKind_Reg][SizeClass_4]
+                     [OperandKind_Memory][SizeClass_4] = FE_SSE_CVTSS2SI32rm;
+
+    ENCODING_ENTRIES2[Mnem_SSE_CVTS2SI][OperandKind_Reg][SizeClass_8]
+                     [OperandKind_FReg][SizeClass_4] = FE_SSE_CVTSS2SI64rr;
+    ENCODING_ENTRIES2[Mnem_SSE_CVTS2SI][OperandKind_Reg][SizeClass_8]
+                     [OperandKind_Memory][SizeClass_4] = FE_SSE_CVTSS2SI64rm;
+
+    ENCODING_ENTRIES2[Mnem_SSE_CVTS2SI][OperandKind_Reg][SizeClass_4]
+                     [OperandKind_FReg][SizeClass_8] = FE_SSE_CVTSD2SI32rr;
+    ENCODING_ENTRIES2[Mnem_SSE_CVTS2SI][OperandKind_Reg][SizeClass_4]
+                     [OperandKind_Memory][SizeClass_8] = FE_SSE_CVTSD2SI32rm;
+
+    ENCODING_ENTRIES2[Mnem_SSE_CVTS2SI][OperandKind_Reg][SizeClass_8]
+                     [OperandKind_FReg][SizeClass_8] = FE_SSE_CVTSD2SI64rr;
+    ENCODING_ENTRIES2[Mnem_SSE_CVTS2SI][OperandKind_Reg][SizeClass_8]
+                     [OperandKind_Memory][SizeClass_8] = FE_SSE_CVTSD2SI64rm;
 
     return &asm_builder->vt;
 }

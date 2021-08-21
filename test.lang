@@ -76,12 +76,7 @@ fn export main() {
 	// print_int(0xffffffffffffffff);
 
     var a: f64 = 123;
-    var b: f64 = 123;
-    var c: f32 = f32(b);
-    var d: f64 = f64(c);
-    var e: f64 = f64(d);
-    if (a != b) {
-        printf("yo\n");
-    }
-    printf("%f\n", a / b);
+    var b: u32 = u32(a);
+    var c: f64 = f64(b);
+    printf("%f\n", c);
 }

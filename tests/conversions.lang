@@ -1,0 +1,57 @@
+fn extern vararg printf(_: *u8);
+
+fn export main() {
+    printf("%d\n", i32(u8(123)));
+    printf("%d\n", i32(u16(123)));
+    printf("%d\n", i32(u32(123)));
+    printf("%d\n", i32(u64(123)));
+
+    printf("\n");
+
+    printf("%u\n", u32(i8(123)));
+    printf("%u\n", u32(i16(123)));
+    printf("%u\n", u32(i32(123)));
+    printf("%u\n", u32(i64(123)));
+
+    printf("\n");
+
+    printf("%.2f\n", f64(i8(123)));
+    printf("%.2f\n", f64(i16(123)));
+    printf("%.2f\n", f64(i32(123)));
+    printf("%.2f\n", f64(i64(123)));
+
+    printf("\n");
+
+    printf("%.2f\n", f64(u8(123)));
+    printf("%.2f\n", f64(u16(123)));
+    printf("%.2f\n", f64(u32(123)));
+    printf("%.2f\n", f64(u64(123)));
+
+    printf("\n");
+
+    printf("%ld\n", i64(u8(f32(123))));
+    printf("%ld\n", i64(u16(f32(123))));
+    printf("%ld\n", i64(u32(f32(123))));
+    printf("%ld\n", i64(u64(f32(123))));
+
+    printf("\n");
+
+    printf("%ld\n", i64(i8(f32(123))));
+    printf("%ld\n", i64(i16(f32(123))));
+    printf("%ld\n", i64(i32(f32(123))));
+    printf("%ld\n", i64(i64(f32(123))));
+
+    printf("\n");
+
+    printf("%ld\n", i64(u8(f64(123))));
+    printf("%ld\n", i64(u16(f64(123))));
+    printf("%ld\n", i64(u32(f64(123))));
+    printf("%ld\n", i64(u64(f64(123))));
+
+    printf("\n");
+
+    printf("%ld\n", i64(i8(f64(123))));
+    printf("%ld\n", i64(i16(f64(123))));
+    printf("%ld\n", i64(i32(f64(123))));
+    printf("%ld\n", i64(i64(f64(123))));
+}

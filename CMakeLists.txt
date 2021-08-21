@@ -43,9 +43,6 @@ add_library(
   sir/sir_obj.hpp
   sir/sir_elf64.cpp
 
-  sir/sir_vm.h
-  sir/sir_vm.cpp
-
   sir/sir_interp.h
   sir/sir_interp.cpp
 

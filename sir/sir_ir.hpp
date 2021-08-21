@@ -106,9 +106,6 @@ struct SIRInst {
             size_t params_len;
         } func_call;
         struct {
-            SIRInstRef inst_ref;
-        } bit_cast;
-        struct {
             SIRInstRef accessed_ref;
             SIRInstRef index_ref;
         } array_elem_ptr;
@@ -144,19 +141,7 @@ struct SIRInst {
         } global_ptr;
         struct {
             SIRInstRef inst_ref;
-        } zext;
-        struct {
-            SIRInstRef inst_ref;
-        } sext;
-        struct {
-            SIRInstRef inst_ref;
-        } trunc;
-        struct {
-            SIRInstRef inst_ref;
-        } fptrunc;
-        struct {
-            SIRInstRef inst_ref;
-        } fpext;
+        } cast;
     };
     SIRInstKind kind;
     SIRType *type;

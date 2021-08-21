@@ -130,7 +130,7 @@ print_instruction(SIRModule *module, SIRInstRef inst_ref, SIRStringBuilder *sb)
             inst_ref.id,
             (int)type_string.len,
             type_string.ptr,
-            inst.bit_cast.inst_ref.id);
+            inst.cast.inst_ref.id);
         break;
     }
 
@@ -141,7 +141,7 @@ print_instruction(SIRModule *module, SIRInstRef inst_ref, SIRStringBuilder *sb)
             inst_ref.id,
             (int)type_string.len,
             type_string.ptr,
-            inst.zext.inst_ref.id);
+            inst.cast.inst_ref.id);
         break;
     }
 
@@ -152,7 +152,7 @@ print_instruction(SIRModule *module, SIRInstRef inst_ref, SIRStringBuilder *sb)
             inst_ref.id,
             (int)type_string.len,
             type_string.ptr,
-            inst.sext.inst_ref.id);
+            inst.cast.inst_ref.id);
         break;
     }
 
@@ -163,7 +163,7 @@ print_instruction(SIRModule *module, SIRInstRef inst_ref, SIRStringBuilder *sb)
             inst_ref.id,
             (int)type_string.len,
             type_string.ptr,
-            inst.trunc.inst_ref.id);
+            inst.cast.inst_ref.id);
         break;
     }
 
@@ -174,7 +174,7 @@ print_instruction(SIRModule *module, SIRInstRef inst_ref, SIRStringBuilder *sb)
             inst_ref.id,
             (int)type_string.len,
             type_string.ptr,
-            inst.fptrunc.inst_ref.id);
+            inst.cast.inst_ref.id);
         break;
     }
 
@@ -185,7 +185,51 @@ print_instruction(SIRModule *module, SIRInstRef inst_ref, SIRStringBuilder *sb)
             inst_ref.id,
             (int)type_string.len,
             type_string.ptr,
-            inst.fpext.inst_ref.id);
+            inst.cast.inst_ref.id);
+        break;
+    }
+
+    case SIRInstKind_SIToFP: {
+        SIRString type_string = SIRTypeToString(module, inst.type);
+        sb->sprintf(
+            "%%r%u = sitofp %.*s %%r%u",
+            inst_ref.id,
+            (int)type_string.len,
+            type_string.ptr,
+            inst.cast.inst_ref.id);
+        break;
+    }
+
+    case SIRInstKind_UIToFP: {
+        SIRString type_string = SIRTypeToString(module, inst.type);
+        sb->sprintf(
+            "%%r%u = uitofp %.*s %%r%u",
+            inst_ref.id,
+            (int)type_string.len,
+            type_string.ptr,
+            inst.cast.inst_ref.id);
+        break;
+    }
+
+    case SIRInstKind_FPToSI: {
+        SIRString type_string = SIRTypeToString(module, inst.type);
+        sb->sprintf(
+            "%%r%u = fptosi %.*s %%r%u",
+            inst_ref.id,
+            (int)type_string.len,
+            type_string.ptr,
+            inst.cast.inst_ref.id);
+        break;
+    }
+
+    case SIRInstKind_FPToUI: {
+        SIRString type_string = SIRTypeToString(module, inst.type);
+        sb->sprintf(
+            "%%r%u = fptoui %.*s %%r%u",
+            inst_ref.id,
+            (int)type_string.len,
+            type_string.ptr,
+            inst.cast.inst_ref.id);
         break;
     }
 
@@ -1109,7 +1153,7 @@ SIRInstRef SIRBuilderInsertBitCast(
     SIRInst inst = {};
     inst.kind = SIRInstKind_BitCast;
     inst.type = dest_type;
-    inst.bit_cast = {inst_ref};
+    inst.cast = {inst_ref};
 
     return builder_insert_inst(builder, inst);
 }
@@ -1124,7 +1168,7 @@ SIRInstRef SIRBuilderInsertZext(
     SIRInst inst = {};
     inst.kind = SIRInstKind_ZExt;
     inst.type = dest_type;
-    inst.zext = {inst_ref};
+    inst.cast = {inst_ref};
 
     return builder_insert_inst(builder, inst);
 }
@@ -1139,7 +1183,7 @@ SIRInstRef SIRBuilderInsertSext(
     SIRInst inst = {};
     inst.kind = SIRInstKind_SExt;
     inst.type = dest_type;
-    inst.sext = {inst_ref};
+    inst.cast = {inst_ref};
 
     return builder_insert_inst(builder, inst);
 }
@@ -1156,7 +1200,7 @@ SIRInstRef SIRBuilderInsertTrunc(
     SIRInst inst = {};
     inst.kind = SIRInstKind_Trunc;
     inst.type = dest_type;
-    inst.trunc = {inst_ref};
+    inst.cast = {inst_ref};
 
     return builder_insert_inst(builder, inst);
 }
@@ -1171,7 +1215,7 @@ SIRInstRef SIRBuilderInsertFPTrunc(
     SIRInst inst = {};
     inst.kind = SIRInstKind_FPTrunc;
     inst.type = dest_type;
-    inst.fptrunc = {inst_ref};
+    inst.cast = {inst_ref};
 
     return builder_insert_inst(builder, inst);
 }
@@ -1186,7 +1230,68 @@ SIRInstRef SIRBuilderInsertFPExt(
     SIRInst inst = {};
     inst.kind = SIRInstKind_FPExt;
     inst.type = dest_type;
-    inst.fpext = {inst_ref};
+    inst.cast = {inst_ref};
+
+    return builder_insert_inst(builder, inst);
+}
+
+SIRInstRef SIRBuilderInsertFPToSI(
+    SIRBuilder *builder, SIRType *dest_type, SIRInstRef inst_ref)
+{
+    ZoneScoped;
+
+    SIR_ASSERT(dest_type->kind == SIRTypeKind_Int && dest_type->int_.is_signed);
+
+    SIRInst inst = {};
+    inst.kind = SIRInstKind_FPToSI;
+    inst.type = dest_type;
+    inst.cast = {inst_ref};
+
+    return builder_insert_inst(builder, inst);
+}
+
+SIRInstRef SIRBuilderInsertFPToUI(
+    SIRBuilder *builder, SIRType *dest_type, SIRInstRef inst_ref)
+{
+    ZoneScoped;
+
+    SIR_ASSERT(
+        dest_type->kind == SIRTypeKind_Int && !dest_type->int_.is_signed);
+
+    SIRInst inst = {};
+    inst.kind = SIRInstKind_FPToUI;
+    inst.type = dest_type;
+    inst.cast = {inst_ref};
+
+    return builder_insert_inst(builder, inst);
+}
+
+SIRInstRef SIRBuilderInsertSIToFP(
+    SIRBuilder *builder, SIRType *dest_type, SIRInstRef inst_ref)
+{
+    ZoneScoped;
+
+    SIR_ASSERT(dest_type->kind == SIRTypeKind_Float);
+
+    SIRInst inst = {};
+    inst.kind = SIRInstKind_SIToFP;
+    inst.type = dest_type;
+    inst.cast = {inst_ref};
+
+    return builder_insert_inst(builder, inst);
+}
+
+SIRInstRef SIRBuilderInsertUIToFP(
+    SIRBuilder *builder, SIRType *dest_type, SIRInstRef inst_ref)
+{
+    ZoneScoped;
+
+    SIR_ASSERT(dest_type->kind == SIRTypeKind_Float);
+
+    SIRInst inst = {};
+    inst.kind = SIRInstKind_UIToFP;
+    inst.type = dest_type;
+    inst.cast = {inst_ref};
 
     return builder_insert_inst(builder, inst);
 }

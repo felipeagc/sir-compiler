@@ -384,7 +384,7 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
                 compiler->expr_types[expr_ref].id) {
                 value = {false, source_value};
             } else if (
-                dest_type.is_runtime_int() && source_type.is_runtime_int()) {
+                source_type.is_runtime_int() && dest_type.is_runtime_int()) {
                 if (dest_type.int_.bits < source_type.int_.bits) {
                     value = {
                         false,
@@ -406,8 +406,8 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
                     value = {false, source_value};
                 }
             } else if (
-                dest_type.is_runtime_float() &&
-                source_type.is_runtime_float()) {
+                source_type.is_runtime_float() &&
+                dest_type.is_runtime_float()) {
                 if (dest_type.float_.bits < source_type.float_.bits) {
                     value = {
                         false,
@@ -420,6 +420,34 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
                             ctx->builder, dest_type_ir, source_value)};
                 } else {
                     value = {false, source_value};
+                }
+            } else if (
+                source_type.is_runtime_int() && dest_type.is_runtime_float()) {
+                // Int to float
+                if (source_type.int_.is_signed) {
+                    value = {
+                        false,
+                        SIRBuilderInsertSIToFP(
+                            ctx->builder, dest_type_ir, source_value)};
+                } else {
+                    value = {
+                        false,
+                        SIRBuilderInsertUIToFP(
+                            ctx->builder, dest_type_ir, source_value)};
+                }
+            } else if (
+                source_type.is_runtime_float() && dest_type.is_runtime_int()) {
+                // Float to int
+                if (dest_type.int_.is_signed) {
+                    value = {
+                        false,
+                        SIRBuilderInsertFPToSI(
+                            ctx->builder, dest_type_ir, source_value)};
+                } else {
+                    value = {
+                        false,
+                        SIRBuilderInsertFPToUI(
+                            ctx->builder, dest_type_ir, source_value)};
                 }
             } else {
                 LANG_ASSERT(!"TODO: type cast unimplemented");

@@ -821,7 +821,7 @@ void X64AsmBuilder::move_inst_rvalue(
         break;
     }
     case SIRInstKind_BitCast: {
-        this->move_inst_rvalue(inst.bit_cast.inst_ref, dest_value);
+        this->move_inst_rvalue(inst.cast.inst_ref, dest_value);
         break;
     }
     default: {
@@ -900,6 +900,10 @@ void X64AsmBuilder::generate_const(SIRInstRef inst_ref)
     case SIRInstKind_Trunc:
     case SIRInstKind_FPTrunc:
     case SIRInstKind_FPExt:
+    case SIRInstKind_SIToFP:
+    case SIRInstKind_UIToFP:
+    case SIRInstKind_FPToSI:
+    case SIRInstKind_FPToUI:
     case SIRInstKind_ArrayElemPtr:
     case SIRInstKind_StructElemPtr:
     case SIRInstKind_ExtractArrayElem:
@@ -975,8 +979,7 @@ void X64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
     }
 
     case SIRInstKind_BitCast: {
-        this->meta_insts[inst_ref.id] =
-            this->meta_insts[inst.bit_cast.inst_ref.id];
+        this->meta_insts[inst_ref.id] = this->meta_insts[inst.cast.inst_ref.id];
         break;
     }
 
@@ -984,7 +987,7 @@ void X64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
         MetaValue dest_value = this->meta_insts[inst_ref.id];
 
         SIRType *source_type =
-            SIRModuleGetInst(this->module, inst.trunc.inst_ref).type;
+            SIRModuleGetInst(this->module, inst.cast.inst_ref).type;
         SIRType *dest_type = inst.type;
 
         MetaValue source_ax_value = create_int_register_value(
@@ -992,7 +995,7 @@ void X64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
         MetaValue ext_ax_value = create_int_register_value(
             SIRTypeSizeOf(this->module, dest_type), RegisterIndex_RAX);
 
-        this->move_inst_rvalue(inst.trunc.inst_ref, &source_ax_value);
+        this->move_inst_rvalue(inst.cast.inst_ref, &source_ax_value);
 
         size_t source_bytes = source_type->kind == SIRTypeKind_Bool
                                   ? 1
@@ -1035,7 +1038,7 @@ void X64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
         MetaValue dest_value = this->meta_insts[inst_ref.id];
 
         SIRType *source_type =
-            SIRModuleGetInst(this->module, inst.trunc.inst_ref).type;
+            SIRModuleGetInst(this->module, inst.cast.inst_ref).type;
         SIRType *dest_type = inst.type;
 
         MetaValue source_ax_value = create_int_register_value(
@@ -1043,7 +1046,7 @@ void X64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
         MetaValue ext_ax_value = create_int_register_value(
             SIRTypeSizeOf(this->module, dest_type), RegisterIndex_RAX);
 
-        this->move_inst_rvalue(inst.trunc.inst_ref, &source_ax_value);
+        this->move_inst_rvalue(inst.cast.inst_ref, &source_ax_value);
 
         size_t source_bytes = source_type->int_.bits >> 3;
         size_t dest_bytes = dest_type->int_.bits >> 3;
@@ -1080,7 +1083,7 @@ void X64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
         MetaValue dest_value = this->meta_insts[inst_ref.id];
 
         SIRType *source_type =
-            SIRModuleGetInst(this->module, inst.trunc.inst_ref).type;
+            SIRModuleGetInst(this->module, inst.cast.inst_ref).type;
         SIRType *dest_type = inst.type;
 
         MetaValue source_ax_value = create_int_register_value(
@@ -1088,7 +1091,7 @@ void X64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
 
         MetaValue trunc_ax_value = create_int_register_value(
             SIRTypeSizeOf(this->module, dest_type), RegisterIndex_RAX);
-        this->move_inst_rvalue(inst.trunc.inst_ref, &source_ax_value);
+        this->move_inst_rvalue(inst.cast.inst_ref, &source_ax_value);
         this->encode_mnem2(Mnem_MOV, &dest_value, &trunc_ax_value);
 
         break;
@@ -1097,10 +1100,10 @@ void X64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
     case SIRInstKind_FPExt:
     case SIRInstKind_FPTrunc: {
         MetaValue dest_value = this->meta_insts[inst_ref.id];
-        MetaValue source_value = this->meta_insts[inst.fptrunc.inst_ref.id];
+        MetaValue source_value = this->meta_insts[inst.cast.inst_ref.id];
 
         SIRType *source_type =
-            SIRModuleGetInst(this->module, inst.trunc.inst_ref).type;
+            SIRModuleGetInst(this->module, inst.cast.inst_ref).type;
         SIRType *dest_type = inst.type;
 
         uint32_t source_size = SIRTypeSizeOf(this->module, source_type);
@@ -1115,6 +1118,26 @@ void X64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
             this->encode_mnem2(Mnem_MOV, &dest_value, &source_value);
         }
 
+        break;
+    }
+
+    case SIRInstKind_SIToFP: {
+        SIR_ASSERT(!"unimplemented");
+        break;
+    }
+
+    case SIRInstKind_UIToFP: {
+        SIR_ASSERT(!"unimplemented");
+        break;
+    }
+
+    case SIRInstKind_FPToSI: {
+        SIR_ASSERT(!"unimplemented");
+        break;
+    }
+
+    case SIRInstKind_FPToUI: {
+        SIR_ASSERT(!"unimplemented");
         break;
     }
 
@@ -2678,7 +2701,7 @@ void X64AsmBuilder::generate_function(SIRInstRef func_ref)
             case SIRInstKind_Trunc: {
                 SIRType *dest_type = SIRModuleGetInstType(module, inst_ref);
                 SIRType *source_type =
-                    SIRModuleGetInstType(module, inst.trunc.inst_ref);
+                    SIRModuleGetInstType(module, inst.cast.inst_ref);
 
                 uint32_t dest_type_size = SIRTypeSizeOf(module, dest_type);
                 uint32_t source_type_size = SIRTypeSizeOf(module, source_type);
@@ -2689,7 +2712,7 @@ void X64AsmBuilder::generate_function(SIRInstRef func_ref)
                 if (dest_type_align == source_type_align &&
                     dest_type_size == source_type_size) {
                     inst.kind = SIRInstKind_Alias;
-                    inst.alias.inst_ref = inst.trunc.inst_ref;
+                    inst.alias.inst_ref = inst.cast.inst_ref;
                     module->insts[inst_ref.id] = inst;
                 }
 
@@ -2698,7 +2721,7 @@ void X64AsmBuilder::generate_function(SIRInstRef func_ref)
             case SIRInstKind_ZExt: {
                 SIRType *dest_type = SIRModuleGetInstType(module, inst_ref);
                 SIRType *source_type =
-                    SIRModuleGetInstType(module, inst.zext.inst_ref);
+                    SIRModuleGetInstType(module, inst.cast.inst_ref);
 
                 uint32_t dest_type_size = SIRTypeSizeOf(module, dest_type);
                 uint32_t source_type_size = SIRTypeSizeOf(module, source_type);
@@ -2709,7 +2732,7 @@ void X64AsmBuilder::generate_function(SIRInstRef func_ref)
                 if (dest_type_align == source_type_align &&
                     dest_type_size == source_type_size) {
                     inst.kind = SIRInstKind_Alias;
-                    inst.alias.inst_ref = inst.zext.inst_ref;
+                    inst.alias.inst_ref = inst.cast.inst_ref;
                     module->insts[inst_ref.id] = inst;
                 }
 
@@ -2786,6 +2809,10 @@ void X64AsmBuilder::generate_function(SIRInstRef func_ref)
             case SIRInstKind_Trunc:
             case SIRInstKind_FPTrunc:
             case SIRInstKind_FPExt:
+            case SIRInstKind_SIToFP:
+            case SIRInstKind_UIToFP:
+            case SIRInstKind_FPToSI:
+            case SIRInstKind_FPToUI:
             case SIRInstKind_Binop:
             case SIRInstKind_ArrayElemPtr:
             case SIRInstKind_StructElemPtr:

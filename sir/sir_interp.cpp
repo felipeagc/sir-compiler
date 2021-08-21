@@ -100,6 +100,10 @@ static char *SIRInterpGetInstAddr(SIRInterpContext *ctx, SIRInstRef inst_ref)
     case SIRInstKind_Trunc:
     case SIRInstKind_FPTrunc:
     case SIRInstKind_FPExt:
+    case SIRInstKind_SIToFP:
+    case SIRInstKind_UIToFP:
+    case SIRInstKind_FPToSI:
+    case SIRInstKind_FPToUI:
     case SIRInstKind_ArrayElemPtr:
     case SIRInstKind_StructElemPtr:
     case SIRInstKind_ExtractArrayElem:
@@ -352,19 +356,19 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
         break;
     }
     case SIRInstKind_BitCast: {
-        value_addr = SIRInterpGetInstAddr(ctx, inst.bit_cast.inst_ref);
+        value_addr = SIRInterpGetInstAddr(ctx, inst.cast.inst_ref);
         break;
     }
     case SIRInstKind_ZExt: {
         SIRType *source_type =
-            SIRModuleGetInstType(ctx->mod, inst.zext.inst_ref);
+            SIRModuleGetInstType(ctx->mod, inst.cast.inst_ref);
         size_t source_size = SIRTypeSizeOf(ctx->mod, source_type);
         SIRType *dest_type = SIRModuleGetInstType(ctx->mod, inst_ref);
         size_t dest_size = SIRTypeSizeOf(ctx->mod, dest_type);
 
         SIR_ASSERT(dest_size >= source_size);
 
-        char *source_addr = SIRInterpGetInstAddr(ctx, inst.zext.inst_ref);
+        char *source_addr = SIRInterpGetInstAddr(ctx, inst.cast.inst_ref);
 
         value_addr = SIRInterpAllocStackVal(
             ctx, dest_size, SIRTypeAlignOf(ctx->mod, dest_type));
@@ -389,14 +393,14 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
     }
     case SIRInstKind_SExt: {
         SIRType *source_type =
-            SIRModuleGetInstType(ctx->mod, inst.sext.inst_ref);
+            SIRModuleGetInstType(ctx->mod, inst.cast.inst_ref);
         size_t source_size = SIRTypeSizeOf(ctx->mod, source_type);
         SIRType *dest_type = SIRModuleGetInstType(ctx->mod, inst_ref);
         size_t dest_size = SIRTypeSizeOf(ctx->mod, dest_type);
 
         SIR_ASSERT(dest_size >= source_size);
 
-        char *source_addr = SIRInterpGetInstAddr(ctx, inst.sext.inst_ref);
+        char *source_addr = SIRInterpGetInstAddr(ctx, inst.cast.inst_ref);
 
         value_addr = SIRInterpAllocStackVal(
             ctx, dest_size, SIRTypeAlignOf(ctx->mod, dest_type));
@@ -421,14 +425,14 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
     }
     case SIRInstKind_Trunc: {
         SIRType *source_type =
-            SIRModuleGetInstType(ctx->mod, inst.trunc.inst_ref);
+            SIRModuleGetInstType(ctx->mod, inst.cast.inst_ref);
         size_t source_size = SIRTypeSizeOf(ctx->mod, source_type);
         SIRType *dest_type = SIRModuleGetInstType(ctx->mod, inst_ref);
         size_t dest_size = SIRTypeSizeOf(ctx->mod, dest_type);
 
         SIR_ASSERT(dest_size <= source_size);
 
-        char *source_addr = SIRInterpGetInstAddr(ctx, inst.trunc.inst_ref);
+        char *source_addr = SIRInterpGetInstAddr(ctx, inst.cast.inst_ref);
 
         value_addr = SIRInterpAllocStackVal(
             ctx, dest_size, SIRTypeAlignOf(ctx->mod, dest_type));
@@ -454,14 +458,14 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
     }
     case SIRInstKind_FPTrunc: {
         SIRType *source_type =
-            SIRModuleGetInstType(ctx->mod, inst.trunc.inst_ref);
+            SIRModuleGetInstType(ctx->mod, inst.cast.inst_ref);
         size_t source_size = SIRTypeSizeOf(ctx->mod, source_type);
         SIRType *dest_type = SIRModuleGetInstType(ctx->mod, inst_ref);
         size_t dest_size = SIRTypeSizeOf(ctx->mod, dest_type);
 
         SIR_ASSERT(dest_size <= source_size);
 
-        char *source_addr = SIRInterpGetInstAddr(ctx, inst.trunc.inst_ref);
+        char *source_addr = SIRInterpGetInstAddr(ctx, inst.cast.inst_ref);
 
         value_addr = SIRInterpAllocStackVal(
             ctx, dest_size, SIRTypeAlignOf(ctx->mod, dest_type));
@@ -472,20 +476,36 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
     }
     case SIRInstKind_FPExt: {
         SIRType *source_type =
-            SIRModuleGetInstType(ctx->mod, inst.trunc.inst_ref);
+            SIRModuleGetInstType(ctx->mod, inst.cast.inst_ref);
         size_t source_size = SIRTypeSizeOf(ctx->mod, source_type);
         SIRType *dest_type = SIRModuleGetInstType(ctx->mod, inst_ref);
         size_t dest_size = SIRTypeSizeOf(ctx->mod, dest_type);
 
         SIR_ASSERT(dest_size >= source_size);
 
-        char *source_addr = SIRInterpGetInstAddr(ctx, inst.trunc.inst_ref);
+        char *source_addr = SIRInterpGetInstAddr(ctx, inst.cast.inst_ref);
 
         value_addr = SIRInterpAllocStackVal(
             ctx, dest_size, SIRTypeAlignOf(ctx->mod, dest_type));
 
         *(double *)value_addr = *(double *)source_addr;
 
+        break;
+    }
+    case SIRInstKind_SIToFP: {
+        SIR_ASSERT(!"unimplemented");
+        break;
+    }
+    case SIRInstKind_UIToFP: {
+        SIR_ASSERT(!"unimplemented");
+        break;
+    }
+    case SIRInstKind_FPToSI: {
+        SIR_ASSERT(!"unimplemented");
+        break;
+    }
+    case SIRInstKind_FPToUI: {
+        SIR_ASSERT(!"unimplemented");
         break;
     }
     case SIRInstKind_ArrayElemPtr: {

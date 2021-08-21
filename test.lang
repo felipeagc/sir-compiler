@@ -1,8 +1,8 @@
 fn extern vararg printf(arg: *u8);
 
 fn print_int(x: u64) {
-	n := x;
-	i := u32(0);
+	var n = x;
+	var i = u32(0);
 	while (i < 8) {
 		printf("%02x", (n >> ((7 - i) * 8)) & 0xff);
 		i = i + 1;
@@ -48,30 +48,37 @@ fn export main() {
 	// printf("@sizeof(usize) = %d\n", i32(@sizeof(usize)));
 	// s: usize = 1231;
 
-	if (@defined("linux")) {
-		printf("Linux\n");
-	}
-	my_int2 := MyInt(123);
-	is_linux := @defined("linux") == true;
-	not_linux: bool = is_linux == false;
-	if (not_linux) {
-		printf("Not linux\n");
-	}
+	// if (@defined("linux")) {
+	// 	printf("Linux\n");
+	// }
+	// var my_int2 = MyInt(123);
+	// var is_linux = @defined("linux") == true;
+	// var not_linux: bool = is_linux == false;
+	// if (not_linux) {
+	// 	printf("Not linux\n");
+	// }
 
-	when (@defined("linux") or @defined("no")) {
-		printf("Compiling 1\n");
-	} else {
-		printf("Compiling 2\n");
-	}
+	// when (@defined("linux") or @defined("no")) {
+	// 	printf("Compiling 1\n");
+	// } else {
+	// 	printf("Compiling 2\n");
+	// }
 
-	if (is_linux and my_int2 > MyInt(1)) {
-		printf("hey\n");
-	}
+	// if (is_linux and my_int2 > MyInt(1)) {
+	// 	printf("hey\n");
+	// }
 
-	if (not_linux or my_int2 > MyInt(1)) {
-		printf("hey again\n");
-	}
+	// if (not_linux or my_int2 > MyInt(1)) {
+	// 	printf("hey again\n");
+	// }
 
-	print_int(0xFF00000000000000);
-	print_int(0xffffffffffffffff);
+	// print_int(0xFF00000000000000);
+	// print_int(0xffffffffffffffff);
+
+    var a: f64 = 123;
+    var b: f64 = 123;
+    if (a != b) {
+        printf("yo\n");
+    }
+    printf("%f\n", a / b);
 }

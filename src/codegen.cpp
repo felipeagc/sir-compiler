@@ -690,7 +690,6 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
                              ? SIRBinaryOperation_SRem
                              : SIRBinaryOperation_URem;
                     break;
-                case TypeKind_Float: op = SIRBinaryOperation_FRem; break;
                 default: LANG_ASSERT(0);
                 }
                 break;

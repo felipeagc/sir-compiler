@@ -714,8 +714,7 @@ static void analyze_expr(
         case BinaryOp_Add:
         case BinaryOp_Sub:
         case BinaryOp_Mul:
-        case BinaryOp_Div:
-        case BinaryOp_Mod: {
+        case BinaryOp_Div: {
             size_t error_checkpoint = compiler->get_error_checkpoint();
 
             if (expected_type_ref.id == 0) {
@@ -794,7 +793,8 @@ static void analyze_expr(
         }
         case BinaryOp_BitAnd:
         case BinaryOp_BitOr:
-        case BinaryOp_BitXor: {
+        case BinaryOp_BitXor:
+        case BinaryOp_Mod: {
             size_t error_checkpoint = compiler->get_error_checkpoint();
 
             if (expected_type_ref.id == 0) {
@@ -1297,7 +1297,8 @@ analyze_decl(Compiler *compiler, AnalyzerState *state, DeclRef decl_ref)
             var_type = compiler->expr_as_types[decl.var_decl.type_expr];
         }
 
-        if (decl.var_decl.value_expr.get(compiler).kind != ExprKind_UndefinedLiteral) {
+        if (decl.var_decl.value_expr.get(compiler).kind !=
+            ExprKind_UndefinedLiteral) {
             analyze_expr(compiler, state, decl.var_decl.value_expr, var_type);
             if (var_type.id == 0) {
                 var_type = compiler->expr_types[decl.var_decl.value_expr];
@@ -1342,7 +1343,8 @@ analyze_decl(Compiler *compiler, AnalyzerState *state, DeclRef decl_ref)
         }
 
         LANG_ASSERT(decl.var_decl.value_expr.id > 0);
-        if (decl.var_decl.value_expr.get(compiler).kind != ExprKind_UndefinedLiteral) {
+        if (decl.var_decl.value_expr.get(compiler).kind !=
+            ExprKind_UndefinedLiteral) {
             analyze_expr(compiler, state, decl.var_decl.value_expr, var_type);
             if (var_type.id == 0) {
                 var_type = compiler->expr_types[decl.var_decl.value_expr];

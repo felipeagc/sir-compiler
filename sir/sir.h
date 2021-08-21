@@ -53,7 +53,6 @@ typedef enum SIRBinaryOperation {
     SIRBinaryOperation_FSub,
     SIRBinaryOperation_FMul,
     SIRBinaryOperation_FDiv,
-    SIRBinaryOperation_FRem,
 
     SIRBinaryOperation_BEQ,
     SIRBinaryOperation_BNE,

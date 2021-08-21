@@ -621,19 +621,6 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
         case SIRBinaryOperation_FSub: SIR_INTERP_FLOAT_BINOP(-); break;
         case SIRBinaryOperation_FMul: SIR_INTERP_FLOAT_BINOP(*); break;
         case SIRBinaryOperation_FDiv: SIR_INTERP_FLOAT_BINOP(/); break;
-        case SIRBinaryOperation_FRem: {
-            switch (value_size) {
-            case 4:
-                *(float *)value_addr =
-                    fmodf(*(float *)left_addr, *(float *)right_addr);
-                break;
-            case 8:
-                *(double *)value_addr =
-                    fmod(*(double *)left_addr, *(double *)right_addr);
-                break;
-            }
-            break;
-        }
         case SIRBinaryOperation_BEQ: {
             SIR_INTERP_BINOP(bool, bool, ==);
             break;

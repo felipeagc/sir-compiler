@@ -39,7 +39,6 @@ static const char *binop_to_string(SIRBinaryOperation op)
     case SIRBinaryOperation_FSub: return "fsub";
     case SIRBinaryOperation_FMul: return "fmul";
     case SIRBinaryOperation_FDiv: return "fdiv";
-    case SIRBinaryOperation_FRem: return "frem";
 
     case SIRBinaryOperation_BEQ: return "beq";
     case SIRBinaryOperation_BNE: return "bne";
@@ -1165,8 +1164,7 @@ SIRInstRef SIRBuilderInsertBinop(
     case SIRBinaryOperation_FAdd:
     case SIRBinaryOperation_FSub:
     case SIRBinaryOperation_FMul:
-    case SIRBinaryOperation_FDiv:
-    case SIRBinaryOperation_FRem: {
+    case SIRBinaryOperation_FDiv: {
         inst.type = SIRModuleGetInst(builder->module, left_ref).type;
         break;
     }

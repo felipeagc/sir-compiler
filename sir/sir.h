@@ -108,6 +108,8 @@ typedef enum SIRInstKind {
     SIRInstKind_ZExt,
     SIRInstKind_SExt,
     SIRInstKind_Trunc,
+    SIRInstKind_FPTrunc,
+    SIRInstKind_FPExt,
     SIRInstKind_ArrayElemPtr,
     SIRInstKind_StructElemPtr,
     SIRInstKind_ExtractArrayElem,
@@ -229,6 +231,10 @@ SIRInstRef SIRBuilderInsertZext(
 SIRInstRef SIRBuilderInsertSext(
     SIRBuilder *builder, SIRType *dest_type, SIRInstRef inst_ref);
 SIRInstRef SIRBuilderInsertTrunc(
+    SIRBuilder *builder, SIRType *dest_type, SIRInstRef inst_ref);
+SIRInstRef SIRBuilderInsertFPTrunc(
+    SIRBuilder *builder, SIRType *dest_type, SIRInstRef inst_ref);
+SIRInstRef SIRBuilderInsertFPExt(
     SIRBuilder *builder, SIRType *dest_type, SIRInstRef inst_ref);
 
 SIRInstRef SIRBuilderInsertBinop(

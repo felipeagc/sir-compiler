@@ -320,6 +320,11 @@ struct Type {
         return false;
     }
 
+    inline bool is_runtime_float()
+    {
+        return this->kind == TypeKind_Float;
+    }
+
     inline bool is_runtime()
     {
         switch (this->kind) {

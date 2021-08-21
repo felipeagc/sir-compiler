@@ -98,6 +98,8 @@ static char *SIRInterpGetInstAddr(SIRInterpContext *ctx, SIRInstRef inst_ref)
     case SIRInstKind_ZExt:
     case SIRInstKind_SExt:
     case SIRInstKind_Trunc:
+    case SIRInstKind_FPTrunc:
+    case SIRInstKind_FPExt:
     case SIRInstKind_ArrayElemPtr:
     case SIRInstKind_StructElemPtr:
     case SIRInstKind_ExtractArrayElem:
@@ -447,6 +449,42 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
         case 8: *(uint64_t *)value_addr = value; break;
         default: SIR_ASSERT(0);
         }
+
+        break;
+    }
+    case SIRInstKind_FPTrunc: {
+        SIRType *source_type =
+            SIRModuleGetInstType(ctx->mod, inst.trunc.inst_ref);
+        size_t source_size = SIRTypeSizeOf(ctx->mod, source_type);
+        SIRType *dest_type = SIRModuleGetInstType(ctx->mod, inst_ref);
+        size_t dest_size = SIRTypeSizeOf(ctx->mod, dest_type);
+
+        SIR_ASSERT(dest_size <= source_size);
+
+        char *source_addr = SIRInterpGetInstAddr(ctx, inst.trunc.inst_ref);
+
+        value_addr = SIRInterpAllocStackVal(
+            ctx, dest_size, SIRTypeAlignOf(ctx->mod, dest_type));
+
+        *(float *)value_addr = *(float *)source_addr;
+
+        break;
+    }
+    case SIRInstKind_FPExt: {
+        SIRType *source_type =
+            SIRModuleGetInstType(ctx->mod, inst.trunc.inst_ref);
+        size_t source_size = SIRTypeSizeOf(ctx->mod, source_type);
+        SIRType *dest_type = SIRModuleGetInstType(ctx->mod, inst_ref);
+        size_t dest_size = SIRTypeSizeOf(ctx->mod, dest_type);
+
+        SIR_ASSERT(dest_size >= source_size);
+
+        char *source_addr = SIRInterpGetInstAddr(ctx, inst.trunc.inst_ref);
+
+        value_addr = SIRInterpAllocStackVal(
+            ctx, dest_size, SIRTypeAlignOf(ctx->mod, dest_type));
+
+        *(double *)value_addr = *(double *)source_addr;
 
         break;
     }

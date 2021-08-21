@@ -28,43 +28,18 @@
  -- io.close(file)
 
 
--- local file = io.open("test_benchmark.lang", "w")
--- io.output(file)
-
--- local func_count = 1000
--- local stmt_count = 1000
-
--- io.write("fn extern puts(arg: *u8);\n\n")
-
--- for i = 1,func_count do
--- 	io.write(string.format("fn func%d() {\n", i))
--- 	for j = 1,stmt_count do
--- 		io.write("\tputs(\"hello, world!\");\n")
--- 	end
--- 	io.write("}\n\n")
--- end
-
--- io.write("fn export main() {\n")
--- for i = 1,func_count do
--- 	io.write(string.format("\tfunc%d();\n", i))
--- end
--- io.write("}\n")
-
--- io.close(file)
-
 local file = io.open("test_benchmark.lang", "w")
 io.output(file)
 
 local func_count = 1000
-local stmt_count = 500
+local stmt_count = 1000
 
-io.write("fn extern vararg printf(arg: *u8);\n\n")
+io.write("fn extern puts(arg: *u8);\n\n")
 
 for i = 1,func_count do
 	io.write(string.format("fn func%d() {\n", i))
 	for j = 1,stmt_count do
-		io.write(string.format("\tvar a%d: [1 + 1]i32 = undefined;\n", j))
-		io.write("\tprintf(\"hello, world!\");\n")
+		io.write("\tputs(\"hello, world!\");\n")
 	end
 	io.write("}\n\n")
 end
@@ -76,3 +51,28 @@ end
 io.write("}\n")
 
 io.close(file)
+
+-- local file = io.open("test_benchmark.lang", "w")
+-- io.output(file)
+
+-- local func_count = 1000
+-- local stmt_count = 500
+
+-- io.write("fn extern vararg printf(arg: *u8);\n\n")
+
+-- for i = 1,func_count do
+-- 	io.write(string.format("fn func%d() {\n", i))
+-- 	for j = 1,stmt_count do
+-- 		io.write(string.format("\tvar a%d: [1 + 1]i32 = undefined;\n", j))
+-- 		io.write("\tprintf(\"hello, world!\");\n")
+-- 	end
+-- 	io.write("}\n\n")
+-- end
+
+-- io.write("fn export main() {\n")
+-- for i = 1,func_count do
+-- 	io.write(string.format("\tfunc%d();\n", i))
+-- end
+-- io.write("}\n")
+
+-- io.close(file)

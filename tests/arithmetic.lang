@@ -82,18 +82,22 @@ fn export main(): i32 {
 	printf("\n");
 
 	// Float addition
+	printf("%.2f\n", f64(f32(5 + 2)));
 	printf("%.2f\n", f64(5 + 2));
 	printf("\n");
 
 	// Float subtraction
+	printf("%.2f\n", f64(f32(5 - 2)));
 	printf("%.2f\n", f64(5 - 2));
 	printf("\n");
 
 	// Float multiplication
+	printf("%.2f\n", f64(f32(5 * 2)));
 	printf("%.2f\n", f64(5 * 2));
 	printf("\n");
 
 	// Float division
+	printf("%.2f\n", f64(f32(5 / 2)));
 	printf("%.2f\n", f64(5 / 2));
 
 	return 0;

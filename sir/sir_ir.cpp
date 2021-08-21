@@ -167,6 +167,28 @@ print_instruction(SIRModule *module, SIRInstRef inst_ref, SIRStringBuilder *sb)
         break;
     }
 
+    case SIRInstKind_FPTrunc: {
+        SIRString type_string = SIRTypeToString(module, inst.type);
+        sb->sprintf(
+            "%%r%u = fptrunc %.*s %%r%u",
+            inst_ref.id,
+            (int)type_string.len,
+            type_string.ptr,
+            inst.fptrunc.inst_ref.id);
+        break;
+    }
+
+    case SIRInstKind_FPExt: {
+        SIRString type_string = SIRTypeToString(module, inst.type);
+        sb->sprintf(
+            "%%r%u = fpext %.*s %%r%u",
+            inst_ref.id,
+            (int)type_string.len,
+            type_string.ptr,
+            inst.fpext.inst_ref.id);
+        break;
+    }
+
     case SIRInstKind_Load: {
         SIRString type_string = SIRTypeToString(module, inst.type);
         sb->sprintf(
@@ -1135,6 +1157,36 @@ SIRInstRef SIRBuilderInsertTrunc(
     inst.kind = SIRInstKind_Trunc;
     inst.type = dest_type;
     inst.trunc = {inst_ref};
+
+    return builder_insert_inst(builder, inst);
+}
+
+SIRInstRef SIRBuilderInsertFPTrunc(
+    SIRBuilder *builder, SIRType *dest_type, SIRInstRef inst_ref)
+{
+    ZoneScoped;
+
+    SIR_ASSERT(dest_type->kind == SIRTypeKind_Float);
+
+    SIRInst inst = {};
+    inst.kind = SIRInstKind_FPTrunc;
+    inst.type = dest_type;
+    inst.fptrunc = {inst_ref};
+
+    return builder_insert_inst(builder, inst);
+}
+
+SIRInstRef SIRBuilderInsertFPExt(
+    SIRBuilder *builder, SIRType *dest_type, SIRInstRef inst_ref)
+{
+    ZoneScoped;
+
+    SIR_ASSERT(dest_type->kind == SIRTypeKind_Float);
+
+    SIRInst inst = {};
+    inst.kind = SIRInstKind_FPExt;
+    inst.type = dest_type;
+    inst.fpext = {inst_ref};
 
     return builder_insert_inst(builder, inst);
 }

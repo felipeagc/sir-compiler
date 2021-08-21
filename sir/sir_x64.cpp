@@ -87,6 +87,7 @@ enum Mnem : uint8_t {
     Mnem_SSE_MUL,
     Mnem_SSE_DIV,
     Mnem_SSE_UCOMIS,
+    Mnem_SSE_CVTS,
     Mnem_COUNT,
 };
 
@@ -897,6 +898,8 @@ void X64AsmBuilder::generate_const(SIRInstRef inst_ref)
     case SIRInstKind_ZExt:
     case SIRInstKind_SExt:
     case SIRInstKind_Trunc:
+    case SIRInstKind_FPTrunc:
+    case SIRInstKind_FPExt:
     case SIRInstKind_ArrayElemPtr:
     case SIRInstKind_StructElemPtr:
     case SIRInstKind_ExtractArrayElem:
@@ -1087,6 +1090,30 @@ void X64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
             SIRTypeSizeOf(this->module, dest_type), RegisterIndex_RAX);
         this->move_inst_rvalue(inst.trunc.inst_ref, &source_ax_value);
         this->encode_mnem2(Mnem_MOV, &dest_value, &trunc_ax_value);
+
+        break;
+    }
+
+    case SIRInstKind_FPExt:
+    case SIRInstKind_FPTrunc: {
+        MetaValue dest_value = this->meta_insts[inst_ref.id];
+        MetaValue source_value = this->meta_insts[inst.fptrunc.inst_ref.id];
+
+        SIRType *source_type =
+            SIRModuleGetInst(this->module, inst.trunc.inst_ref).type;
+        SIRType *dest_type = inst.type;
+
+        uint32_t source_size = SIRTypeSizeOf(this->module, source_type);
+        uint32_t dest_size = SIRTypeSizeOf(this->module, dest_type);
+
+        if (source_size != dest_size) {
+            MetaValue xmm0_value = create_float_register_value(
+                SIRTypeSizeOf(this->module, dest_type), RegisterIndex_XMM0);
+            this->encode_mnem2(Mnem_SSE_CVTS, &xmm0_value, &source_value);
+            this->encode_mnem2(Mnem_MOV, &dest_value, &xmm0_value);
+        } else {
+            this->encode_mnem2(Mnem_MOV, &dest_value, &source_value);
+        }
 
         break;
     }
@@ -2757,6 +2784,8 @@ void X64AsmBuilder::generate_function(SIRInstRef func_ref)
             case SIRInstKind_ZExt:
             case SIRInstKind_SExt:
             case SIRInstKind_Trunc:
+            case SIRInstKind_FPTrunc:
+            case SIRInstKind_FPExt:
             case SIRInstKind_Binop:
             case SIRInstKind_ArrayElemPtr:
             case SIRInstKind_StructElemPtr:
@@ -3390,6 +3419,18 @@ SIRCreateX64Builder(SIRModule *module, SIRObjectBuilder *obj_builder)
                      [OperandKind_Memory][SizeClass_8] = FE_SSE_UCOMISDrm;
     ENCODING_ENTRIES2[Mnem_SSE_UCOMIS][OperandKind_FReg][SizeClass_4]
                      [OperandKind_Memory][SizeClass_4] = FE_SSE_UCOMISSrm;
+
+    // SSE CVTS
+
+    ENCODING_ENTRIES2[Mnem_SSE_CVTS][OperandKind_FReg][SizeClass_8]
+                     [OperandKind_FReg][SizeClass_4] = FE_SSE_CVTSS2SDrr;
+    ENCODING_ENTRIES2[Mnem_SSE_CVTS][OperandKind_FReg][SizeClass_8]
+                     [OperandKind_Memory][SizeClass_4] = FE_SSE_CVTSS2SDrm;
+
+    ENCODING_ENTRIES2[Mnem_SSE_CVTS][OperandKind_FReg][SizeClass_4]
+                     [OperandKind_FReg][SizeClass_8] = FE_SSE_CVTSD2SSrr;
+    ENCODING_ENTRIES2[Mnem_SSE_CVTS][OperandKind_FReg][SizeClass_4]
+                     [OperandKind_Memory][SizeClass_8] = FE_SSE_CVTSD2SSrm;
 
     return &asm_builder->vt;
 }

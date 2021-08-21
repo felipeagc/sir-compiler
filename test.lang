@@ -77,6 +77,9 @@ fn export main() {
 
     var a: f64 = 123;
     var b: f64 = 123;
+    var c: f32 = f32(b);
+    var d: f64 = f64(c);
+    var e: f64 = f64(d);
     if (a != b) {
         printf("yo\n");
     }

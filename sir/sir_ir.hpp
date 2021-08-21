@@ -151,6 +151,12 @@ struct SIRInst {
         struct {
             SIRInstRef inst_ref;
         } trunc;
+        struct {
+            SIRInstRef inst_ref;
+        } fptrunc;
+        struct {
+            SIRInstRef inst_ref;
+        } fpext;
     };
     SIRInstKind kind;
     SIRType *type;

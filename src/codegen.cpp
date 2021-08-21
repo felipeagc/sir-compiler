@@ -385,7 +385,6 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
                 value = {false, source_value};
             } else if (
                 dest_type.is_runtime_int() && source_type.is_runtime_int()) {
-
                 if (dest_type.int_.bits < source_type.int_.bits) {
                     value = {
                         false,
@@ -406,8 +405,24 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
                 } else {
                     value = {false, source_value};
                 }
+            } else if (
+                dest_type.is_runtime_float() &&
+                source_type.is_runtime_float()) {
+                if (dest_type.float_.bits < source_type.float_.bits) {
+                    value = {
+                        false,
+                        SIRBuilderInsertFPTrunc(
+                            ctx->builder, dest_type_ir, source_value)};
+                } else if (dest_type.float_.bits > source_type.float_.bits) {
+                    value = {
+                        false,
+                        SIRBuilderInsertFPExt(
+                            ctx->builder, dest_type_ir, source_value)};
+                } else {
+                    value = {false, source_value};
+                }
             } else {
-                LANG_ASSERT(!"type cast unimplemented");
+                LANG_ASSERT(!"TODO: type cast unimplemented");
             }
             break;
         }

@@ -493,19 +493,117 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
         break;
     }
     case SIRInstKind_SIToFP: {
-        SIR_ASSERT(!"unimplemented");
+        SIRType *source_type =
+            SIRModuleGetInstType(ctx->mod, inst.cast.inst_ref);
+        size_t source_size = SIRTypeSizeOf(ctx->mod, source_type);
+        SIRType *dest_type = SIRModuleGetInstType(ctx->mod, inst_ref);
+        size_t dest_size = SIRTypeSizeOf(ctx->mod, dest_type);
+
+        SIR_ASSERT(dest_size <= source_size);
+
+        char *source_addr = SIRInterpGetInstAddr(ctx, inst.cast.inst_ref);
+
+        value_addr = SIRInterpAllocStackVal(
+            ctx, dest_size, SIRTypeAlignOf(ctx->mod, dest_type));
+
+        int64_t value = 0;
+        switch (source_size) {
+        case 1: value = *(int8_t *)source_addr; break;
+        case 2: value = *(int16_t *)source_addr; break;
+        case 4: value = *(int32_t *)source_addr; break;
+        case 8: value = *(int64_t *)source_addr; break;
+        default: SIR_ASSERT(0);
+        }
+
+        switch (dest_size) {
+        case 4: *(float *)value_addr = value; break;
+        case 8: *(double *)value_addr = value; break;
+        default: SIR_ASSERT(0);
+        }
         break;
     }
     case SIRInstKind_UIToFP: {
-        SIR_ASSERT(!"unimplemented");
+        SIRType *source_type =
+            SIRModuleGetInstType(ctx->mod, inst.cast.inst_ref);
+        size_t source_size = SIRTypeSizeOf(ctx->mod, source_type);
+        SIRType *dest_type = SIRModuleGetInstType(ctx->mod, inst_ref);
+        size_t dest_size = SIRTypeSizeOf(ctx->mod, dest_type);
+
+        char *source_addr = SIRInterpGetInstAddr(ctx, inst.cast.inst_ref);
+
+        value_addr = SIRInterpAllocStackVal(
+            ctx, dest_size, SIRTypeAlignOf(ctx->mod, dest_type));
+
+        uint64_t value = 0;
+        switch (source_size) {
+        case 1: value = *(uint8_t *)source_addr; break;
+        case 2: value = *(uint16_t *)source_addr; break;
+        case 4: value = *(uint32_t *)source_addr; break;
+        case 8: value = *(uint64_t *)source_addr; break;
+        default: SIR_ASSERT(0);
+        }
+
+        switch (dest_size) {
+        case 4: *(float *)value_addr = value; break;
+        case 8: *(double *)value_addr = value; break;
+        default: SIR_ASSERT(0);
+        }
         break;
     }
     case SIRInstKind_FPToSI: {
-        SIR_ASSERT(!"unimplemented");
+        SIRType *source_type =
+            SIRModuleGetInstType(ctx->mod, inst.cast.inst_ref);
+        size_t source_size = SIRTypeSizeOf(ctx->mod, source_type);
+        SIRType *dest_type = SIRModuleGetInstType(ctx->mod, inst_ref);
+        size_t dest_size = SIRTypeSizeOf(ctx->mod, dest_type);
+
+        char *source_addr = SIRInterpGetInstAddr(ctx, inst.cast.inst_ref);
+
+        value_addr = SIRInterpAllocStackVal(
+            ctx, dest_size, SIRTypeAlignOf(ctx->mod, dest_type));
+
+        double value = 0;
+        switch (source_size) {
+        case 4: value = *(float *)source_addr; break;
+        case 8: value = *(double *)source_addr; break;
+        default: SIR_ASSERT(0);
+        }
+
+        switch (dest_size) {
+        case 1: *(int8_t *)value_addr = value; break;
+        case 2: *(int16_t *)value_addr = value; break;
+        case 4: *(int32_t *)value_addr = value; break;
+        case 8: *(int64_t *)value_addr = value; break;
+        default: SIR_ASSERT(0);
+        }
         break;
     }
     case SIRInstKind_FPToUI: {
-        SIR_ASSERT(!"unimplemented");
+        SIRType *source_type =
+            SIRModuleGetInstType(ctx->mod, inst.cast.inst_ref);
+        size_t source_size = SIRTypeSizeOf(ctx->mod, source_type);
+        SIRType *dest_type = SIRModuleGetInstType(ctx->mod, inst_ref);
+        size_t dest_size = SIRTypeSizeOf(ctx->mod, dest_type);
+
+        char *source_addr = SIRInterpGetInstAddr(ctx, inst.cast.inst_ref);
+
+        value_addr = SIRInterpAllocStackVal(
+            ctx, dest_size, SIRTypeAlignOf(ctx->mod, dest_type));
+
+        double value = 0;
+        switch (source_size) {
+        case 4: value = *(float *)source_addr; break;
+        case 8: value = *(double *)source_addr; break;
+        default: SIR_ASSERT(0);
+        }
+
+        switch (dest_size) {
+        case 1: *(uint8_t *)value_addr = value; break;
+        case 2: *(uint16_t *)value_addr = value; break;
+        case 4: *(uint32_t *)value_addr = value; break;
+        case 8: *(uint64_t *)value_addr = value; break;
+        default: SIR_ASSERT(0);
+        }
         break;
     }
     case SIRInstKind_ArrayElemPtr: {

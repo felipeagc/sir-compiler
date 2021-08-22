@@ -74,8 +74,9 @@ fn export main() {
 
 	// print_int(0xFF00000000000000);
 	// print_int(0xffffffffffffffff);
+	print_int(-1);
 
     var a: f64 = 123;
     var b: f64 = -a;
-    printf("%f\n", f64(b));
+    printf("%f %f %f %f %f %f %f %f %f %f\n", f32(1), f32(b), f32(b), f32(b), f32(b), f32(b), f32(b), f32(b), f32(9), f32(10));
 }

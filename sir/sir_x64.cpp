@@ -2179,6 +2179,8 @@ void X64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
                 SIRInstRef param_inst_ref = inst.func_call.params[i];
                 SIR_ASSERT(param_inst_ref.id > 0);
 
+                bool is_param_variadic = i >= called_func->param_types_len;
+
                 SIRInst param_inst =
                     SIRModuleGetInst(this->module, param_inst_ref);
 
@@ -2235,16 +2237,22 @@ void X64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
                 }
                 case SIRTypeKind_Float: {
                     MetaValue dest_param_value = {};
+
+                    uint32_t dest_bytes = param_inst.type->float_.bits >> 3;
+                    if (is_param_variadic && param_type->float_.bits == 32) {
+                        dest_bytes = 8;
+                    }
+
                     if (used_float_regs <
                         SIR_CARRAY_LENGTH(SYSV_FLOAT_PARAM_REGS)) {
                         dest_param_value = create_float_register_value(
-                            param_inst.type->float_.bits >> 3,
+                            dest_bytes,
                             SYSV_FLOAT_PARAM_REGS[used_float_regs++]);
                     } else {
                         param_stack_offset =
                             SIR_ROUND_UP(param_align, param_stack_offset);
                         dest_param_value = create_int_register_memory_value(
-                            param_inst.type->float_.bits >> 3,
+                            dest_bytes,
                             RegisterIndex_RSP,
                             0,
                             RegisterIndex_None,
@@ -2252,7 +2260,35 @@ void X64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
                         param_stack_offset +=
                             8; // pretty sure this should always be 8
                     }
-                    this->move_inst_rvalue(param_inst_ref, &dest_param_value);
+
+                    if (is_param_variadic && param_type->float_.bits == 32) {
+                        switch (dest_param_value.kind) {
+                        case MetaValueKind_IRegisterMemory: {
+                            this->encode(FE_SSE_MOVQrr, FE_AX, FE_XMM0);
+                            MetaValue xmm_64 = create_float_register_value(
+                                8, RegisterIndex_XMM0);
+                            this->encode_mnem2(
+                                Mnem_SSE_CVTS,
+                                &xmm_64,
+                                &this->meta_insts[param_inst_ref.id]);
+                            this->encode_mnem2(
+                                Mnem_MOV, &dest_param_value, &xmm_64);
+                            this->encode(FE_SSE_MOVQrr, FE_XMM0, FE_AX);
+                            break;
+                        }
+                        case MetaValueKind_FRegister: {
+                            this->encode_mnem2(
+                                Mnem_SSE_CVTS,
+                                &dest_param_value,
+                                &this->meta_insts[param_inst_ref.id]);
+                            break;
+                        }
+                        default: SIR_ASSERT(0);
+                        }
+                    } else {
+                        this->move_inst_rvalue(
+                            param_inst_ref, &dest_param_value);
+                    }
                     break;
                 }
                 default: {
@@ -2380,9 +2416,9 @@ void X64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
             if (called_func->variadic) {
                 // Write the amount of vector registers to %AL
                 MetaValue float_count_imm =
-                    create_imm_int_value(1, used_float_regs);
+                    create_imm_int_value(4, used_float_regs);
                 MetaValue float_count_reg =
-                    create_int_register_value(1, RegisterIndex_RAX);
+                    create_int_register_value(4, RegisterIndex_RAX);
                 this->encode_mnem2(
                     Mnem_MOV, &float_count_reg, &float_count_imm);
             }

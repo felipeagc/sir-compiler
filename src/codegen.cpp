@@ -630,15 +630,75 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
             break;
         }
         case UnaryOp_Negate: {
-            LANG_ASSERT(!"unimplemented");
+            CodegenValue operand_value =
+                codegen_expr(compiler, ctx, expr.unary.left_ref);
+            SIRInstRef operand_inst = load_lvalue(ctx, operand_value);
+
+            TypeRef inner_ty_ref =
+                compiler->expr_types[expr_ref].inner(compiler);
+            Type inner_ty = inner_ty_ref.get(compiler);
+
+            switch (inner_ty.kind) {
+            case TypeKind_Int: {
+                value = {
+                    false,
+                    SIRBuilderInsertBinop(
+                        ctx->builder,
+                        SIRBinaryOperation_ISub,
+                        SIRModuleAddConstInt(
+                            ctx->module, ctx->type_values[inner_ty_ref], 0),
+                        operand_inst)};
+                break;
+            }
+            case TypeKind_Float: {
+                value = {
+                    false, SIRBuilderInsertFNeg(ctx->builder, operand_inst)};
+                break;
+            }
+            default: LANG_ASSERT(0);
+            }
+
             break;
         }
         case UnaryOp_Not: {
-            LANG_ASSERT(!"unimplemented");
+            CodegenValue operand_value =
+                codegen_expr(compiler, ctx, expr.unary.left_ref);
+            SIRInstRef operand_inst = load_lvalue(ctx, operand_value);
+
+            TypeRef inner_ty_ref =
+                compiler->expr_types[expr_ref].inner(compiler);
+
+            operand_inst = SIRBuilderInsertTrunc(
+                ctx->builder, SIRModuleGetBoolType(ctx->module), operand_inst);
+
+            operand_inst = SIRBuilderInsertBinop(
+                ctx->builder,
+                SIRBinaryOperation_Xor,
+                operand_inst,
+                SIRModuleAddConstBool(ctx->module, true));
+
+            operand_inst = SIRBuilderInsertZext(
+                ctx->builder, ctx->type_values[inner_ty_ref.id], operand_inst);
+
+            value = {false, operand_inst};
             break;
         }
         case UnaryOp_BitNot: {
-            LANG_ASSERT(!"unimplemented");
+            CodegenValue operand_value =
+                codegen_expr(compiler, ctx, expr.unary.left_ref);
+            SIRInstRef operand_inst = load_lvalue(ctx, operand_value);
+
+            TypeRef inner_ty_ref =
+                compiler->expr_types[expr_ref].inner(compiler);
+
+            operand_inst = SIRBuilderInsertBinop(
+                ctx->builder,
+                SIRBinaryOperation_Xor,
+                operand_inst,
+                SIRModuleAddConstInt(
+                    ctx->module, ctx->type_values[inner_ty_ref], -1));
+
+            value = {false, operand_inst};
             break;
         }
         }

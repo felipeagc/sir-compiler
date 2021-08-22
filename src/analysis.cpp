@@ -739,8 +739,7 @@ static void analyze_expr(
             TypeRef inner_ref = subtype_ref.inner(compiler);
             Type inner_type = inner_ref.get(compiler);
 
-            if (inner_type.kind != TypeKind_Bool &&
-                inner_type.kind != TypeKind_Int) {
+            if (inner_type.kind != TypeKind_Int) {
                 String type_string = subtype_ref.get(compiler).to_string(compiler);
                 compiler->add_error(
                     compiler->expr_locs[expr_ref],

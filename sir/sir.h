@@ -54,8 +54,6 @@ typedef enum SIRBinaryOperation {
     SIRBinaryOperation_FMul,
     SIRBinaryOperation_FDiv,
 
-    SIRBinaryOperation_BEQ,
-    SIRBinaryOperation_BNE,
     SIRBinaryOperation_IEQ,
     SIRBinaryOperation_INE,
     SIRBinaryOperation_UGT,
@@ -114,6 +112,7 @@ typedef enum SIRInstKind {
     SIRInstKind_UIToFP,
     SIRInstKind_FPToSI,
     SIRInstKind_FPToUI,
+    SIRInstKind_FNeg,
     SIRInstKind_ArrayElemPtr,
     SIRInstKind_StructElemPtr,
     SIRInstKind_ExtractArrayElem,
@@ -248,6 +247,8 @@ SIRInstRef SIRBuilderInsertSIToFP(
     SIRBuilder *builder, SIRType *dest_type, SIRInstRef inst_ref);
 SIRInstRef SIRBuilderInsertUIToFP(
     SIRBuilder *builder, SIRType *dest_type, SIRInstRef inst_ref);
+
+SIRInstRef SIRBuilderInsertFNeg(SIRBuilder *builder, SIRInstRef inst_ref);
 
 SIRInstRef SIRBuilderInsertBinop(
     SIRBuilder *builder,

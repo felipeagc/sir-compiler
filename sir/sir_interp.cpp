@@ -104,6 +104,7 @@ static char *SIRInterpGetInstAddr(SIRInterpContext *ctx, SIRInstRef inst_ref)
     case SIRInstKind_UIToFP:
     case SIRInstKind_FPToSI:
     case SIRInstKind_FPToUI:
+    case SIRInstKind_FNeg:
     case SIRInstKind_ArrayElemPtr:
     case SIRInstKind_StructElemPtr:
     case SIRInstKind_ExtractArrayElem:
@@ -606,6 +607,23 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
         }
         break;
     }
+    case SIRInstKind_FNeg: {
+        SIRType *dest_type = SIRModuleGetInstType(ctx->mod, inst_ref);
+        size_t dest_size = SIRTypeSizeOf(ctx->mod, dest_type);
+
+        char *source_addr = SIRInterpGetInstAddr(ctx, inst.fneg.inst_ref);
+
+        value_addr = SIRInterpAllocStackVal(
+            ctx, dest_size, SIRTypeAlignOf(ctx->mod, dest_type));
+
+        switch (dest_size) {
+        case 4: *(float *)value_addr = -(*(float *)source_addr); break;
+        case 8: *(double *)value_addr = -(*(double *)source_addr); break;
+        default: SIR_ASSERT(0);
+        }
+
+        break;
+    }
     case SIRInstKind_ArrayElemPtr: {
         SIRType *index_type =
             SIRModuleGetInstType(ctx->mod, inst.array_elem_ptr.index_ref);
@@ -777,14 +795,6 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
         case SIRBinaryOperation_FSub: SIR_INTERP_FLOAT_BINOP(-); break;
         case SIRBinaryOperation_FMul: SIR_INTERP_FLOAT_BINOP(*); break;
         case SIRBinaryOperation_FDiv: SIR_INTERP_FLOAT_BINOP(/); break;
-        case SIRBinaryOperation_BEQ: {
-            SIR_INTERP_BINOP(bool, bool, ==);
-            break;
-        }
-        case SIRBinaryOperation_BNE: {
-            SIR_INTERP_BINOP(bool, bool, !=);
-            break;
-        }
         case SIRBinaryOperation_IEQ: SIR_INTERP_UINT_CMP_BINOP(==); break;
         case SIRBinaryOperation_INE: SIR_INTERP_UINT_CMP_BINOP(!=); break;
         case SIRBinaryOperation_UGT: SIR_INTERP_UINT_CMP_BINOP(>); break;

@@ -142,6 +142,9 @@ struct SIRInst {
         struct {
             SIRInstRef inst_ref;
         } cast;
+        struct {
+            SIRInstRef inst_ref;
+        } fneg;
     };
     SIRInstKind kind;
     SIRType *type;

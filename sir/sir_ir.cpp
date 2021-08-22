@@ -40,8 +40,6 @@ static const char *binop_to_string(SIRBinaryOperation op)
     case SIRBinaryOperation_FMul: return "fmul";
     case SIRBinaryOperation_FDiv: return "fdiv";
 
-    case SIRBinaryOperation_BEQ: return "beq";
-    case SIRBinaryOperation_BNE: return "bne";
     case SIRBinaryOperation_IEQ: return "ieq";
     case SIRBinaryOperation_INE: return "ine";
     case SIRBinaryOperation_UGT: return "ugt";
@@ -230,6 +228,17 @@ print_instruction(SIRModule *module, SIRInstRef inst_ref, SIRStringBuilder *sb)
             (int)type_string.len,
             type_string.ptr,
             inst.cast.inst_ref.id);
+        break;
+    }
+
+    case SIRInstKind_FNeg: {
+        SIRString type_string = SIRTypeToString(module, inst.type);
+        sb->sprintf(
+            "%%r%u = fneg %.*s %%r%u",
+            inst_ref.id,
+            (int)type_string.len,
+            type_string.ptr,
+            inst.fneg.inst_ref.id);
         break;
     }
 
@@ -1296,6 +1305,21 @@ SIRInstRef SIRBuilderInsertUIToFP(
     return builder_insert_inst(builder, inst);
 }
 
+SIRInstRef SIRBuilderInsertFNeg(SIRBuilder *builder, SIRInstRef inst_ref)
+{
+    ZoneScoped;
+
+    SIRType *type = SIRModuleGetInst(builder->module, inst_ref).type;
+    SIR_ASSERT(type->kind == SIRTypeKind_Float);
+
+    SIRInst inst = {};
+    inst.kind = SIRInstKind_FNeg;
+    inst.type = type;
+    inst.fneg = {inst_ref};
+
+    return builder_insert_inst(builder, inst);
+}
+
 SIRInstRef SIRBuilderInsertBinop(
     SIRBuilder *builder,
     SIRBinaryOperation op,
@@ -1326,8 +1350,6 @@ SIRInstRef SIRBuilderInsertBinop(
         break;
     }
 
-    case SIRBinaryOperation_BEQ:
-    case SIRBinaryOperation_BNE:
     case SIRBinaryOperation_IEQ:
     case SIRBinaryOperation_INE:
     case SIRBinaryOperation_UGT:

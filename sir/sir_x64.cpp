@@ -906,6 +906,7 @@ void X64AsmBuilder::generate_const(SIRInstRef inst_ref)
     case SIRInstKind_UIToFP:
     case SIRInstKind_FPToSI:
     case SIRInstKind_FPToUI:
+    case SIRInstKind_FNeg:
     case SIRInstKind_ArrayElemPtr:
     case SIRInstKind_StructElemPtr:
     case SIRInstKind_ExtractArrayElem:
@@ -1232,6 +1233,32 @@ void X64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
 
         this->encode_mnem2(Mnem_MOV, &dest_value, &dest_reg_value);
 
+        break;
+    }
+
+    case SIRInstKind_FNeg: {
+        MetaValue dest_value = this->meta_insts[inst_ref.id];
+        MetaValue source_value = this->meta_insts[inst.cast.inst_ref.id];
+
+        uint32_t dest_size = SIRTypeSizeOf(this->module, inst.type);
+
+        MetaValue tmp_reg_value =
+            create_int_register_value(dest_size, RegisterIndex_RAX);
+        this->encode_mnem2(Mnem_MOV, &tmp_reg_value, &source_value);
+
+        switch (dest_size) {
+        case 4: {
+            this->encode(FE_XOR32ri, FE_AX, -2147483648);
+            break;
+        }
+        case 8: {
+            this->encode(FE_MOV64ri, FE_CX, -9223372036854775808ULL);
+            this->encode(FE_XOR64rr, FE_AX, FE_CX);
+            break;
+        }
+        }
+
+        this->encode_mnem2(Mnem_MOV, &dest_value, &tmp_reg_value);
         break;
     }
 
@@ -1627,8 +1654,6 @@ void X64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
             break;
         }
 
-        case SIRBinaryOperation_BEQ:
-        case SIRBinaryOperation_BNE:
         case SIRBinaryOperation_IEQ:
         case SIRBinaryOperation_INE:
         case SIRBinaryOperation_UGT:
@@ -1660,11 +1685,9 @@ void X64AsmBuilder::generate_inst(SIRInstRef func_ref, SIRInstRef inst_ref)
 
             switch (inst.binop.op) {
             default: SIR_ASSERT(0); break;
-            case SIRBinaryOperation_BEQ:
             case SIRBinaryOperation_IEQ:
                 this->encode(FE_SETZ8r, FE_AX); // sete
                 break;
-            case SIRBinaryOperation_BNE:
             case SIRBinaryOperation_INE:
                 this->encode(FE_SETNZ8r, FE_AX); // setne
                 break;
@@ -2907,6 +2930,7 @@ void X64AsmBuilder::generate_function(SIRInstRef func_ref)
             case SIRInstKind_UIToFP:
             case SIRInstKind_FPToSI:
             case SIRInstKind_FPToUI:
+            case SIRInstKind_FNeg:
             case SIRInstKind_Binop:
             case SIRInstKind_ArrayElemPtr:
             case SIRInstKind_StructElemPtr:

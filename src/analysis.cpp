@@ -644,6 +644,7 @@ static void analyze_expr(
             analyze_expr(compiler, state, expr.unary.left_ref);
 
             TypeRef subtype_ref = compiler->expr_types[expr.unary.left_ref];
+
             if (!subtype_ref.get(compiler).is_runtime()) {
                 Type subtype = subtype_ref.get(compiler);
                 String type_string = subtype.to_string(compiler);
@@ -674,10 +675,11 @@ static void analyze_expr(
             analyze_expr(compiler, state, expr.unary.left_ref);
 
             TypeRef subtype_ref = compiler->expr_types[expr.unary.left_ref];
-            Type subtype = subtype_ref.get(compiler);
+            TypeRef inner_ref = subtype_ref.inner(compiler);
+            Type inner_type = inner_ref.get(compiler);
 
-            if (subtype.kind != TypeKind_Pointer) {
-                String type_string = subtype.to_string(compiler);
+            if (inner_type.kind != TypeKind_Pointer) {
+                String type_string = subtype_ref.get(compiler).to_string(compiler);
                 compiler->add_error(
                     compiler->expr_locs[expr_ref],
                     "cannot dereference variable of type: '%.*s'",
@@ -686,18 +688,69 @@ static void analyze_expr(
                 break;
             }
 
-            compiler->expr_types[expr_ref] = subtype.pointer.sub_type;
+            compiler->expr_types[expr_ref] = inner_type.pointer.sub_type;
 
             break;
         }
         case UnaryOp_Negate: {
-            compiler->add_error(
-                compiler->expr_locs[expr_ref], "'-' not implemented");
+            analyze_expr(compiler, state, expr.unary.left_ref, expected_type_ref);
+
+            TypeRef subtype_ref = compiler->expr_types[expr.unary.left_ref];
+            TypeRef inner_ref = subtype_ref.inner(compiler);
+            Type inner_type = inner_ref.get(compiler);
+
+            if (!inner_type.is_numeric()) {
+                String type_string = subtype_ref.get(compiler).to_string(compiler);
+                compiler->add_error(
+                    compiler->expr_locs[expr_ref],
+                    "cannot negate variable of type: '%.*s'",
+                    (int)type_string.len,
+                    type_string.ptr);
+                break;
+            }
+
+            compiler->expr_types[expr_ref] = subtype_ref;
             break;
         }
         case UnaryOp_Not: {
-            compiler->add_error(
-                compiler->expr_locs[expr_ref], "'!' not implemented");
+            analyze_expr(compiler, state, expr.unary.left_ref, expected_type_ref);
+
+            TypeRef subtype_ref = compiler->expr_types[expr.unary.left_ref];
+            TypeRef inner_ref = subtype_ref.inner(compiler);
+            Type inner_type = inner_ref.get(compiler);
+
+            if (inner_type.kind != TypeKind_Bool) {
+                String type_string = subtype_ref.get(compiler).to_string(compiler);
+                compiler->add_error(
+                    compiler->expr_locs[expr_ref],
+                    "cannot use boolean 'not' on variable of type: '%.*s'",
+                    (int)type_string.len,
+                    type_string.ptr);
+                break;
+            }
+
+            compiler->expr_types[expr_ref] = subtype_ref;
+            break;
+        }
+        case UnaryOp_BitNot: {
+            analyze_expr(compiler, state, expr.unary.left_ref, expected_type_ref);
+
+            TypeRef subtype_ref = compiler->expr_types[expr.unary.left_ref];
+            TypeRef inner_ref = subtype_ref.inner(compiler);
+            Type inner_type = inner_ref.get(compiler);
+
+            if (inner_type.kind != TypeKind_Bool &&
+                inner_type.kind != TypeKind_Int) {
+                String type_string = subtype_ref.get(compiler).to_string(compiler);
+                compiler->add_error(
+                    compiler->expr_locs[expr_ref],
+                    "cannot use bitwise 'not' on variable of type: '%.*s'",
+                    (int)type_string.len,
+                    type_string.ptr);
+                break;
+            }
+
+            compiler->expr_types[expr_ref] = subtype_ref;
             break;
         }
         }

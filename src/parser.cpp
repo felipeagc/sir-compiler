@@ -1107,7 +1107,8 @@ parse_unary_expr(Compiler *compiler, ParserState *state, Location *expr_loc)
     switch (next_token.kind) {
     case TokenKind_Sub:
     case TokenKind_Not:
-    case TokenKind_BitAnd: {
+    case TokenKind_BitAnd:
+    case TokenKind_BitNot: {
         state->next_token();
 
         UnaryOp op = {};
@@ -1116,6 +1117,7 @@ parse_unary_expr(Compiler *compiler, ParserState *state, Location *expr_loc)
         case TokenKind_Sub: op = UnaryOp_Negate; break;
         case TokenKind_Not: op = UnaryOp_Not; break;
         case TokenKind_BitAnd: op = UnaryOp_AddressOf; break;
+        case TokenKind_BitNot: op = UnaryOp_BitNot; break;
         default: LANG_ASSERT(0); break;
         }
 

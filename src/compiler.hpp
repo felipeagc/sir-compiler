@@ -362,6 +362,7 @@ enum UnaryOp {
     UnaryOp_AddressOf,
     UnaryOp_Dereference,
     UnaryOp_Not,
+    UnaryOp_BitNot,
     UnaryOp_Negate,
 };
 

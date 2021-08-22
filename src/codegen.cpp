@@ -637,6 +637,10 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
             LANG_ASSERT(!"unimplemented");
             break;
         }
+        case UnaryOp_BitNot: {
+            LANG_ASSERT(!"unimplemented");
+            break;
+        }
         }
 
         break;

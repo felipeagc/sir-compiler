@@ -81,6 +81,54 @@ fn export main(): i32 {
 
 	printf("\n");
 
+	// Integer AND
+
+	printf("%d\n",  i32(u8(0x0f & 0xf0)));
+	printf("%d\n", i32(u16(0x0f & 0xf0)));
+	printf("%d\n", i32(u32(0x0f & 0xf0)));
+	printf("%d\n", i32(u64(0x0f & 0xf0)));
+
+	printf("\n");
+
+	printf("%d\n",  i32(i8(0x0f & 0xf0)));
+	printf("%d\n", i32(i16(0x0f & 0xf0)));
+	printf("%d\n", i32(i32(0x0f & 0xf0)));
+	printf("%d\n", i32(i64(0x0f & 0xf0)));
+
+	printf("\n");
+
+	// Integer OR
+
+	printf("%d\n",  i32(u8(0x08 | 0x40)));
+	printf("%d\n", i32(u16(0x08 | 0x40)));
+	printf("%d\n", i32(u32(0x08 | 0x40)));
+	printf("%d\n", i32(u64(0x08 | 0x40)));
+
+	printf("\n");
+
+	printf("%d\n",  i32(i8(0x08 | 0x40)));
+	printf("%d\n", i32(i16(0x08 | 0x40)));
+	printf("%d\n", i32(i32(0x08 | 0x40)));
+	printf("%d\n", i32(i64(0x08 | 0x40)));
+
+	printf("\n");
+
+	// Integer XOR
+
+	printf("%d\n",  i32(u8(0x48 ^ 0x40)));
+	printf("%d\n", i32(u16(0x48 ^ 0x40)));
+	printf("%d\n", i32(u32(0x48 ^ 0x40)));
+	printf("%d\n", i32(u64(0x48 ^ 0x40)));
+
+	printf("\n");
+
+	printf("%d\n",  i32(i8(0x48 ^ 0x40)));
+	printf("%d\n", i32(i16(0x48 ^ 0x40)));
+	printf("%d\n", i32(i32(0x48 ^ 0x40)));
+	printf("%d\n", i32(i64(0x48 ^ 0x40)));
+
+	printf("\n");
+
 	// Float addition
 	printf("%.2f\n", f64(f32(5 + 2)));
 	printf("%.2f\n", f64(5 + 2));

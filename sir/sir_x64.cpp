@@ -85,6 +85,12 @@ enum Mnem : uint8_t {
     Mnem_DIV,
     Mnem_IDIV,
     Mnem_C_SEP,
+    Mnem_AND,
+    Mnem_OR,
+    Mnem_XOR,
+    Mnem_SHL,
+    Mnem_SHR,
+    Mnem_SAR,
     Mnem_SSE_ADD,
     Mnem_SSE_SUB,
     Mnem_SSE_MUL,
@@ -1545,53 +1551,17 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
         case SIRBinaryOperation_And:
         case SIRBinaryOperation_Or:
         case SIRBinaryOperation_Xor: {
-            MetaValue ax_value =
-                create_int_register_value(operand_size, RegisterIndex_RAX);
-            MetaValue dx_value =
-                create_int_register_value(operand_size, RegisterIndex_RDX);
-
-            builder->move_inst_rvalue(inst.binop.left_ref, &ax_value);
-            builder->move_inst_rvalue(inst.binop.right_ref, &dx_value);
-
-            int64_t x86_inst = 0;
+            Mnem mnem;
 
             switch (inst.binop.op) {
-            case SIRBinaryOperation_And: {
-                switch (operand_size) {
-                case 1: x86_inst = FE_AND8rr; break;
-                case 2: x86_inst = FE_AND16rr; break;
-                case 4: x86_inst = FE_AND32rr; break;
-                case 8: x86_inst = FE_AND64rr; break;
-                default: SIR_ASSERT(0); break;
-                }
-                break;
-            }
-            case SIRBinaryOperation_Or: {
-                switch (operand_size) {
-                case 1: x86_inst = FE_OR8rr; break;
-                case 2: x86_inst = FE_OR16rr; break;
-                case 4: x86_inst = FE_OR32rr; break;
-                case 8: x86_inst = FE_OR64rr; break;
-                default: SIR_ASSERT(0); break;
-                }
-                break;
-            }
-            case SIRBinaryOperation_Xor: {
-                switch (operand_size) {
-                case 1: x86_inst = FE_XOR8rr; break;
-                case 2: x86_inst = FE_XOR16rr; break;
-                case 4: x86_inst = FE_XOR32rr; break;
-                case 8: x86_inst = FE_XOR64rr; break;
-                default: SIR_ASSERT(0); break;
-                }
-                break;
-            }
+            case SIRBinaryOperation_And: mnem = Mnem_AND; break;
+            case SIRBinaryOperation_Or: mnem = Mnem_OR; break;
+            case SIRBinaryOperation_Xor: mnem = Mnem_XOR; break;
             default: SIR_ASSERT(0); break;
             }
 
-            builder->encode(x86_inst, FE_AX, FE_DX);
-            builder->encode_mnem2(Mnem_MOV, &dest_value, &ax_value);
-            break;
+            builder->encode_mnem2(Mnem_MOV, &dest_value, &left_val);
+            builder->encode_mnem2(mnem, &dest_value, &right_val);
             break;
         }
 
@@ -3455,6 +3425,147 @@ SIRCreateX64Builder(SIRModule *module, SIRObjectBuilder *obj_builder)
                      [SizeClass_8] = FE_IMUL64rr;
     ENCODING_ENTRIES2[Mnem_MUL][OperandKind_Reg][SizeClass_4][OperandKind_Reg]
                      [SizeClass_4] = FE_IMUL32rr;
+
+    // AND
+
+    ENCODING_ENTRIES2[Mnem_AND][OperandKind_Reg][SizeClass_1][OperandKind_Reg]
+                     [SizeClass_1] = FE_AND8rr;
+    ENCODING_ENTRIES2[Mnem_AND][OperandKind_Reg][SizeClass_2][OperandKind_Reg]
+                     [SizeClass_2] = FE_AND16rr;
+    ENCODING_ENTRIES2[Mnem_AND][OperandKind_Reg][SizeClass_4][OperandKind_Reg]
+                     [SizeClass_4] = FE_AND32rr;
+    ENCODING_ENTRIES2[Mnem_AND][OperandKind_Reg][SizeClass_8][OperandKind_Reg]
+                     [SizeClass_8] = FE_AND64rr;
+
+    ENCODING_ENTRIES2[Mnem_AND][OperandKind_Reg][SizeClass_1][OperandKind_Imm]
+                     [SizeClass_1] = FE_AND8ri;
+    ENCODING_ENTRIES2[Mnem_AND][OperandKind_Reg][SizeClass_2][OperandKind_Imm]
+                     [SizeClass_2] = FE_AND16ri;
+    ENCODING_ENTRIES2[Mnem_AND][OperandKind_Reg][SizeClass_4][OperandKind_Imm]
+                     [SizeClass_4] = FE_AND32ri;
+    ENCODING_ENTRIES2[Mnem_AND][OperandKind_Reg][SizeClass_8][OperandKind_Imm]
+                     [SizeClass_8] = FE_AND64ri;
+
+    ENCODING_ENTRIES2[Mnem_AND][OperandKind_Reg][SizeClass_1]
+                     [OperandKind_Memory][SizeClass_1] = FE_AND8rm;
+    ENCODING_ENTRIES2[Mnem_AND][OperandKind_Reg][SizeClass_2]
+                     [OperandKind_Memory][SizeClass_2] = FE_AND16rm;
+    ENCODING_ENTRIES2[Mnem_AND][OperandKind_Reg][SizeClass_4]
+                     [OperandKind_Memory][SizeClass_4] = FE_AND32rm;
+    ENCODING_ENTRIES2[Mnem_AND][OperandKind_Reg][SizeClass_8]
+                     [OperandKind_Memory][SizeClass_8] = FE_AND64rm;
+
+    ENCODING_ENTRIES2[Mnem_AND][OperandKind_Memory][SizeClass_1]
+                     [OperandKind_Reg][SizeClass_1] = FE_AND8mr;
+    ENCODING_ENTRIES2[Mnem_AND][OperandKind_Memory][SizeClass_2]
+                     [OperandKind_Reg][SizeClass_2] = FE_AND16mr;
+    ENCODING_ENTRIES2[Mnem_AND][OperandKind_Memory][SizeClass_4]
+                     [OperandKind_Reg][SizeClass_4] = FE_AND32mr;
+    ENCODING_ENTRIES2[Mnem_AND][OperandKind_Memory][SizeClass_8]
+                     [OperandKind_Reg][SizeClass_8] = FE_AND64mr;
+
+    ENCODING_ENTRIES2[Mnem_AND][OperandKind_Memory][SizeClass_1]
+                     [OperandKind_Imm][SizeClass_1] = FE_AND8mi;
+    ENCODING_ENTRIES2[Mnem_AND][OperandKind_Memory][SizeClass_2]
+                     [OperandKind_Imm][SizeClass_2] = FE_AND16mi;
+    ENCODING_ENTRIES2[Mnem_AND][OperandKind_Memory][SizeClass_4]
+                     [OperandKind_Imm][SizeClass_4] = FE_AND32mi;
+    ENCODING_ENTRIES2[Mnem_AND][OperandKind_Memory][SizeClass_8]
+                     [OperandKind_Imm][SizeClass_8] = FE_AND64mi;
+
+    // OR
+
+    ENCODING_ENTRIES2[Mnem_OR][OperandKind_Reg][SizeClass_1][OperandKind_Reg]
+                     [SizeClass_1] = FE_OR8rr;
+    ENCODING_ENTRIES2[Mnem_OR][OperandKind_Reg][SizeClass_2][OperandKind_Reg]
+                     [SizeClass_2] = FE_OR16rr;
+    ENCODING_ENTRIES2[Mnem_OR][OperandKind_Reg][SizeClass_4][OperandKind_Reg]
+                     [SizeClass_4] = FE_OR32rr;
+    ENCODING_ENTRIES2[Mnem_OR][OperandKind_Reg][SizeClass_8][OperandKind_Reg]
+                     [SizeClass_8] = FE_OR64rr;
+
+    ENCODING_ENTRIES2[Mnem_OR][OperandKind_Reg][SizeClass_1][OperandKind_Imm]
+                     [SizeClass_1] = FE_OR8ri;
+    ENCODING_ENTRIES2[Mnem_OR][OperandKind_Reg][SizeClass_2][OperandKind_Imm]
+                     [SizeClass_2] = FE_OR16ri;
+    ENCODING_ENTRIES2[Mnem_OR][OperandKind_Reg][SizeClass_4][OperandKind_Imm]
+                     [SizeClass_4] = FE_OR32ri;
+    ENCODING_ENTRIES2[Mnem_OR][OperandKind_Reg][SizeClass_8][OperandKind_Imm]
+                     [SizeClass_8] = FE_OR64ri;
+
+    ENCODING_ENTRIES2[Mnem_OR][OperandKind_Reg][SizeClass_1][OperandKind_Memory]
+                     [SizeClass_1] = FE_OR8rm;
+    ENCODING_ENTRIES2[Mnem_OR][OperandKind_Reg][SizeClass_2][OperandKind_Memory]
+                     [SizeClass_2] = FE_OR16rm;
+    ENCODING_ENTRIES2[Mnem_OR][OperandKind_Reg][SizeClass_4][OperandKind_Memory]
+                     [SizeClass_4] = FE_OR32rm;
+    ENCODING_ENTRIES2[Mnem_OR][OperandKind_Reg][SizeClass_8][OperandKind_Memory]
+                     [SizeClass_8] = FE_OR64rm;
+
+    ENCODING_ENTRIES2[Mnem_OR][OperandKind_Memory][SizeClass_1][OperandKind_Reg]
+                     [SizeClass_1] = FE_OR8mr;
+    ENCODING_ENTRIES2[Mnem_OR][OperandKind_Memory][SizeClass_2][OperandKind_Reg]
+                     [SizeClass_2] = FE_OR16mr;
+    ENCODING_ENTRIES2[Mnem_OR][OperandKind_Memory][SizeClass_4][OperandKind_Reg]
+                     [SizeClass_4] = FE_OR32mr;
+    ENCODING_ENTRIES2[Mnem_OR][OperandKind_Memory][SizeClass_8][OperandKind_Reg]
+                     [SizeClass_8] = FE_OR64mr;
+
+    ENCODING_ENTRIES2[Mnem_OR][OperandKind_Memory][SizeClass_1][OperandKind_Imm]
+                     [SizeClass_1] = FE_OR8mi;
+    ENCODING_ENTRIES2[Mnem_OR][OperandKind_Memory][SizeClass_2][OperandKind_Imm]
+                     [SizeClass_2] = FE_OR16mi;
+    ENCODING_ENTRIES2[Mnem_OR][OperandKind_Memory][SizeClass_4][OperandKind_Imm]
+                     [SizeClass_4] = FE_OR32mi;
+    ENCODING_ENTRIES2[Mnem_OR][OperandKind_Memory][SizeClass_8][OperandKind_Imm]
+                     [SizeClass_8] = FE_OR64mi;
+
+    // XOR
+
+    ENCODING_ENTRIES2[Mnem_XOR][OperandKind_Reg][SizeClass_1][OperandKind_Reg]
+                     [SizeClass_1] = FE_XOR8rr;
+    ENCODING_ENTRIES2[Mnem_XOR][OperandKind_Reg][SizeClass_2][OperandKind_Reg]
+                     [SizeClass_2] = FE_XOR16rr;
+    ENCODING_ENTRIES2[Mnem_XOR][OperandKind_Reg][SizeClass_4][OperandKind_Reg]
+                     [SizeClass_4] = FE_XOR32rr;
+    ENCODING_ENTRIES2[Mnem_XOR][OperandKind_Reg][SizeClass_8][OperandKind_Reg]
+                     [SizeClass_8] = FE_XOR64rr;
+
+    ENCODING_ENTRIES2[Mnem_XOR][OperandKind_Reg][SizeClass_1][OperandKind_Imm]
+                     [SizeClass_1] = FE_XOR8ri;
+    ENCODING_ENTRIES2[Mnem_XOR][OperandKind_Reg][SizeClass_2][OperandKind_Imm]
+                     [SizeClass_2] = FE_XOR16ri;
+    ENCODING_ENTRIES2[Mnem_XOR][OperandKind_Reg][SizeClass_4][OperandKind_Imm]
+                     [SizeClass_4] = FE_XOR32ri;
+    ENCODING_ENTRIES2[Mnem_XOR][OperandKind_Reg][SizeClass_8][OperandKind_Imm]
+                     [SizeClass_8] = FE_XOR64ri;
+
+    ENCODING_ENTRIES2[Mnem_XOR][OperandKind_Reg][SizeClass_1]
+                     [OperandKind_Memory][SizeClass_1] = FE_XOR8rm;
+    ENCODING_ENTRIES2[Mnem_XOR][OperandKind_Reg][SizeClass_2]
+                     [OperandKind_Memory][SizeClass_2] = FE_XOR16rm;
+    ENCODING_ENTRIES2[Mnem_XOR][OperandKind_Reg][SizeClass_4]
+                     [OperandKind_Memory][SizeClass_4] = FE_XOR32rm;
+    ENCODING_ENTRIES2[Mnem_XOR][OperandKind_Reg][SizeClass_8]
+                     [OperandKind_Memory][SizeClass_8] = FE_XOR64rm;
+
+    ENCODING_ENTRIES2[Mnem_XOR][OperandKind_Memory][SizeClass_1]
+                     [OperandKind_Reg][SizeClass_1] = FE_XOR8mr;
+    ENCODING_ENTRIES2[Mnem_XOR][OperandKind_Memory][SizeClass_2]
+                     [OperandKind_Reg][SizeClass_2] = FE_XOR16mr;
+    ENCODING_ENTRIES2[Mnem_XOR][OperandKind_Memory][SizeClass_4]
+                     [OperandKind_Reg][SizeClass_4] = FE_XOR32mr;
+    ENCODING_ENTRIES2[Mnem_XOR][OperandKind_Memory][SizeClass_8]
+                     [OperandKind_Reg][SizeClass_8] = FE_XOR64mr;
+
+    ENCODING_ENTRIES2[Mnem_XOR][OperandKind_Memory][SizeClass_1]
+                     [OperandKind_Imm][SizeClass_1] = FE_XOR8mi;
+    ENCODING_ENTRIES2[Mnem_XOR][OperandKind_Memory][SizeClass_2]
+                     [OperandKind_Imm][SizeClass_2] = FE_XOR16mi;
+    ENCODING_ENTRIES2[Mnem_XOR][OperandKind_Memory][SizeClass_4]
+                     [OperandKind_Imm][SizeClass_4] = FE_XOR32mi;
+    ENCODING_ENTRIES2[Mnem_XOR][OperandKind_Memory][SizeClass_8]
+                     [OperandKind_Imm][SizeClass_8] = FE_XOR64mi;
 
     // SSE ADD
 

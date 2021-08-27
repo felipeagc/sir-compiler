@@ -84,7 +84,17 @@ print_instruction(SIRModule *module, SIRInstRef inst_ref, SIRStringBuilder *sb)
     case SIRInstKind_Block: SIR_ASSERT(0); break;
 
     case SIRInstKind_Alias: {
-        sb->sprintf("%%r%u = alias %%r%u", inst_ref.id, inst.alias.inst_ref.id);
+        sb->sprintf("%%r%u = alias %%r%u", inst_ref.id, inst.op1.id);
+        break;
+    }
+
+    case SIRInstKind_PushFunctionParameter: {
+        sb->sprintf("push_func_param %%r%u", inst.op1.id);
+        break;
+    }
+
+    case SIRInstKind_SetCond: {
+        sb->sprintf("set_cond %%r%u", inst.op1.id);
         break;
     }
 
@@ -128,7 +138,7 @@ print_instruction(SIRModule *module, SIRInstRef inst_ref, SIRStringBuilder *sb)
             inst_ref.id,
             (int)type_string.len,
             type_string.ptr,
-            inst.cast.inst_ref.id);
+            inst.op1.id);
         break;
     }
 
@@ -139,7 +149,7 @@ print_instruction(SIRModule *module, SIRInstRef inst_ref, SIRStringBuilder *sb)
             inst_ref.id,
             (int)type_string.len,
             type_string.ptr,
-            inst.cast.inst_ref.id);
+            inst.op1.id);
         break;
     }
 
@@ -150,7 +160,7 @@ print_instruction(SIRModule *module, SIRInstRef inst_ref, SIRStringBuilder *sb)
             inst_ref.id,
             (int)type_string.len,
             type_string.ptr,
-            inst.cast.inst_ref.id);
+            inst.op1.id);
         break;
     }
 
@@ -161,7 +171,7 @@ print_instruction(SIRModule *module, SIRInstRef inst_ref, SIRStringBuilder *sb)
             inst_ref.id,
             (int)type_string.len,
             type_string.ptr,
-            inst.cast.inst_ref.id);
+            inst.op1.id);
         break;
     }
 
@@ -172,7 +182,7 @@ print_instruction(SIRModule *module, SIRInstRef inst_ref, SIRStringBuilder *sb)
             inst_ref.id,
             (int)type_string.len,
             type_string.ptr,
-            inst.cast.inst_ref.id);
+            inst.op1.id);
         break;
     }
 
@@ -183,7 +193,7 @@ print_instruction(SIRModule *module, SIRInstRef inst_ref, SIRStringBuilder *sb)
             inst_ref.id,
             (int)type_string.len,
             type_string.ptr,
-            inst.cast.inst_ref.id);
+            inst.op1.id);
         break;
     }
 
@@ -194,7 +204,7 @@ print_instruction(SIRModule *module, SIRInstRef inst_ref, SIRStringBuilder *sb)
             inst_ref.id,
             (int)type_string.len,
             type_string.ptr,
-            inst.cast.inst_ref.id);
+            inst.op1.id);
         break;
     }
 
@@ -205,7 +215,7 @@ print_instruction(SIRModule *module, SIRInstRef inst_ref, SIRStringBuilder *sb)
             inst_ref.id,
             (int)type_string.len,
             type_string.ptr,
-            inst.cast.inst_ref.id);
+            inst.op1.id);
         break;
     }
 
@@ -216,7 +226,7 @@ print_instruction(SIRModule *module, SIRInstRef inst_ref, SIRStringBuilder *sb)
             inst_ref.id,
             (int)type_string.len,
             type_string.ptr,
-            inst.cast.inst_ref.id);
+            inst.op1.id);
         break;
     }
 
@@ -227,7 +237,7 @@ print_instruction(SIRModule *module, SIRInstRef inst_ref, SIRStringBuilder *sb)
             inst_ref.id,
             (int)type_string.len,
             type_string.ptr,
-            inst.cast.inst_ref.id);
+            inst.op1.id);
         break;
     }
 
@@ -238,7 +248,7 @@ print_instruction(SIRModule *module, SIRInstRef inst_ref, SIRStringBuilder *sb)
             inst_ref.id,
             (int)type_string.len,
             type_string.ptr,
-            inst.fneg.inst_ref.id);
+            inst.op1.id);
         break;
     }
 
@@ -249,7 +259,7 @@ print_instruction(SIRModule *module, SIRInstRef inst_ref, SIRStringBuilder *sb)
             inst_ref.id,
             (int)type_string.len,
             type_string.ptr,
-            inst.load.ptr_ref.id);
+            inst.op1.id);
         break;
     }
 
@@ -316,15 +326,7 @@ print_instruction(SIRModule *module, SIRInstRef inst_ref, SIRStringBuilder *sb)
 
     case SIRInstKind_FuncCall: {
         sb->sprintf(
-            "%%r%u = func_call %%r%u (",
-            inst_ref.id,
-            inst.func_call.func_ref.id);
-        for (size_t i = 0; i < inst.func_call.params_len; ++i) {
-            if (i > 0) sb->append(SIR_STR(", "));
-            SIRInstRef param_inst_ref = inst.func_call.params[i];
-            sb->sprintf("%%r%u", param_inst_ref.id);
-        }
-        sb->append(SIR_STR(")"));
+            "%%r%u = func_call %%r%u", inst_ref.id, inst.op1.id);
         break;
     }
 
@@ -363,24 +365,20 @@ print_instruction(SIRModule *module, SIRInstRef inst_ref, SIRStringBuilder *sb)
     }
     case SIRInstKind_ReturnValue: {
         SIRString type_string = SIRTypeToString(
-            module, SIRModuleGetInst(module, inst.return_value.inst_ref).type);
+            module, SIRModuleGetInst(module, inst.op1).type);
         sb->sprintf(
             "return_value %.*s %%r%u",
             (int)type_string.len,
             type_string.ptr,
-            inst.return_value.inst_ref.id);
+            inst.op1.id);
         break;
     }
     case SIRInstKind_Jump: {
-        sb->sprintf("jump %%b%u", inst.jump.block_ref.id);
+        sb->sprintf("jump %%b%u", inst.op1.id);
         break;
     }
     case SIRInstKind_Branch: {
-        sb->sprintf(
-            "branch %%r%u %%b%u %%b%u",
-            inst.branch.cond_inst_ref.id,
-            inst.branch.true_block_ref.id,
-            inst.branch.false_block_ref.id);
+        sb->sprintf("branch %%b%u %%b%u", inst.op1.id, inst.op2.id);
         break;
     }
     case SIRInstKind_Phi: {
@@ -415,7 +413,7 @@ print_block(SIRModule *module, SIRInstRef block_ref, SIRStringBuilder *sb)
 
     sb->sprintf("  block %%b%u:\n", block_ref.id);
 
-    for (SIRInstRef inst_ref : block->block.inst_refs) {
+    for (SIRInstRef inst_ref : block->block->inst_refs) {
         sb->append(SIR_STR("    "));
         print_instruction(module, inst_ref, sb);
     }
@@ -906,10 +904,11 @@ SIRInstRef SIRModuleAddGlobal(
     SIRInst global = {};
     global.kind = SIRInstKind_Global;
     global.type = SIRModuleCreatePointerType(module, type);
-    global.global.data =
+    global.global = SIRAllocInit(module->arena, SIRGlobal);
+    global.global->data =
         (uint8_t *)SIRAllocSliceClone(module->arena, data, data_len);
-    global.global.data_len = data_len;
-    global.global.flags = flags;
+    global.global->data_len = data_len;
+    global.global->flags = flags;
 
     SIRInstRef global_ref = module_add_inst(module, global);
 
@@ -936,10 +935,11 @@ SIRModuleAddGlobalString(SIRModule *module, const char *str, size_t str_len)
     SIRInst global = {};
     global.kind = SIRInstKind_Global;
     global.type = SIRModuleCreatePointerType(module, module->u8_type);
-    global.global.data =
+    global.global = SIRAllocInit(module->arena, SIRGlobal);
+    global.global->data =
         (uint8_t *)SIRAllocNullTerminate(module->arena, sir_str);
-    global.global.data_len = sir_str.len + 1;
-    global.global.flags = SIRGlobalFlags_Initialized | SIRGlobalFlags_ReadOnly;
+    global.global->data_len = sir_str.len + 1;
+    global.global->flags = SIRGlobalFlags_Initialized | SIRGlobalFlags_ReadOnly;
 
     SIRInstRef global_ref = module_add_inst(module, global);
 
@@ -992,7 +992,8 @@ SIRInstRef SIRModuleInsertBlockAtEnd(SIRModule *module, SIRInstRef func_ref)
 
     SIRInst block = {};
     block.kind = SIRInstKind_Block;
-    block.block.inst_refs =
+    block.block = SIRAllocInit(module->arena, SIRBlock);
+    block.block->inst_refs =
         SIRArray<SIRInstRef>::create((SIRAllocator *)module->arena);
     SIRInstRef block_ref = module_add_inst(module, block);
 
@@ -1039,7 +1040,7 @@ static SIRInstRef builder_insert_inst(SIRBuilder *builder, const SIRInst &inst)
     SIRInstRef ref = module_add_inst(builder->module, inst);
 
     SIRInst *block = &builder->module->insts[builder->current_block_ref.id];
-    block->block.inst_refs.push_back(ref);
+    block->block->inst_refs.push_back(ref);
 
     return ref;
 }
@@ -1144,7 +1145,7 @@ SIRInstRef SIRBuilderInsertLoad(SIRBuilder *builder, SIRInstRef ptr_ref)
     SIRInst inst = {};
     inst.kind = SIRInstKind_Load;
     inst.type = SIRModuleGetInst(builder->module, ptr_ref).type->pointer.sub;
-    inst.load.ptr_ref = ptr_ref;
+    inst.op1 = ptr_ref;
 
     return builder_insert_inst(builder, inst);
 }
@@ -1162,7 +1163,7 @@ SIRInstRef SIRBuilderInsertBitCast(
     SIRInst inst = {};
     inst.kind = SIRInstKind_BitCast;
     inst.type = dest_type;
-    inst.cast = {inst_ref};
+    inst.op1 = inst_ref;
 
     return builder_insert_inst(builder, inst);
 }
@@ -1177,7 +1178,7 @@ SIRInstRef SIRBuilderInsertZext(
     SIRInst inst = {};
     inst.kind = SIRInstKind_ZExt;
     inst.type = dest_type;
-    inst.cast = {inst_ref};
+    inst.op1 = inst_ref;
 
     return builder_insert_inst(builder, inst);
 }
@@ -1192,7 +1193,7 @@ SIRInstRef SIRBuilderInsertSext(
     SIRInst inst = {};
     inst.kind = SIRInstKind_SExt;
     inst.type = dest_type;
-    inst.cast = {inst_ref};
+    inst.op1 = inst_ref;
 
     return builder_insert_inst(builder, inst);
 }
@@ -1209,7 +1210,7 @@ SIRInstRef SIRBuilderInsertTrunc(
     SIRInst inst = {};
     inst.kind = SIRInstKind_Trunc;
     inst.type = dest_type;
-    inst.cast = {inst_ref};
+    inst.op1 = inst_ref;
 
     return builder_insert_inst(builder, inst);
 }
@@ -1224,7 +1225,7 @@ SIRInstRef SIRBuilderInsertFPTrunc(
     SIRInst inst = {};
     inst.kind = SIRInstKind_FPTrunc;
     inst.type = dest_type;
-    inst.cast = {inst_ref};
+    inst.op1 = inst_ref;
 
     return builder_insert_inst(builder, inst);
 }
@@ -1239,7 +1240,7 @@ SIRInstRef SIRBuilderInsertFPExt(
     SIRInst inst = {};
     inst.kind = SIRInstKind_FPExt;
     inst.type = dest_type;
-    inst.cast = {inst_ref};
+    inst.op1 = inst_ref;
 
     return builder_insert_inst(builder, inst);
 }
@@ -1254,7 +1255,7 @@ SIRInstRef SIRBuilderInsertFPToSI(
     SIRInst inst = {};
     inst.kind = SIRInstKind_FPToSI;
     inst.type = dest_type;
-    inst.cast = {inst_ref};
+    inst.op1 = inst_ref;
 
     return builder_insert_inst(builder, inst);
 }
@@ -1270,7 +1271,7 @@ SIRInstRef SIRBuilderInsertFPToUI(
     SIRInst inst = {};
     inst.kind = SIRInstKind_FPToUI;
     inst.type = dest_type;
-    inst.cast = {inst_ref};
+    inst.op1 = inst_ref;
 
     return builder_insert_inst(builder, inst);
 }
@@ -1285,7 +1286,7 @@ SIRInstRef SIRBuilderInsertSIToFP(
     SIRInst inst = {};
     inst.kind = SIRInstKind_SIToFP;
     inst.type = dest_type;
-    inst.cast = {inst_ref};
+    inst.op1 = inst_ref;
 
     return builder_insert_inst(builder, inst);
 }
@@ -1300,7 +1301,7 @@ SIRInstRef SIRBuilderInsertUIToFP(
     SIRInst inst = {};
     inst.kind = SIRInstKind_UIToFP;
     inst.type = dest_type;
-    inst.cast = {inst_ref};
+    inst.op1 = inst_ref;
 
     return builder_insert_inst(builder, inst);
 }
@@ -1315,7 +1316,7 @@ SIRInstRef SIRBuilderInsertFNeg(SIRBuilder *builder, SIRInstRef inst_ref)
     SIRInst inst = {};
     inst.kind = SIRInstKind_FNeg;
     inst.type = type;
-    inst.fneg = {inst_ref};
+    inst.op1 = inst_ref;
 
     return builder_insert_inst(builder, inst);
 }
@@ -1407,13 +1408,17 @@ SIRInstRef SIRBuilderInsertFuncCall(
     SIR_ASSERT(func_inst.kind == SIRInstKind_Function);
     SIRFunction *called_function = func_inst.func;
 
+    for (size_t i = 0; i < params_len; ++i) {
+        SIRInst inst = {};
+        inst.kind = SIRInstKind_PushFunctionParameter;
+        inst.op1 = params[i];
+        builder_insert_inst(builder, inst);
+    }
+
     SIRInst inst = {};
     inst.kind = SIRInstKind_FuncCall;
     inst.type = called_function->return_type;
-    inst.func_call.func_ref = func_ref;
-    inst.func_call.params_len = params_len;
-    inst.func_call.params = (SIRInstRef *)SIRAllocSliceClone(
-        builder->module->arena, params, params_len);
+    inst.op1 = func_ref;
 
     return builder_insert_inst(builder, inst);
 }
@@ -1424,7 +1429,7 @@ void SIRBuilderInsertJump(SIRBuilder *builder, SIRInstRef block_ref)
 
     SIRInst inst = {};
     inst.kind = SIRInstKind_Jump;
-    inst.jump = {block_ref};
+    inst.op1 = block_ref;
 
     builder_insert_inst(builder, inst);
 }
@@ -1447,11 +1452,17 @@ void SIRBuilderInsertBranch(
         SIRModuleGetInst(builder->module, false_block_ref).kind ==
         SIRInstKind_Block);
 
+    {
+        SIRInst inst = {};
+        inst.kind = SIRInstKind_SetCond;
+        inst.op1 = cond_ref;
+        builder_insert_inst(builder, inst);
+    }
+
     SIRInst inst = {};
     inst.kind = SIRInstKind_Branch;
-    inst.branch.cond_inst_ref = cond_ref;
-    inst.branch.true_block_ref = true_block_ref;
-    inst.branch.false_block_ref = false_block_ref;
+    inst.op1 = true_block_ref;
+    inst.op2 = false_block_ref;
 
     builder_insert_inst(builder, inst);
 }
@@ -1488,7 +1499,7 @@ void SIRBuilderInsertReturnValue(SIRBuilder *builder, SIRInstRef inst_ref)
 
     SIRInst inst = {};
     inst.kind = SIRInstKind_ReturnValue;
-    inst.return_value.inst_ref = inst_ref;
+    inst.op1 = inst_ref;
 
     builder_insert_inst(builder, inst);
 }
@@ -1522,16 +1533,16 @@ SIRTypeKind SIRModuleGetTypeKind(SIRModule *module, SIRType *type)
 uint32_t
 SIRModuleGetBlockInstructionCount(SIRModule *module, SIRInstRef block_ref)
 {
-    return (uint32_t)module->insts[block_ref.id].block.inst_refs.len;
+    return (uint32_t)module->insts[block_ref.id].block->inst_refs.len;
 }
 
 SIRInstRef SIRModuleGetBlockInstruction(
     SIRModule *module, SIRInstRef block_ref, uint32_t inst_index)
 {
-    if (module->insts[block_ref.id].block.inst_refs.len <= inst_index) {
+    if (module->insts[block_ref.id].block->inst_refs.len <= inst_index) {
         return (SIRInstRef){0};
     }
-    return module->insts[block_ref.id].block.inst_refs[inst_index];
+    return module->insts[block_ref.id].block->inst_refs[inst_index];
 }
 
 SIRString SIRTypeToString(SIRModule *module, SIRType *type)

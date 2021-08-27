@@ -55,6 +55,16 @@ struct SIRFunction {
     SIRCallingConvention calling_convention;
 };
 
+struct SIRBlock {
+    SIRArray<SIRInstRef> inst_refs;
+};
+
+struct SIRGlobal {
+    const uint8_t *data;
+    size_t data_len;
+    uint32_t flags;
+};
+
 struct SIRPhiPair {
     SIRInstRef block_ref;
     SIRInstRef value_ref;
@@ -63,15 +73,8 @@ struct SIRPhiPair {
 struct SIRInst {
     union {
         SIRFunction *func;
-        struct {
-            SIRInstRef inst_ref;
-        } alias;
-        struct {
-            SIRArray<SIRInstRef> inst_refs;
-        } block;
-        struct {
-            uint32_t index;
-        } func_param;
+        SIRBlock *block;
+        SIRGlobal *global;
         struct {
             uint64_t u64;
         } const_int;
@@ -82,69 +85,40 @@ struct SIRInst {
             bool value;
         } const_bool;
         struct {
-            const uint8_t *data;
-            size_t data_len;
-            uint32_t flags;
-        } global;
+            uint32_t index;
+        } func_param;
         struct {
-            SIRInstRef inst_ref;
-        } return_value;
-        struct {
-            SIRInstRef block_ref;
-        } jump;
-        struct {
-            SIRInstRef cond_inst_ref;
-            SIRInstRef true_block_ref;
-            SIRInstRef false_block_ref;
-        } branch;
+            SIRInstRef op1;
+            SIRInstRef op2;
+        };
         struct {
             SIRArray<SIRPhiPair> pairs;
         } phi;
-        struct {
-            SIRInstRef func_ref;
-            SIRInstRef *params;
-            size_t params_len;
-        } func_call;
         struct {
             SIRInstRef accessed_ref;
             SIRInstRef index_ref;
         } array_elem_ptr;
         struct {
             SIRInstRef accessed_ref;
-            uint32_t field_index;
+            uint32_t field_index; // TODO: replace with SIRInstKind_ConstInt
         } struct_elem_ptr;
         struct {
             SIRInstRef accessed_ref;
-            uint32_t elem_index;
+            uint32_t elem_index; // TODO: replace with SIRInstKind_ConstInt
         } extract_array_elem;
         struct {
             SIRInstRef accessed_ref;
-            uint32_t field_index;
+            uint32_t field_index; // TODO: replace with SIRInstKind_ConstInt
         } extract_struct_elem;
         struct {
             SIRInstRef ptr_ref;
             SIRInstRef value_ref;
         } store;
         struct {
-            SIRInstRef ptr_ref;
-        } load;
-        struct {
-            SIRBinaryOperation op;
             SIRInstRef left_ref;
             SIRInstRef right_ref;
+            SIRBinaryOperation op;
         } binop;
-        struct {
-            SIRInstRef stack_slot_ref;
-        } stack_ptr;
-        struct {
-            SIRInstRef global_ref;
-        } global_ptr;
-        struct {
-            SIRInstRef inst_ref;
-        } cast;
-        struct {
-            SIRInstRef inst_ref;
-        } fneg;
     };
     SIRInstKind kind;
     SIRType *type;

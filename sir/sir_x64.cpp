@@ -260,6 +260,8 @@ struct X64AsmBuilder {
     SIRObjectBuilder *obj_builder;
     SIRArray<MetaValue> meta_insts;
     SIRInstRef current_block;
+    SIRArray<SIRInstRef> current_func_params;
+    SIRInstRef current_cond;
 
     size_t get_code_offset();
     size_t encode_raw(const uint8_t *bytes, size_t len);
@@ -778,7 +780,7 @@ void X64AsmBuilder::move_inst_rvalue(
         break;
     }
     case SIRInstKind_BitCast: {
-        this->move_inst_rvalue(inst.cast.inst_ref, dest_value);
+        this->move_inst_rvalue(inst.op1, dest_value);
         break;
     }
     default: {
@@ -843,6 +845,8 @@ static void generate_const(X64AsmBuilder *builder, SIRInstRef inst_ref)
     case SIRInstKind_Block:
     case SIRInstKind_Function:
     case SIRInstKind_FunctionParameter:
+    case SIRInstKind_SetCond:
+    case SIRInstKind_PushFunctionParameter:
     case SIRInstKind_ReturnVoid:
     case SIRInstKind_ReturnValue:
     case SIRInstKind_Load:
@@ -933,15 +937,25 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
     case SIRInstKind_ConstInt:
     case SIRInstKind_ConstFloat: SIR_ASSERT(0); break;
 
+    case SIRInstKind_SetCond: {
+        builder->current_cond = inst.op1;
+        break;
+    }
+
+    case SIRInstKind_PushFunctionParameter: {
+        builder->current_func_params.push_back(inst.op1);
+        break;
+    }
+
     case SIRInstKind_Alias: {
         builder->meta_insts[inst_ref.id] =
-            builder->meta_insts[inst.alias.inst_ref.id];
+            builder->meta_insts[inst.op1.id];
         break;
     }
 
     case SIRInstKind_BitCast: {
         builder->meta_insts[inst_ref.id] =
-            builder->meta_insts[inst.cast.inst_ref.id];
+            builder->meta_insts[inst.op1.id];
         break;
     }
 
@@ -949,7 +963,7 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
         MetaValue dest_value = builder->meta_insts[inst_ref.id];
 
         SIRType *source_type =
-            SIRModuleGetInst(builder->module, inst.cast.inst_ref).type;
+            SIRModuleGetInst(builder->module, inst.op1).type;
         SIRType *dest_type = inst.type;
 
         MetaValue source_ax_value = create_int_register_value(
@@ -957,7 +971,7 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
         MetaValue ext_ax_value = create_int_register_value(
             SIRTypeSizeOf(builder->module, dest_type), RegisterIndex_RAX);
 
-        builder->move_inst_rvalue(inst.cast.inst_ref, &source_ax_value);
+        builder->move_inst_rvalue(inst.op1, &source_ax_value);
 
         size_t source_bytes = source_type->kind == SIRTypeKind_Bool
                                   ? 1
@@ -1000,7 +1014,7 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
         MetaValue dest_value = builder->meta_insts[inst_ref.id];
 
         SIRType *source_type =
-            SIRModuleGetInst(builder->module, inst.cast.inst_ref).type;
+            SIRModuleGetInst(builder->module, inst.op1).type;
         SIRType *dest_type = inst.type;
 
         MetaValue source_ax_value = create_int_register_value(
@@ -1008,7 +1022,7 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
         MetaValue ext_ax_value = create_int_register_value(
             SIRTypeSizeOf(builder->module, dest_type), RegisterIndex_RAX);
 
-        builder->move_inst_rvalue(inst.cast.inst_ref, &source_ax_value);
+        builder->move_inst_rvalue(inst.op1, &source_ax_value);
 
         size_t source_bytes = source_type->int_.bits >> 3;
         size_t dest_bytes = dest_type->int_.bits >> 3;
@@ -1045,7 +1059,7 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
         MetaValue dest_value = builder->meta_insts[inst_ref.id];
 
         SIRType *source_type =
-            SIRModuleGetInst(builder->module, inst.cast.inst_ref).type;
+            SIRModuleGetInst(builder->module, inst.op1).type;
         SIRType *dest_type = inst.type;
 
         MetaValue source_ax_value = create_int_register_value(
@@ -1053,7 +1067,7 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
 
         MetaValue trunc_ax_value = create_int_register_value(
             SIRTypeSizeOf(builder->module, dest_type), RegisterIndex_RAX);
-        builder->move_inst_rvalue(inst.cast.inst_ref, &source_ax_value);
+        builder->move_inst_rvalue(inst.op1, &source_ax_value);
         builder->encode_mnem2(Mnem_MOV, &dest_value, &trunc_ax_value);
 
         break;
@@ -1062,10 +1076,10 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
     case SIRInstKind_FPExt:
     case SIRInstKind_FPTrunc: {
         MetaValue dest_value = builder->meta_insts[inst_ref.id];
-        MetaValue source_value = builder->meta_insts[inst.cast.inst_ref.id];
+        MetaValue source_value = builder->meta_insts[inst.op1.id];
 
         SIRType *source_type =
-            SIRModuleGetInst(builder->module, inst.cast.inst_ref).type;
+            SIRModuleGetInst(builder->module, inst.op1).type;
         SIRType *dest_type = inst.type;
 
         uint32_t source_size = SIRTypeSizeOf(builder->module, source_type);
@@ -1085,10 +1099,10 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
 
     case SIRInstKind_SIToFP: {
         MetaValue dest_value = builder->meta_insts[inst_ref.id];
-        MetaValue source_value = builder->meta_insts[inst.cast.inst_ref.id];
+        MetaValue source_value = builder->meta_insts[inst.op1.id];
 
         SIRType *source_type =
-            SIRModuleGetInst(builder->module, inst.cast.inst_ref).type;
+            SIRModuleGetInst(builder->module, inst.op1).type;
 
         uint32_t source_size = SIRTypeSizeOf(builder->module, source_type);
         uint32_t dest_size = SIRTypeSizeOf(builder->module, inst.type);
@@ -1129,10 +1143,10 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
 
     case SIRInstKind_UIToFP: {
         MetaValue dest_value = builder->meta_insts[inst_ref.id];
-        MetaValue source_value = builder->meta_insts[inst.cast.inst_ref.id];
+        MetaValue source_value = builder->meta_insts[inst.op1.id];
 
         SIRType *source_type =
-            SIRModuleGetInst(builder->module, inst.cast.inst_ref).type;
+            SIRModuleGetInst(builder->module, inst.op1).type;
 
         uint32_t source_size = SIRTypeSizeOf(builder->module, source_type);
         uint32_t dest_size = SIRTypeSizeOf(builder->module, inst.type);
@@ -1180,7 +1194,7 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
     case SIRInstKind_FPToUI:
     case SIRInstKind_FPToSI: {
         MetaValue dest_value = builder->meta_insts[inst_ref.id];
-        MetaValue source_value = builder->meta_insts[inst.cast.inst_ref.id];
+        MetaValue source_value = builder->meta_insts[inst.op1.id];
 
         uint32_t dest_size = SIRTypeSizeOf(builder->module, inst.type);
 
@@ -1199,7 +1213,7 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
 
     case SIRInstKind_FNeg: {
         MetaValue dest_value = builder->meta_insts[inst_ref.id];
-        MetaValue source_value = builder->meta_insts[inst.cast.inst_ref.id];
+        MetaValue source_value = builder->meta_insts[inst.op1.id];
 
         uint32_t dest_size = SIRTypeSizeOf(builder->module, inst.type);
 
@@ -1804,14 +1818,16 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
     }
 
     case SIRInstKind_Load: {
+        SIRInstRef ptr_ref = inst.op1;
         size_t value_size = SIRTypeSizeOf(builder->module, inst.type);
+
         switch (value_size) {
         case 1:
         case 2:
         case 4:
         case 8: {
             SIRInst ptr_inst =
-                SIRModuleGetInst(builder->module, inst.load.ptr_ref);
+                SIRModuleGetInst(builder->module, ptr_ref);
 
             MetaValue ptr_value = {};
             switch (ptr_inst.kind) {
@@ -1836,13 +1852,13 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
         default: {
 
             MetaValue source_ptr_mem_value =
-                builder->meta_insts[inst.load.ptr_ref.id];
+                builder->meta_insts[ptr_ref.id];
             if (source_ptr_mem_value.kind != MetaValueKind_IRegisterMemory) {
                 MetaValue source_ptr_value =
                     create_int_register_value(8, RegisterIndex_RDX);
                 builder->encode_lea2(
                     &source_ptr_value,
-                    &builder->meta_insts[inst.load.ptr_ref.id]);
+                    &builder->meta_insts[ptr_ref.id]);
                 source_ptr_mem_value = create_int_register_memory_value(
                     0, RegisterIndex_RDX, 0, RegisterIndex_None, 0);
             }
@@ -1868,12 +1884,14 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
     }
 
     case SIRInstKind_FuncCall: {
+        SIRInstRef called_func_ref = inst.op1;
         SIRFunction *called_func =
-            SIRModuleGetInst(builder->module, inst.func_call.func_ref).func;
+            SIRModuleGetInst(builder->module, called_func_ref).func;
 
         // TODO: save and restore caller-saved registers
 
-        SIR_ASSERT(called_func->param_types_len <= inst.func_call.params_len);
+        SIR_ASSERT(
+            called_func->param_types_len <= builder->current_func_params.len);
 
         switch (called_func->calling_convention) {
         case SIRCallingConvention_SystemV: {
@@ -1883,8 +1901,8 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
             size_t param_stack_offset = 0;
 
             // Write parameters to ABI locations
-            for (size_t i = 0; i < inst.func_call.params_len; ++i) {
-                SIRInstRef param_inst_ref = inst.func_call.params[i];
+            for (size_t i = 0; i < builder->current_func_params.len; ++i) {
+                SIRInstRef param_inst_ref = builder->current_func_params[i];
                 SIR_ASSERT(param_inst_ref.id > 0);
 
                 bool is_param_variadic = i >= called_func->param_types_len;
@@ -2139,7 +2157,10 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
         }
         }
 
-        builder->encode_direct_call(inst.func_call.func_ref);
+        // Reset parameter list
+        builder->current_func_params.len = 0;
+
+        builder->encode_direct_call(called_func_ref);
 
         // Move returned values to result location
 
@@ -2257,8 +2278,9 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
     }
 
     case SIRInstKind_ReturnValue: {
+        SIRInstRef returned_inst_ref = inst.op1;
         SIRInst returned_inst =
-            SIRModuleGetInst(builder->module, inst.return_value.inst_ref);
+            SIRModuleGetInst(builder->module, returned_inst_ref);
 
         SIRType *return_type = returned_inst.type;
 
@@ -2270,7 +2292,7 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
             builder->encode_mnem2(
                 Mnem_MOV,
                 &result_location,
-                &builder->meta_insts[inst.return_value.inst_ref.id]);
+                &builder->meta_insts[returned_inst_ref.id]);
             break;
         }
         case SIRTypeKind_Pointer: {
@@ -2280,7 +2302,7 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
             builder->encode_mnem2(
                 Mnem_MOV,
                 &result_location,
-                &builder->meta_insts[inst.return_value.inst_ref.id]);
+                &builder->meta_insts[returned_inst_ref.id]);
             break;
         }
         case SIRTypeKind_Float: {
@@ -2290,7 +2312,7 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
             builder->encode_mnem2(
                 Mnem_MOV,
                 &result_location,
-                &builder->meta_insts[inst.return_value.inst_ref.id]);
+                &builder->meta_insts[returned_inst_ref.id]);
             break;
         }
         default: {
@@ -2307,7 +2329,7 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
                     builder, return_type, &class1, &class2);
 
                 MetaValue returned_value =
-                    builder->meta_insts[inst.return_value.inst_ref.id];
+                    builder->meta_insts[returned_inst_ref.id];
                 SIR_ASSERT(
                     returned_value.kind == MetaValueKind_IRegisterMemory);
 
@@ -2363,10 +2385,9 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
     }
 
     case SIRInstKind_Jump: {
-        SIRInst dest_block =
-            SIRModuleGetInst(builder->module, inst.jump.block_ref);
-        if (dest_block.block.inst_refs.len > 0) {
-            SIRInstRef first_inst_ref = dest_block.block.inst_refs[0];
+        SIRInst dest_block = SIRModuleGetInst(builder->module, inst.op1);
+        if (dest_block.block->inst_refs.len > 0) {
+            SIRInstRef first_inst_ref = dest_block.block->inst_refs[0];
             SIRInst first_inst =
                 SIRModuleGetInst(builder->module, first_inst_ref);
 
@@ -2386,7 +2407,7 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
         FuncJumpPatch patch = {
             .instruction = FE_JMP | FE_JMPL,
             .instruction_offset = builder->get_code_offset(),
-            .destination_block = inst.jump.block_ref,
+            .destination_block = inst.op1,
         };
         meta_func->jump_patches.push_back(patch);
 
@@ -2397,16 +2418,18 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
     case SIRInstKind_Branch: {
         MetaValue al_value = create_int_register_value(1, RegisterIndex_RAX);
 
+        SIRInstRef true_block = inst.op1;
+        SIRInstRef false_block = inst.op2;
+
         SIRInstRef true_phi = {};
         SIRInstRef true_phi_value = {};
         SIRInstRef false_phi = {};
         SIRInstRef false_phi_value = {};
 
         {
-            SIRInst dest_block =
-                SIRModuleGetInst(builder->module, inst.branch.true_block_ref);
-            if (dest_block.block.inst_refs.len > 0) {
-                SIRInstRef first_inst_ref = dest_block.block.inst_refs[0];
+            SIRInst dest_block = SIRModuleGetInst(builder->module, true_block);
+            if (dest_block.block->inst_refs.len > 0) {
+                SIRInstRef first_inst_ref = dest_block.block->inst_refs[0];
                 SIRInst first_inst =
                     SIRModuleGetInst(builder->module, first_inst_ref);
 
@@ -2424,10 +2447,9 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
         }
 
         {
-            SIRInst dest_block =
-                SIRModuleGetInst(builder->module, inst.branch.false_block_ref);
-            if (dest_block.block.inst_refs.len > 0) {
-                SIRInstRef first_inst_ref = dest_block.block.inst_refs[0];
+            SIRInst dest_block = SIRModuleGetInst(builder->module, false_block);
+            if (dest_block.block->inst_refs.len > 0) {
+                SIRInstRef first_inst_ref = dest_block.block->inst_refs[0];
                 SIRInst first_inst =
                     SIRModuleGetInst(builder->module, first_inst_ref);
 
@@ -2447,7 +2469,7 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
         builder->encode_mnem2(
             Mnem_MOV,
             &al_value,
-            &builder->meta_insts[inst.branch.cond_inst_ref.id]);
+            &builder->meta_insts[builder->current_cond.id]);
 
         builder->encode(
             FE_TEST8rr,
@@ -2462,7 +2484,7 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
         FuncJumpPatch true_patch = {
             .instruction = FE_JNZ | FE_JMPL,
             .instruction_offset = builder->get_code_offset(),
-            .destination_block = inst.branch.true_block_ref,
+            .destination_block = true_block,
         };
         meta_func->jump_patches.push_back(true_patch);
         builder->encode(FE_JNZ | FE_JMPL, -true_patch.instruction_offset);
@@ -2475,7 +2497,7 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
         FuncJumpPatch false_patch = {
             .instruction = FE_JMP | FE_JMPL,
             .instruction_offset = builder->get_code_offset(),
-            .destination_block = inst.branch.false_block_ref,
+            .destination_block = false_block,
         };
         meta_func->jump_patches.push_back(false_patch);
         builder->encode(FE_JMP | FE_JMPL, -false_patch.instruction_offset);
@@ -2496,9 +2518,9 @@ SIR_INLINE void generate_global(X64AsmBuilder *builder, SIRInstRef global_ref)
 
     builder->meta_insts[global_ref.id] = create_global_value(
         builder,
-        global.global.flags,
-        global.global.data,
-        global.global.data_len);
+        global.global->flags,
+        global.global->data,
+        global.global->data_len);
 }
 
 SIR_INLINE void
@@ -2697,7 +2719,8 @@ SIR_INLINE size_t get_func_call_stack_parameters_size(
 
     SIRInst func_call = SIRModuleGetInst(builder->module, func_call_ref);
     SIRFunction *called_func =
-        SIRModuleGetInst(builder->module, func_call.func_call.func_ref).func;
+        SIRModuleGetInst(builder->module, func_call.op1).func;
+
     switch (called_func->calling_convention) {
     case SIRCallingConvention_SystemV: {
         uint32_t used_int_regs = 0;
@@ -2786,7 +2809,7 @@ static void reg_stack_alloc(
     // Spill all elegible insts to stack
     for (SIRInstRef block_ref : func->blocks) {
         SIRInst block = SIRModuleGetInst(builder->module, block_ref);
-        for (SIRInstRef inst_ref : block.block.inst_refs) {
+        for (SIRInstRef inst_ref : block.block->inst_refs) {
             SIRInst inst = SIRModuleGetInst(builder->module, inst_ref);
 
             switch (inst.kind) {
@@ -2803,7 +2826,9 @@ static void reg_stack_alloc(
             case SIRInstKind_Jump:
             case SIRInstKind_Branch:
             case SIRInstKind_ReturnVoid:
-            case SIRInstKind_ReturnValue: break;
+            case SIRInstKind_ReturnValue:
+            case SIRInstKind_SetCond:
+            case SIRInstKind_PushFunctionParameter: break;
 
             // Data already stored somewhere else:
             case SIRInstKind_Alias:
@@ -2866,14 +2891,14 @@ static void inst_aliasing_pass(X64AsmBuilder *builder, SIRFunction *func)
 {
     for (SIRInstRef block_ref : func->blocks) {
         SIRInst block = SIRModuleGetInst(builder->module, block_ref);
-        for (SIRInstRef inst_ref : block.block.inst_refs) {
+        for (SIRInstRef inst_ref : block.block->inst_refs) {
             SIRInst inst = SIRModuleGetInst(builder->module, inst_ref);
             switch (inst.kind) {
             case SIRInstKind_Trunc: {
                 SIRType *dest_type =
                     SIRModuleGetInstType(builder->module, inst_ref);
                 SIRType *source_type =
-                    SIRModuleGetInstType(builder->module, inst.cast.inst_ref);
+                    SIRModuleGetInstType(builder->module, inst.op1);
 
                 uint32_t dest_type_size =
                     SIRTypeSizeOf(builder->module, dest_type);
@@ -2887,7 +2912,8 @@ static void inst_aliasing_pass(X64AsmBuilder *builder, SIRFunction *func)
                 if (dest_type_align == source_type_align &&
                     dest_type_size == source_type_size) {
                     inst.kind = SIRInstKind_Alias;
-                    inst.alias.inst_ref = inst.cast.inst_ref;
+                    inst.op1 = inst.op1;
+                    inst.op2.id = 0;
                     builder->module->insts[inst_ref.id] = inst;
                 }
 
@@ -2897,7 +2923,7 @@ static void inst_aliasing_pass(X64AsmBuilder *builder, SIRFunction *func)
                 SIRType *dest_type =
                     SIRModuleGetInstType(builder->module, inst_ref);
                 SIRType *source_type =
-                    SIRModuleGetInstType(builder->module, inst.cast.inst_ref);
+                    SIRModuleGetInstType(builder->module, inst.op1);
 
                 uint32_t dest_type_size =
                     SIRTypeSizeOf(builder->module, dest_type);
@@ -2911,7 +2937,8 @@ static void inst_aliasing_pass(X64AsmBuilder *builder, SIRFunction *func)
                 if (dest_type_align == source_type_align &&
                     dest_type_size == source_type_size) {
                     inst.kind = SIRInstKind_Alias;
-                    inst.alias.inst_ref = inst.cast.inst_ref;
+                    inst.op1 = inst.op1;
+                    inst.op2.id = 0;
                     builder->module->insts[inst_ref.id] = inst;
                 }
 
@@ -3063,7 +3090,7 @@ static void generate_function(X64AsmBuilder *builder, SIRInstRef func_ref)
 
         builder->current_block = block_ref;
 
-        for (SIRInstRef inst_ref : block.block.inst_refs) {
+        for (SIRInstRef inst_ref : block.block->inst_refs) {
             generate_inst(builder, func_ref, inst_ref);
             /* builder->encode(FE_NOP); */
         }
@@ -3115,6 +3142,7 @@ static void generate(SIRAsmBuilder *asm_builder)
 static void destroy(SIRAsmBuilder *asm_builder)
 {
     X64AsmBuilder *builder = (X64AsmBuilder *)asm_builder;
+    builder->current_func_params.destroy();
     builder->meta_insts.destroy();
 }
 
@@ -3130,6 +3158,9 @@ SIRCreateX64Builder(SIRModule *module, SIRObjectBuilder *obj_builder)
 
     asm_builder->module = module;
     asm_builder->obj_builder = obj_builder;
+
+    asm_builder->current_func_params =
+        SIRArray<SIRInstRef>::create(&SIR_MALLOC_ALLOCATOR);
 
     asm_builder->meta_insts =
         SIRArray<MetaValue>::create(&SIR_MALLOC_ALLOCATOR);

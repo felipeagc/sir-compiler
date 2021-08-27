@@ -103,6 +103,7 @@ typedef enum SIRInstKind {
     SIRInstKind_SetCond,
     SIRInstKind_Branch,
     SIRInstKind_Phi,
+    SIRInstKind_PhiIncoming,
     SIRInstKind_FuncCall,
     SIRInstKind_BitCast,
     SIRInstKind_ZExt,
@@ -275,7 +276,6 @@ SIRInstRef SIRBuilderInsertPhi(SIRBuilder *builder, SIRType *type);
 
 void SIRPhiAddIncoming(
     SIRBuilder *builder,
-    SIRInstRef phi_ref,
     SIRInstRef block_ref,
     SIRInstRef value_ref);
 

@@ -26,7 +26,7 @@ struct SIRType {
             uint64_t count;
         } array;
         struct {
-            SIRType ** fields;
+            SIRType **fields;
             uint32_t fields_len;
             bool packed;
         } struct_;
@@ -65,11 +65,6 @@ struct SIRGlobal {
     uint32_t flags;
 };
 
-struct SIRPhiPair {
-    SIRInstRef block_ref;
-    SIRInstRef value_ref;
-};
-
 struct SIRInst {
     union {
         SIRFunction *func;
@@ -92,12 +87,17 @@ struct SIRInst {
             SIRInstRef op2;
         };
         struct {
-            SIRArray<SIRPhiPair> pairs;
-        } phi;
-        struct {
             SIRInstRef accessed_ref;
             SIRInstRef index_ref;
         } array_elem_ptr;
+        struct {
+            SIRInstRef ptr_ref;
+            SIRInstRef value_ref;
+        } store;
+        struct {
+            SIRInstRef block_ref;
+            SIRInstRef value_ref;
+        } phi_incoming;
         struct {
             SIRInstRef accessed_ref;
             uint32_t field_index; // TODO: replace with SIRInstKind_ConstInt
@@ -110,10 +110,6 @@ struct SIRInst {
             SIRInstRef accessed_ref;
             uint32_t field_index; // TODO: replace with SIRInstKind_ConstInt
         } extract_struct_elem;
-        struct {
-            SIRInstRef ptr_ref;
-            SIRInstRef value_ref;
-        } store;
         struct {
             SIRInstRef left_ref;
             SIRInstRef right_ref;

@@ -952,11 +952,8 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
                     ctx->builder, ctx->type_values[compiler->bool_type]),
             };
 
-            SIRPhiAddIncoming(
-                ctx->builder, value.inst_ref, incoming_block, left_value);
-
-            SIRPhiAddIncoming(
-                ctx->builder, value.inst_ref, true_block, right_value);
+            SIRPhiAddIncoming(ctx->builder, incoming_block, left_value);
+            SIRPhiAddIncoming(ctx->builder, true_block, right_value);
 
             break;
         }
@@ -1000,11 +997,9 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
                     ctx->builder, ctx->type_values[compiler->bool_type]),
             };
 
-            SIRPhiAddIncoming(
-                ctx->builder, value.inst_ref, incoming_block, left_value);
+            SIRPhiAddIncoming(ctx->builder, incoming_block, left_value);
+            SIRPhiAddIncoming(ctx->builder, false_block, right_value);
 
-            SIRPhiAddIncoming(
-                ctx->builder, value.inst_ref, false_block, right_value);
             break;
         }
         }

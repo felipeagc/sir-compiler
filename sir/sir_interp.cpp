@@ -84,6 +84,7 @@ static char *SIRInterpGetInstAddr(SIRInterpContext *ctx, SIRInstRef inst_ref)
     switch (inst.kind) {
     case SIRInstKind_Unknown: SIR_ASSERT(0); break;
 
+    case SIRInstKind_PhiIncoming:
     case SIRInstKind_PushFunctionParameter:
     case SIRInstKind_SetCond:
     case SIRInstKind_Alias:
@@ -180,6 +181,7 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
     case SIRInstKind_ConstInt:
     case SIRInstKind_ConstFloat: SIR_ASSERT(0); break;
 
+    case SIRInstKind_PhiIncoming:
     case SIRInstKind_Function:
     case SIRInstKind_FunctionParameter:
     case SIRInstKind_Block: {
@@ -252,18 +254,23 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
         SIRInstRef next_block_ref = inst.op1;
         SIRInst next_block = SIRModuleGetInst(ctx->mod, next_block_ref);
 
-        if (next_block.block->inst_refs.len > 0) {
-            SIRInstRef first_inst_ref = next_block.block->inst_refs[0];
-            SIRInst first_inst = SIRModuleGetInst(ctx->mod, first_inst_ref);
+        SIRInstRef phi_ref = {0};
+        for (size_t i = 0; i < next_block.block->inst_refs.len; ++i) {
+            SIRInstRef next_inst_ref = next_block.block->inst_refs[i];
+            SIRInst next_inst = SIRModuleGetInst(ctx->mod, next_inst_ref);
+            if (i == 0) {
+                if (next_inst.kind != SIRInstKind_Phi) break;
 
-            if (first_inst.kind == SIRInstKind_Phi) {
-                for (size_t i = 0; i < first_inst.phi.pairs.len; ++i) {
-                    SIRPhiPair pair = first_inst.phi.pairs[i];
-                    if (pair.block_ref.id == current_block_ref.id) {
-                        ctx->value_addrs[first_inst_ref.id] =
-                            SIRInterpGetInstAddr(ctx, pair.value_ref);
-                        break;
-                    }
+                phi_ref = next_inst_ref;
+            } else {
+                if (next_inst.kind != SIRInstKind_PhiIncoming) break;
+
+                if (next_inst.phi_incoming.block_ref.id ==
+                    current_block_ref.id) {
+                    ctx->value_addrs[phi_ref.id] =
+                        SIRInterpGetInstAddr(
+                            ctx, next_inst.phi_incoming.value_ref);
+                    break;
                 }
             }
         }
@@ -284,18 +291,23 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
             (*(bool *)value_addr) ? true_block : false_block;
         SIRInst next_block = SIRModuleGetInst(ctx->mod, next_block_ref);
 
-        if (next_block.block->inst_refs.len > 0) {
-            SIRInstRef first_inst_ref = next_block.block->inst_refs[0];
-            SIRInst first_inst = SIRModuleGetInst(ctx->mod, first_inst_ref);
+        SIRInstRef phi_ref = {0};
+        for (size_t i = 0; i < next_block.block->inst_refs.len; ++i) {
+            SIRInstRef next_inst_ref = next_block.block->inst_refs[i];
+            SIRInst next_inst = SIRModuleGetInst(ctx->mod, next_inst_ref);
+            if (i == 0) {
+                if (next_inst.kind != SIRInstKind_Phi) break;
 
-            if (first_inst.kind == SIRInstKind_Phi) {
-                for (size_t i = 0; i < first_inst.phi.pairs.len; ++i) {
-                    SIRPhiPair pair = first_inst.phi.pairs[i];
-                    if (pair.block_ref.id == current_block_ref.id) {
-                        ctx->value_addrs[first_inst_ref.id] =
-                            SIRInterpGetInstAddr(ctx, pair.value_ref);
-                        break;
-                    }
+                phi_ref = next_inst_ref;
+            } else {
+                if (next_inst.kind != SIRInstKind_PhiIncoming) break;
+
+                if (next_inst.phi_incoming.block_ref.id ==
+                    current_block_ref.id) {
+                    ctx->value_addrs[phi_ref.id] =
+                        SIRInterpGetInstAddr(
+                            ctx, next_inst.phi_incoming.value_ref);
+                    break;
                 }
             }
         }
@@ -382,8 +394,7 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
         break;
     }
     case SIRInstKind_ZExt: {
-        SIRType *source_type =
-            SIRModuleGetInstType(ctx->mod, inst.op1);
+        SIRType *source_type = SIRModuleGetInstType(ctx->mod, inst.op1);
         size_t source_size = SIRTypeSizeOf(ctx->mod, source_type);
         SIRType *dest_type = SIRModuleGetInstType(ctx->mod, inst_ref);
         size_t dest_size = SIRTypeSizeOf(ctx->mod, dest_type);
@@ -414,8 +425,7 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
         break;
     }
     case SIRInstKind_SExt: {
-        SIRType *source_type =
-            SIRModuleGetInstType(ctx->mod, inst.op1);
+        SIRType *source_type = SIRModuleGetInstType(ctx->mod, inst.op1);
         size_t source_size = SIRTypeSizeOf(ctx->mod, source_type);
         SIRType *dest_type = SIRModuleGetInstType(ctx->mod, inst_ref);
         size_t dest_size = SIRTypeSizeOf(ctx->mod, dest_type);
@@ -446,8 +456,7 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
         break;
     }
     case SIRInstKind_Trunc: {
-        SIRType *source_type =
-            SIRModuleGetInstType(ctx->mod, inst.op1);
+        SIRType *source_type = SIRModuleGetInstType(ctx->mod, inst.op1);
         size_t source_size = SIRTypeSizeOf(ctx->mod, source_type);
         SIRType *dest_type = SIRModuleGetInstType(ctx->mod, inst_ref);
         size_t dest_size = SIRTypeSizeOf(ctx->mod, dest_type);
@@ -479,8 +488,7 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
         break;
     }
     case SIRInstKind_FPTrunc: {
-        SIRType *source_type =
-            SIRModuleGetInstType(ctx->mod, inst.op1);
+        SIRType *source_type = SIRModuleGetInstType(ctx->mod, inst.op1);
         size_t source_size = SIRTypeSizeOf(ctx->mod, source_type);
         SIRType *dest_type = SIRModuleGetInstType(ctx->mod, inst_ref);
         size_t dest_size = SIRTypeSizeOf(ctx->mod, dest_type);
@@ -497,8 +505,7 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
         break;
     }
     case SIRInstKind_FPExt: {
-        SIRType *source_type =
-            SIRModuleGetInstType(ctx->mod, inst.op1);
+        SIRType *source_type = SIRModuleGetInstType(ctx->mod, inst.op1);
         size_t source_size = SIRTypeSizeOf(ctx->mod, source_type);
         SIRType *dest_type = SIRModuleGetInstType(ctx->mod, inst_ref);
         size_t dest_size = SIRTypeSizeOf(ctx->mod, dest_type);
@@ -515,8 +522,7 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
         break;
     }
     case SIRInstKind_SIToFP: {
-        SIRType *source_type =
-            SIRModuleGetInstType(ctx->mod, inst.op1);
+        SIRType *source_type = SIRModuleGetInstType(ctx->mod, inst.op1);
         size_t source_size = SIRTypeSizeOf(ctx->mod, source_type);
         SIRType *dest_type = SIRModuleGetInstType(ctx->mod, inst_ref);
         size_t dest_size = SIRTypeSizeOf(ctx->mod, dest_type);
@@ -545,8 +551,7 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
         break;
     }
     case SIRInstKind_UIToFP: {
-        SIRType *source_type =
-            SIRModuleGetInstType(ctx->mod, inst.op1);
+        SIRType *source_type = SIRModuleGetInstType(ctx->mod, inst.op1);
         size_t source_size = SIRTypeSizeOf(ctx->mod, source_type);
         SIRType *dest_type = SIRModuleGetInstType(ctx->mod, inst_ref);
         size_t dest_size = SIRTypeSizeOf(ctx->mod, dest_type);
@@ -573,8 +578,7 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
         break;
     }
     case SIRInstKind_FPToSI: {
-        SIRType *source_type =
-            SIRModuleGetInstType(ctx->mod, inst.op1);
+        SIRType *source_type = SIRModuleGetInstType(ctx->mod, inst.op1);
         size_t source_size = SIRTypeSizeOf(ctx->mod, source_type);
         SIRType *dest_type = SIRModuleGetInstType(ctx->mod, inst_ref);
         size_t dest_size = SIRTypeSizeOf(ctx->mod, dest_type);
@@ -601,8 +605,7 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
         break;
     }
     case SIRInstKind_FPToUI: {
-        SIRType *source_type =
-            SIRModuleGetInstType(ctx->mod, inst.op1);
+        SIRType *source_type = SIRModuleGetInstType(ctx->mod, inst.op1);
         size_t source_size = SIRTypeSizeOf(ctx->mod, source_type);
         SIRType *dest_type = SIRModuleGetInstType(ctx->mod, inst_ref);
         size_t dest_size = SIRTypeSizeOf(ctx->mod, dest_type);

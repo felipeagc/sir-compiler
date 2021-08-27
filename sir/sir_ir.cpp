@@ -325,8 +325,7 @@ print_instruction(SIRModule *module, SIRInstRef inst_ref, SIRStringBuilder *sb)
     }
 
     case SIRInstKind_FuncCall: {
-        sb->sprintf(
-            "%%r%u = func_call %%r%u", inst_ref.id, inst.op1.id);
+        sb->sprintf("%%r%u = func_call %%r%u", inst_ref.id, inst.op1.id);
         break;
     }
 
@@ -364,8 +363,8 @@ print_instruction(SIRModule *module, SIRInstRef inst_ref, SIRStringBuilder *sb)
         break;
     }
     case SIRInstKind_ReturnValue: {
-        SIRString type_string = SIRTypeToString(
-            module, SIRModuleGetInst(module, inst.op1).type);
+        SIRString type_string =
+            SIRTypeToString(module, SIRModuleGetInst(module, inst.op1).type);
         sb->sprintf(
             "return_value %.*s %%r%u",
             (int)type_string.len,
@@ -384,19 +383,18 @@ print_instruction(SIRModule *module, SIRInstRef inst_ref, SIRStringBuilder *sb)
     case SIRInstKind_Phi: {
         SIRString type_string = SIRTypeToString(module, inst.type);
         sb->sprintf(
-            "%%r%u = phi %.*s ",
+            "%%r%u = phi %.*s",
             inst_ref.id,
             (int)type_string.len,
             type_string.ptr);
-
-        for (size_t i = 0; i < inst.phi.pairs.len; ++i) {
-            if (i > 0) sb->append(SIR_STR(", "));
-
-            sb->sprintf(
-                "[%%b%u, %%r%u]",
-                inst.phi.pairs[i].block_ref.id,
-                inst.phi.pairs[i].value_ref.id);
-        }
+        break;
+    }
+    case SIRInstKind_PhiIncoming: {
+        sb->sprintf(
+            "%%r%u = phi_incoming %%b%u %%r%u",
+            inst_ref.id,
+            inst.op1.id,
+            inst.op2.id);
         break;
     }
     }
@@ -1474,23 +1472,21 @@ SIRInstRef SIRBuilderInsertPhi(SIRBuilder *builder, SIRType *type)
     SIRInst inst = {};
     inst.kind = SIRInstKind_Phi;
     inst.type = type;
-    inst.phi.pairs =
-        SIRArray<SIRPhiPair>::create((SIRAllocator *)builder->module->arena);
 
     return builder_insert_inst(builder, inst);
 }
 
 void SIRPhiAddIncoming(
-    SIRBuilder *builder,
-    SIRInstRef phi_ref,
-    SIRInstRef block_ref,
-    SIRInstRef value_ref)
+    SIRBuilder *builder, SIRInstRef block_ref, SIRInstRef value_ref)
 {
     ZoneScoped;
 
-    SIRInst phi = SIRModuleGetInst(builder->module, phi_ref);
-    phi.phi.pairs.push_back((SIRPhiPair){block_ref, value_ref});
-    builder->module->insts[phi_ref.id] = phi;
+    SIRInst inst = {};
+    inst.kind = SIRInstKind_PhiIncoming;
+    inst.op1 = block_ref;
+    inst.op2 = value_ref;
+
+    builder_insert_inst(builder, inst);
 }
 
 void SIRBuilderInsertReturnValue(SIRBuilder *builder, SIRInstRef inst_ref)

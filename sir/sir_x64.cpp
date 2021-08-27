@@ -1238,13 +1238,12 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
         MetaValue dest_value = builder->meta_insts[inst_ref.id];
 
         size_t operand_size = SIRTypeSizeOf(
-            builder->module,
-            SIRModuleGetInst(builder->module, inst.binop.left_ref).type);
+            builder->module, SIRModuleGetInst(builder->module, inst.op1).type);
 
-        MetaValue left_val = builder->meta_insts[inst.binop.left_ref.id];
-        MetaValue right_val = builder->meta_insts[inst.binop.right_ref.id];
+        MetaValue left_val = builder->meta_insts[inst.op1.id];
+        MetaValue right_val = builder->meta_insts[inst.op2.id];
 
-        switch (inst.binop.op) {
+        switch (inst.binop) {
         case SIRBinaryOperation_Unknown:
         case SIRBinaryOperation_MAX: SIR_ASSERT(0); break;
 
@@ -1318,10 +1317,10 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
                 create_int_register_value(operand_size, RegisterIndex_RAX);
             MetaValue divisor_value = right_val;
 
-            bool is_signed = inst.binop.op == SIRBinaryOperation_SDiv ||
-                             inst.binop.op == SIRBinaryOperation_SRem;
-            bool is_rem = inst.binop.op == SIRBinaryOperation_SRem ||
-                          inst.binop.op == SIRBinaryOperation_URem;
+            bool is_signed = inst.binop == SIRBinaryOperation_SDiv ||
+                             inst.binop == SIRBinaryOperation_SRem;
+            bool is_rem = inst.binop == SIRBinaryOperation_SRem ||
+                          inst.binop == SIRBinaryOperation_URem;
 
             Mnem ext_mnem = Mnem_MOVZX;
             Mnem div_mnem = Mnem_DIV;
@@ -1446,8 +1445,8 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
             MetaValue dx_value =
                 create_int_register_value(operand_size, RegisterIndex_RDX);
 
-            builder->move_inst_rvalue(inst.binop.left_ref, &ax_value);
-            builder->move_inst_rvalue(inst.binop.right_ref, &dx_value);
+            builder->move_inst_rvalue(inst.op1, &ax_value);
+            builder->move_inst_rvalue(inst.op2, &dx_value);
 
             int64_t x86_inst = 0;
             switch (operand_size) {
@@ -1460,7 +1459,7 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
 
             builder->encode(x86_inst, FE_AX, FE_DX);
 
-            switch (inst.binop.op) {
+            switch (inst.binop) {
             default: SIR_ASSERT(0); break;
             case SIRBinaryOperation_IEQ:
                 builder->encode(FE_SETZ8r, FE_AX); // sete
@@ -1515,7 +1514,7 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
             builder->encode_mnem2(Mnem_MOV, &xmm0_value, &left_val);
             builder->encode_mnem2(Mnem_MOV, &xmm1_value, &right_val);
 
-            switch (inst.binop.op) {
+            switch (inst.binop) {
             default: SIR_ASSERT(0); break;
             case SIRBinaryOperation_FEQ:
             case SIRBinaryOperation_FNE:
@@ -1534,7 +1533,7 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
                 break;
             }
 
-            switch (inst.binop.op) {
+            switch (inst.binop) {
             default: SIR_ASSERT(0); break;
             case SIRBinaryOperation_FEQ:
                 builder->encode(FE_SETZ8r, FE_AX); // sete
@@ -1563,7 +1562,7 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
         case SIRBinaryOperation_Or:
         case SIRBinaryOperation_Xor: {
             Mnem mnem;
-            switch (inst.binop.op) {
+            switch (inst.binop) {
             case SIRBinaryOperation_And: mnem = Mnem_AND; break;
             case SIRBinaryOperation_Or: mnem = Mnem_OR; break;
             case SIRBinaryOperation_Xor: mnem = Mnem_XOR; break;
@@ -1579,7 +1578,7 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
         case SIRBinaryOperation_AShr:
         case SIRBinaryOperation_LShr: {
             Mnem mnem;
-            switch (inst.binop.op) {
+            switch (inst.binop) {
             case SIRBinaryOperation_Shl: mnem = Mnem_SHL; break;
             case SIRBinaryOperation_AShr: mnem = Mnem_SAR; break;
             case SIRBinaryOperation_LShr: mnem = Mnem_SHR; break;
@@ -1636,7 +1635,10 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
     }
 
     case SIRInstKind_StructElemPtr: {
-        uint32_t field_index = inst.struct_elem_ptr.field_index;
+        SIRInstRef field_index_ref = inst.struct_elem_ptr.field_index_ref;
+        uint32_t field_index =
+            SIRModuleGetInst(builder->module, field_index_ref).const_int.u64;
+
         SIRType *struct_type =
             SIRModuleGetInst(builder->module, inst.struct_elem_ptr.accessed_ref)
                 .type->pointer.sub;
@@ -1664,6 +1666,10 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
     }
 
     case SIRInstKind_ExtractArrayElem: {
+        SIRInstRef elem_index_ref = inst.extract_array_elem.index_ref;
+        uint32_t elem_index =
+            SIRModuleGetInst(builder->module, elem_index_ref).const_int.u64;
+
         size_t value_size = SIRTypeSizeOf(builder->module, inst.type);
 
         MetaValue accessed_value =
@@ -1675,7 +1681,7 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
         MetaValue value_addr = create_int_register_memory_value(
             value_size,
             RegisterIndex_RAX,
-            value_size * inst.extract_array_elem.elem_index,
+            value_size * elem_index,
             RegisterIndex_None,
             0);
 
@@ -1698,9 +1704,12 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
     }
 
     case SIRInstKind_ExtractStructElem: {
+        SIRInstRef field_index_ref = inst.extract_struct_elem.field_index_ref;
+        uint32_t field_index =
+            SIRModuleGetInst(builder->module, field_index_ref).const_int.u64;
+
         size_t value_size = SIRTypeSizeOf(builder->module, inst.type);
 
-        uint32_t field_index = inst.extract_struct_elem.field_index;
         SIRType *struct_type =
             SIRModuleGetInst(
                 builder->module, inst.extract_struct_elem.accessed_ref)

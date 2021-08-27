@@ -268,11 +268,11 @@ print_instruction(SIRModule *module, SIRInstRef inst_ref, SIRStringBuilder *sb)
         sb->sprintf(
             "%%r%u = %s %.*s %%r%u %%r%u",
             inst_ref.id,
-            binop_to_string(inst.binop.op),
+            binop_to_string(inst.binop),
             (int)type_string.len,
             type_string.ptr,
-            inst.binop.left_ref.id,
-            inst.binop.right_ref.id);
+            inst.op1.id,
+            inst.op2.id);
         break;
     }
 
@@ -291,36 +291,36 @@ print_instruction(SIRModule *module, SIRInstRef inst_ref, SIRStringBuilder *sb)
     case SIRInstKind_StructElemPtr: {
         SIRString type_string = SIRTypeToString(module, inst.type);
         sb->sprintf(
-            "%%r%u = struct_elem_ptr %.*s %%r%u %u",
+            "%%r%u = struct_elem_ptr %.*s %%r%u %%r%u",
             inst_ref.id,
             (int)type_string.len,
             type_string.ptr,
             inst.struct_elem_ptr.accessed_ref.id,
-            inst.struct_elem_ptr.field_index);
+            inst.struct_elem_ptr.field_index_ref.id);
         break;
     }
 
     case SIRInstKind_ExtractArrayElem: {
         SIRString type_string = SIRTypeToString(module, inst.type);
         sb->sprintf(
-            "%%r%u = extract_array_elem %.*s %%r%u %u",
+            "%%r%u = extract_array_elem %.*s %%r%u %%r%u",
             inst_ref.id,
             (int)type_string.len,
             type_string.ptr,
             inst.extract_array_elem.accessed_ref.id,
-            inst.extract_array_elem.elem_index);
+            inst.extract_array_elem.index_ref.id);
         break;
     }
 
     case SIRInstKind_ExtractStructElem: {
         SIRString type_string = SIRTypeToString(module, inst.type);
         sb->sprintf(
-            "%%r%u = extract_struct_elem %.*s %%r%u %u",
+            "%%r%u = extract_struct_elem %.*s %%r%u %%r%u",
             inst_ref.id,
             (int)type_string.len,
             type_string.ptr,
             inst.extract_struct_elem.accessed_ref.id,
-            inst.extract_struct_elem.field_index);
+            inst.extract_struct_elem.field_index_ref.id);
         break;
     }
 
@@ -864,11 +864,11 @@ SIRInstRef SIRModuleAddFunction(
     };
 
     for (uint32_t i = 0; i < param_types_len; ++i) {
-        SIRInst param_inst = {
-            .func_param = {.index = i},
-            .kind = SIRInstKind_FunctionParameter,
-            .type = param_types[i],
-        };
+        SIRInst param_inst = {};
+        param_inst.kind = SIRInstKind_FunctionParameter;
+        param_inst.type = param_types[i];
+        param_inst.func_param.index = i;
+
         SIRInstRef inst_ref = module_add_inst(module, param_inst);
         function->param_insts.push_back(inst_ref);
     }
@@ -1077,7 +1077,8 @@ SIRInstRef SIRBuilderInsertStructElemPtr(
         builder->module,
         accessed_inst.type->pointer.sub->struct_.fields[field_index]);
     inst.struct_elem_ptr.accessed_ref = accessed_ref;
-    inst.struct_elem_ptr.field_index = field_index;
+    inst.struct_elem_ptr.field_index_ref = SIRModuleAddConstInt(
+        builder->module, builder->module->u32_type, field_index);
 
     return builder_insert_inst(builder, inst);
 }
@@ -1094,7 +1095,8 @@ SIRInstRef SIRBuilderInsertExtractArrayElem(
     inst.kind = SIRInstKind_ExtractArrayElem;
     inst.type = accessed_inst.type->array.sub;
     inst.extract_array_elem.accessed_ref = accessed_ref;
-    inst.extract_array_elem.elem_index = elem_index;
+    inst.extract_array_elem.index_ref = SIRModuleAddConstInt(
+        builder->module, builder->module->u32_type, elem_index);
 
     return builder_insert_inst(builder, inst);
 }
@@ -1111,7 +1113,8 @@ SIRInstRef SIRBuilderInsertExtractStructElem(
     inst.kind = SIRInstKind_ExtractStructElem;
     inst.type = accessed_inst.type->struct_.fields[field_index];
     inst.extract_struct_elem.accessed_ref = accessed_ref;
-    inst.extract_struct_elem.field_index = field_index;
+    inst.extract_struct_elem.field_index_ref = SIRModuleAddConstInt(
+        builder->module, builder->module->u32_type, field_index);
 
     return builder_insert_inst(builder, inst);
 }
@@ -1387,9 +1390,9 @@ SIRInstRef SIRBuilderInsertBinop(
 
     SIR_ASSERT(inst.type);
 
-    inst.binop.op = op;
-    inst.binop.left_ref = left_ref;
-    inst.binop.right_ref = right_ref;
+    inst.binop = op;
+    inst.op1 = left_ref;
+    inst.op2 = right_ref;
 
     return builder_insert_inst(builder, inst);
 }

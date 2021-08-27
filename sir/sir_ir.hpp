@@ -66,6 +66,9 @@ struct SIRGlobal {
 };
 
 struct SIRInst {
+    SIRInstKind kind;
+    SIRBinaryOperation binop;
+    SIRType *type;
     union {
         SIRFunction *func;
         SIRBlock *block;
@@ -87,10 +90,6 @@ struct SIRInst {
             SIRInstRef op2;
         };
         struct {
-            SIRInstRef accessed_ref;
-            SIRInstRef index_ref;
-        } array_elem_ptr;
-        struct {
             SIRInstRef ptr_ref;
             SIRInstRef value_ref;
         } store;
@@ -100,24 +99,21 @@ struct SIRInst {
         } phi_incoming;
         struct {
             SIRInstRef accessed_ref;
-            uint32_t field_index; // TODO: replace with SIRInstKind_ConstInt
+            SIRInstRef index_ref;
+        } array_elem_ptr;
+        struct {
+            SIRInstRef accessed_ref;
+            SIRInstRef field_index_ref;
         } struct_elem_ptr;
         struct {
             SIRInstRef accessed_ref;
-            uint32_t elem_index; // TODO: replace with SIRInstKind_ConstInt
+            SIRInstRef index_ref;
         } extract_array_elem;
         struct {
             SIRInstRef accessed_ref;
-            uint32_t field_index; // TODO: replace with SIRInstKind_ConstInt
+            SIRInstRef field_index_ref;
         } extract_struct_elem;
-        struct {
-            SIRInstRef left_ref;
-            SIRInstRef right_ref;
-            SIRBinaryOperation op;
-        } binop;
     };
-    SIRInstKind kind;
-    SIRType *type;
 };
 
 struct SIRModule {

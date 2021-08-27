@@ -267,9 +267,8 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
 
                 if (next_inst.phi_incoming.block_ref.id ==
                     current_block_ref.id) {
-                    ctx->value_addrs[phi_ref.id] =
-                        SIRInterpGetInstAddr(
-                            ctx, next_inst.phi_incoming.value_ref);
+                    ctx->value_addrs[phi_ref.id] = SIRInterpGetInstAddr(
+                        ctx, next_inst.phi_incoming.value_ref);
                     break;
                 }
             }
@@ -304,9 +303,8 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
 
                 if (next_inst.phi_incoming.block_ref.id ==
                     current_block_ref.id) {
-                    ctx->value_addrs[phi_ref.id] =
-                        SIRInterpGetInstAddr(
-                            ctx, next_inst.phi_incoming.value_ref);
+                    ctx->value_addrs[phi_ref.id] = SIRInterpGetInstAddr(
+                        ctx, next_inst.phi_incoming.value_ref);
                     break;
                 }
             }
@@ -683,6 +681,10 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
         break;
     }
     case SIRInstKind_StructElemPtr: {
+        SIRInstRef field_index_ref = inst.struct_elem_ptr.field_index_ref;
+        uint32_t field_index =
+            SIRModuleGetInst(ctx->mod, field_index_ref).const_int.u64;
+
         SIRType *struct_ptr_type =
             SIRModuleGetInstType(ctx->mod, inst.struct_elem_ptr.accessed_ref);
         SIRType *struct_type = struct_ptr_type->pointer.sub;
@@ -693,8 +695,8 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
         char *struct_addr = *(char **)SIRInterpGetInstAddr(
             ctx, inst.struct_elem_ptr.accessed_ref);
 
-        uint32_t field_offset = SIRTypeStructOffsetOf(
-            ctx->mod, struct_type, inst.struct_elem_ptr.field_index);
+        uint32_t field_offset =
+            SIRTypeStructOffsetOf(ctx->mod, struct_type, field_index);
 
         char *field_addr = struct_addr + field_offset;
 
@@ -709,13 +711,16 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
 
         SIR_ASSERT(array_type->kind == SIRTypeKind_Array);
 
+        SIRInstRef elem_index_ref = inst.extract_array_elem.index_ref;
+        uint32_t elem_index =
+            SIRModuleGetInst(ctx->mod, elem_index_ref).const_int.u64;
+
         char *array_addr =
             SIRInterpGetInstAddr(ctx, inst.extract_array_elem.accessed_ref);
-        uint64_t index = inst.extract_array_elem.elem_index;
 
         size_t elem_size = SIRTypeSizeOf(ctx->mod, array_type->array.sub);
 
-        char *elem_addr = array_addr + index * elem_size;
+        char *elem_addr = array_addr + elem_index * elem_size;
 
         value_addr = SIRInterpAllocStackVal(
             ctx, elem_size, SIRTypeAlignOf(ctx->mod, array_type->array.sub));
@@ -728,7 +733,9 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
 
         SIR_ASSERT(struct_type->kind == SIRTypeKind_Struct);
 
-        uint32_t field_index = inst.struct_elem_ptr.field_index;
+        SIRInstRef field_index_ref = inst.extract_struct_elem.field_index_ref;
+        uint32_t field_index =
+            SIRModuleGetInst(ctx->mod, field_index_ref).const_int.u64;
 
         uint32_t field_offset =
             SIRTypeStructOffsetOf(ctx->mod, struct_type, field_index);
@@ -753,8 +760,8 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
         value_addr = SIRInterpAllocStackVal(
             ctx, value_size, SIRTypeAlignOf(ctx->mod, type));
 
-        char *left_addr = SIRInterpGetInstAddr(ctx, inst.binop.left_ref);
-        char *right_addr = SIRInterpGetInstAddr(ctx, inst.binop.right_ref);
+        char *left_addr = SIRInterpGetInstAddr(ctx, inst.op1);
+        char *right_addr = SIRInterpGetInstAddr(ctx, inst.op2);
 
 #define SIR_INTERP_BINOP(RESULT_TYPE, OP_TYPE, OP)                             \
     (*(RESULT_TYPE *)value_addr) =                                             \
@@ -804,7 +811,7 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
     case 8: SIR_INTERP_BINOP(double, double, OP); break;                       \
     }
 
-        switch (inst.binop.op) {
+        switch (inst.binop) {
         case SIRBinaryOperation_Unknown:
         case SIRBinaryOperation_MAX: SIR_ASSERT(0); break;
 

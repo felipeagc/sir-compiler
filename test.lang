@@ -11,72 +11,54 @@ fn print_int(x: u64) {
 }
 
 // type S struct {
-// 	a: i32,
-// 	b: f64,
-// };
-// 
-// type P struct {
-// 	a: i32,
-// 	b: i32,
+// 	a: i64,
+// 	b: i64,
 // 	c: f64,
 // 	d: f64,
 // };
-// 
-// fn func1(p1: i32, p2: i32, p3: i32, p4: i32, p5: i32, s1: P): S {
-// 	printf("%f\n", s1.c);
-// 	s: S;
-// 	s.b = 123;
-// 	return s;
+
+// fn ret_large_struct(): S {
+//     var s: S = undefined;
+//     s.a = 1;
+//     s.b = 2;
+//     s.c = 3;
+//     s.d = 4;
+//     return s;
 // }
 
-type MyInt distinct i32;
+type P struct {
+    a: i8,
+    b: i8,
+    c: i8,
+    d: i8,
+    e: i8,
+    f: i8,
+    g: i8,
+};
+
+fn ret_simple_struct(): P {
+    var p: P = undefined;
+    p.a = 1;
+    p.b = 2;
+    p.c = 3;
+    p.d = 4;
+    p.e = 5;
+    p.f = 6;
+    p.g = 7;
+    return p;
+}
 
 fn export main() {
-	// p: P;
-	// p.c = 3;
-	// p2 := func1(1, 2, 3, 4, 5, p);
-	// printf("%f\n", p2.b);
+    // var s: S = ret_large_struct();
+    // printf("%ld\n", s.a);
 
-	// b := u64(2);
-	// c := &b;
-	// a := u64(8) / b;
-	// printf("%d\n", i32(a));
+    var p = ret_simple_struct();
+    printf("a = %d\n", i32(p.a));
+    printf("b = %d\n", i32(p.b));
+    printf("c = %d\n", i32(p.c));
+    printf("d = %d\n", i32(p.d));
+    printf("e = %d\n", i32(p.e));
+    printf("f = %d\n", i32(p.f));
+    printf("g = %d\n", i32(p.g));
 
-	// a := i32(123);
-	// b := a + 321;
-
-	// printf("@sizeof(usize) = %d\n", i32(@sizeof(usize)));
-	// s: usize = 1231;
-
-	// if (@defined("linux")) {
-	// 	printf("Linux\n");
-	// }
-	// var my_int2 = MyInt(123);
-	// var is_linux = @defined("linux") == true;
-	// var not_linux: bool = is_linux == false;
-	// if (not_linux) {
-	// 	printf("Not linux\n");
-	// }
-
-	// when (@defined("linux") or @defined("no")) {
-	// 	printf("Compiling 1\n");
-	// } else {
-	// 	printf("Compiling 2\n");
-	// }
-
-	// if (is_linux and my_int2 > MyInt(1)) {
-	// 	printf("hey\n");
-	// }
-
-	// if (not_linux or my_int2 > MyInt(1)) {
-	// 	printf("hey again\n");
-	// }
-
-	// print_int(0xFF00000000000000);
-	// print_int(0xffffffffffffffff);
-	print_int(-1);
-
-    var a: f64 = 123;
-    var b: f64 = -a;
-    printf("%f %f %f %f %f %f %f %f %f %f\n", f32(1), f32(b), f32(b), f32(b), f32(b), f32(b), f32(b), f32(b), f32(9), f32(10));
 }

@@ -1625,7 +1625,7 @@ uint32_t SIRTypeSizeOf(SIRModule *module, SIRType *type)
     if (type->size > 0) return type->size;
 
     switch (type->kind) {
-    case SIRTypeKind_Void: type->size = 1; break;
+    case SIRTypeKind_Void: type->size = 0; break;
     case SIRTypeKind_Bool: type->size = 1; break;
     case SIRTypeKind_Int: type->size = type->int_.bits / 8; break;
     case SIRTypeKind_Float: type->size = type->float_.bits / 8; break;

@@ -290,12 +290,10 @@ struct X64AsmBuilder {
         const MetaValue *op1,
         const MetaValue *op2,
         const MetaValue *op3);
-    void encode_lea2(const MetaValue *dest, const MetaValue *source);
 
     size_t encode_direct_call(SIRInstRef func_ref);
     void encode_function_ending(SIRInstRef func_ref);
 
-    void move_inst_rvalue(SIRInstRef inst_ref, const MetaValue *dest_value);
     void encode_memcpy(
         size_t value_size, MetaValue source_value, MetaValue dest_value);
 };
@@ -655,35 +653,6 @@ void X64AsmBuilder::encode_mnem3(
     op3->add_relocation(this, mnem, op3_opkind, op3->size_class);
 }
 
-void X64AsmBuilder::encode_lea2(const MetaValue *dest, const MetaValue *source)
-{
-    ZoneScoped;
-
-    OperandKind source_opkind = OPERAND_KINDS[source->kind];
-    OperandKind dest_opkind = OPERAND_KINDS[dest->kind];
-
-    if (source_opkind == OperandKind_Memory &&
-        dest_opkind == OperandKind_Memory) {
-        int64_t encoding1 =
-            ENCODING_ENTRIES2[Mnem_LEA][OperandKind_Reg][dest->size_class]
-                             [OperandKind_Memory][source->size_class];
-        int64_t encoding2 =
-            ENCODING_ENTRIES2[Mnem_MOV][OperandKind_Memory][dest->size_class]
-                             [OperandKind_Reg][dest->size_class];
-        this->encode(encoding1, FE_AX, source->into_operand());
-        source->add_relocation(this, Mnem_LEA);
-        this->encode(encoding2, dest->into_operand(), FE_AX);
-        dest->add_relocation(this, Mnem_MOV);
-    } else {
-        int64_t encoding =
-            ENCODING_ENTRIES2[Mnem_LEA][dest_opkind][dest->size_class]
-                             [source_opkind][source->size_class];
-        this->encode(encoding, dest->into_operand(), source->into_operand());
-        source->add_relocation(this, Mnem_LEA, dest_opkind, dest->size_class);
-        dest->add_relocation(this, Mnem_LEA, source_opkind, source->size_class);
-    }
-}
-
 enum SysVParamClass {
     SysVParamClass_Int = 0,
     SysVParamClass_SSE,
@@ -816,47 +785,6 @@ static bool sysv_param_should_use_regs(
     }
 
     return use_regs;
-}
-
-void X64AsmBuilder::move_inst_rvalue(
-    SIRInstRef inst_ref, const MetaValue *dest_value)
-{
-    ZoneScoped;
-
-    SIRInst inst = SIRModuleGetInst(this->module, inst_ref);
-    switch (inst.kind) {
-    case SIRInstKind_StackSlot: {
-        this->encode_lea2(dest_value, &this->meta_insts[inst_ref.id]);
-        break;
-    }
-    case SIRInstKind_Global: {
-        this->encode_lea2(dest_value, &this->meta_insts[inst_ref.id]);
-        break;
-    }
-    case SIRInstKind_BitCast: {
-        this->move_inst_rvalue(inst.op1, dest_value);
-        break;
-    }
-    default: {
-        size_t value_size = SIRTypeSizeOf(this->module, inst.type);
-        switch (value_size) {
-        case 1:
-        case 2:
-        case 4:
-        case 8: {
-            this->encode_mnem2(
-                Mnem_MOV, dest_value, &this->meta_insts[inst_ref.id]);
-            break;
-        }
-        default: {
-            this->encode_memcpy(
-                value_size, this->meta_insts[inst_ref.id], *dest_value);
-            break;
-        }
-        }
-        break;
-    }
-    }
 }
 
 void X64AsmBuilder::encode_memcpy(
@@ -1173,17 +1101,17 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
 
     case SIRInstKind_Trunc: {
         MetaValue dest_value = builder->meta_insts[inst_ref.id];
+        MetaValue source_value = builder->meta_insts[inst.op1.id];
 
         SIRType *source_type = SIRModuleGetInst(builder->module, inst.op1).type;
         SIRType *dest_type = inst.type;
 
-        MetaValue source_ax_value = create_int_register_value(
-            SIRTypeSizeOf(builder->module, source_type), RegisterIndex_RAX);
+        uint32_t source_size = SIRTypeSizeOf(builder->module, source_type);
+        uint32_t dest_size = SIRTypeSizeOf(builder->module, dest_type);
+        SIR_ASSERT(source_size >= dest_size);
 
-        MetaValue trunc_ax_value = create_int_register_value(
-            SIRTypeSizeOf(builder->module, dest_type), RegisterIndex_RAX);
-        builder->move_inst_rvalue(inst.op1, &source_ax_value);
-        builder->encode_mnem2(Mnem_MOV, &dest_value, &trunc_ax_value);
+        source_value.size_class = dest_value.size_class;
+        builder->encode_mnem2(Mnem_MOV, &dest_value, &source_value);
 
         break;
     }
@@ -1555,13 +1483,17 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
         case SIRBinaryOperation_SGE:
         case SIRBinaryOperation_SLT:
         case SIRBinaryOperation_SLE: {
+            // TODO: comparison encoding could be better
+
             MetaValue ax_value =
                 create_int_register_value(operand_size, RegisterIndex_RAX);
             MetaValue dx_value =
                 create_int_register_value(operand_size, RegisterIndex_RDX);
 
-            builder->move_inst_rvalue(inst.op1, &ax_value);
-            builder->move_inst_rvalue(inst.op2, &dx_value);
+            builder->encode_mnem2(
+                Mnem_MOV, &ax_value, &builder->meta_insts[inst.op1.id]);
+            builder->encode_mnem2(
+                Mnem_MOV, &dx_value, &builder->meta_insts[inst.op2.id]);
 
             int64_t x86_inst = 0;
             switch (operand_size) {
@@ -2056,6 +1988,8 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
                 } else {
                     param_stack_offset =
                         SIR_ROUND_UP(param_align, param_stack_offset);
+                    MetaValue source_param_value =
+                        builder->meta_insts[param_inst_ref.id];
                     MetaValue dest_param_value =
                         create_int_register_memory_value(
                             param_size,
@@ -2066,8 +2000,8 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
                     param_stack_offset +=
                         param_size; // TODO: not sure if builder should have
                                     // alignment added to it
-                    builder->move_inst_rvalue(
-                        param_inst_ref, &dest_param_value);
+                    builder->encode_memcpy(
+                        param_size, source_param_value, dest_param_value);
                 }
             }
 
@@ -2264,9 +2198,13 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
 
                 if (next_inst.phi_incoming.block_ref.id ==
                     builder->current_block.id) {
-                    builder->move_inst_rvalue(
-                        next_inst.phi_incoming.value_ref,
-                        &builder->meta_insts[phi_ref.id]);
+                    builder->encode_memcpy(
+                        SIRTypeSizeOf(
+                            builder->module,
+                            SIRModuleGetInstType(builder->module, phi_ref)),
+                        builder
+                            ->meta_insts[next_inst.phi_incoming.value_ref.id],
+                        builder->meta_insts[phi_ref.id]);
                     break;
                 }
             }
@@ -2349,8 +2287,12 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
             REGISTERS[al_value.reg.index]);
 
         if (true_phi.id) {
-            builder->move_inst_rvalue(
-                true_phi_value, &builder->meta_insts[true_phi.id]);
+            builder->encode_memcpy(
+                SIRTypeSizeOf(
+                    builder->module,
+                    SIRModuleGetInstType(builder->module, true_phi)),
+                builder->meta_insts[true_phi_value.id],
+                builder->meta_insts[true_phi.id]);
         }
 
         FuncJumpPatch true_patch = {
@@ -2362,8 +2304,12 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
         builder->encode(FE_JNZ | FE_JMPL, -true_patch.instruction_offset);
 
         if (false_phi.id) {
-            builder->move_inst_rvalue(
-                false_phi_value, &builder->meta_insts[false_phi.id]);
+            builder->encode_memcpy(
+                SIRTypeSizeOf(
+                    builder->module,
+                    SIRModuleGetInstType(builder->module, false_phi)),
+                builder->meta_insts[false_phi_value.id],
+                builder->meta_insts[false_phi.id]);
         }
 
         FuncJumpPatch false_patch = {

@@ -36,17 +36,21 @@ type P struct {
     g: i8,
 };
 
-// fn ret_simple_struct(s: P): P {
-//     var p: P = s;
-//     // p.a = 1;
-//     p.b = 2;
-//     p.c = 3;
-//     p.d = 4;
-//     p.e = 5;
-//     p.f = 6;
-//     // p.g = 7;
-//     return p;
+// fn arr_param(a: [2]i32) {
+//     var b = a[0];
 // }
+
+fn ret_simple_struct(s: P): P {
+    var p: P = s;
+    // p.a = 1;
+    p.b = 2;
+    p.c = 3;
+    p.d = 4;
+    p.e = 5;
+    p.f = 6;
+    // p.g = 7;
+    return p;
+}
 
 fn export main() {
     // printf("%d\n", i32(1));

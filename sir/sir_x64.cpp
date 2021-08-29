@@ -1989,115 +1989,85 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
                 uint32_t param_size =
                     SIRTypeSizeOf(builder->module, param_type);
 
-                switch (param_type->kind) {
-                /* case SIRTypeKind_Pointer: { */
-                /*     MetaValue dest_param_value = {}; */
-                /*     if (used_int_regs < */
-                /*         SIR_CARRAY_LENGTH(SYSV_INT_PARAM_REGS)) { */
-                /*         dest_param_value = create_int_register_value( */
-                /*             8, SYSV_INT_PARAM_REGS[used_int_regs++]); */
-                /*     } else { */
-                /*         param_stack_offset = */
-                /*             SIR_ROUND_UP(param_align, param_stack_offset); */
-                /*         dest_param_value = create_int_register_memory_value(
-                 */
-                /*             8, */
-                /*             RegisterIndex_RSP, */
-                /*             0, */
-                /*             RegisterIndex_None, */
-                /*             param_stack_offset); */
-                /*         param_stack_offset += 8; */
-                /*     } */
-                /*     builder->move_inst_rvalue( */
-                /*         param_inst_ref, &dest_param_value); */
-                /*     break; */
-                /* } */
-                default: {
-                    SysVParamClass class1 = SysVParamClass_SSE;
-                    SysVParamClass class2 = SysVParamClass_SSE;
-                    bool use_regs = sysv_param_should_use_regs(
-                        builder,
-                        param_type,
-                        &class1,
-                        &class2,
-                        used_int_regs,
-                        used_float_regs);
+                SysVParamClass class1 = SysVParamClass_SSE;
+                SysVParamClass class2 = SysVParamClass_SSE;
+                bool use_regs = sysv_param_should_use_regs(
+                    builder,
+                    param_type,
+                    &class1,
+                    &class2,
+                    used_int_regs,
+                    used_float_regs);
 
-                    if (use_regs) {
-                        MetaValue param_meta_inst =
-                            builder->meta_insts[param_inst_ref.id];
+                if (use_regs) {
+                    MetaValue param_meta_inst =
+                        builder->meta_insts[param_inst_ref.id];
 
-                        // First register
-                        {
-                            uint32_t param_size1 = SIR_MIN(param_size, 8);
+                    // First register
+                    {
+                        uint32_t param_size1 = SIR_MIN(param_size, 8);
 
-                            MetaValue param_meta_inst1 = param_meta_inst;
-                            param_meta_inst1.size_class =
-                                SIZE_CLASSES[param_size1];
+                        MetaValue param_meta_inst1 = param_meta_inst;
+                        param_meta_inst1.size_class = SIZE_CLASSES[param_size1];
 
-                            MetaValue param_value1;
-                            switch (class1) {
-                            case SysVParamClass_Int:
-                                param_value1 = create_int_register_value(
-                                    param_size1,
-                                    SYSV_INT_PARAM_REGS[used_int_regs++]);
-                                break;
-                            case SysVParamClass_SSE:
-                                param_value1 = create_float_register_value(
-                                    param_size1,
-                                    SYSV_FLOAT_PARAM_REGS[used_float_regs++]);
-                                break;
-                            }
-
-                            builder->encode_memcpy(
-                                param_size1, param_meta_inst1, param_value1);
+                        MetaValue param_value1;
+                        switch (class1) {
+                        case SysVParamClass_Int:
+                            param_value1 = create_int_register_value(
+                                param_size1,
+                                SYSV_INT_PARAM_REGS[used_int_regs++]);
+                            break;
+                        case SysVParamClass_SSE:
+                            param_value1 = create_float_register_value(
+                                param_size1,
+                                SYSV_FLOAT_PARAM_REGS[used_float_regs++]);
+                            break;
                         }
 
-                        // Second register
-                        if (param_size > 8) {
-                            uint32_t param_size2 = param_size - 8;
-
-                            MetaValue param_meta_inst2 = param_meta_inst;
-                            param_meta_inst2.size_class =
-                                SIZE_CLASSES[param_size2];
-                            param_meta_inst2.regmem.offset += 8;
-
-                            MetaValue param_value2;
-                            switch (class2) {
-                            case SysVParamClass_Int:
-                                param_value2 = create_int_register_value(
-                                    param_size2,
-                                    SYSV_INT_PARAM_REGS[used_int_regs++]);
-                                break;
-                            case SysVParamClass_SSE:
-                                param_value2 = create_float_register_value(
-                                    param_size2,
-                                    SYSV_FLOAT_PARAM_REGS[used_float_regs++]);
-                                break;
-                            }
-
-                            builder->encode_memcpy(
-                                param_size2, param_meta_inst2, param_value2);
-                        }
-                    } else {
-                        param_stack_offset =
-                            SIR_ROUND_UP(param_align, param_stack_offset);
-                        MetaValue dest_param_value =
-                            create_int_register_memory_value(
-                                param_size,
-                                RegisterIndex_RSP,
-                                0,
-                                RegisterIndex_None,
-                                param_stack_offset);
-                        param_stack_offset +=
-                            param_size; // TODO: not sure if builder should have
-                                        // alignment added to it
-                        builder->move_inst_rvalue(
-                            param_inst_ref, &dest_param_value);
+                        builder->encode_memcpy(
+                            param_size1, param_meta_inst1, param_value1);
                     }
 
-                    break;
-                }
+                    // Second register
+                    if (param_size > 8) {
+                        uint32_t param_size2 = param_size - 8;
+
+                        MetaValue param_meta_inst2 = param_meta_inst;
+                        param_meta_inst2.size_class = SIZE_CLASSES[param_size2];
+                        param_meta_inst2.regmem.offset += 8;
+
+                        MetaValue param_value2;
+                        switch (class2) {
+                        case SysVParamClass_Int:
+                            param_value2 = create_int_register_value(
+                                param_size2,
+                                SYSV_INT_PARAM_REGS[used_int_regs++]);
+                            break;
+                        case SysVParamClass_SSE:
+                            param_value2 = create_float_register_value(
+                                param_size2,
+                                SYSV_FLOAT_PARAM_REGS[used_float_regs++]);
+                            break;
+                        }
+
+                        builder->encode_memcpy(
+                            param_size2, param_meta_inst2, param_value2);
+                    }
+                } else {
+                    param_stack_offset =
+                        SIR_ROUND_UP(param_align, param_stack_offset);
+                    MetaValue dest_param_value =
+                        create_int_register_memory_value(
+                            param_size,
+                            RegisterIndex_RSP,
+                            0,
+                            RegisterIndex_None,
+                            param_stack_offset);
+                    param_stack_offset +=
+                        param_size; // TODO: not sure if builder should have
+                                    // alignment added to it
+                    builder->move_inst_rvalue(
+                        param_inst_ref, &dest_param_value);
                 }
             }
 
@@ -2444,102 +2414,76 @@ move_func_params_to_stack(X64AsmBuilder *builder, SIRFunction *func)
 
             uint32_t param_size = SIRTypeSizeOf(builder->module, param_type);
 
-            switch (param_type->kind) {
-            case SIRTypeKind_Pointer: {
-                MetaValue param_value = {};
-                if (used_int_regs < SIR_CARRAY_LENGTH(SYSV_INT_PARAM_REGS)) {
-                    param_value = create_int_register_value(
-                        8, SYSV_INT_PARAM_REGS[used_int_regs++]);
-                } else {
-                    param_value = create_int_register_memory_value(
-                        8,
-                        RegisterIndex_RBP,
-                        0,
-                        RegisterIndex_None,
-                        stack_param_offset);
-                    stack_param_offset += 8;
-                }
+            SysVParamClass class1 = SysVParamClass_SSE;
+            SysVParamClass class2 = SysVParamClass_SSE;
+            bool use_regs = sysv_param_should_use_regs(
+                builder,
+                param_type,
+                &class1,
+                &class2,
+                used_int_regs,
+                used_float_regs);
 
-                builder->encode_mnem2(Mnem_MOV, &param_meta_inst, &param_value);
-                break;
-            }
-            default: {
-                SysVParamClass class1 = SysVParamClass_SSE;
-                SysVParamClass class2 = SysVParamClass_SSE;
-                bool use_regs = sysv_param_should_use_regs(
-                    builder,
-                    param_type,
-                    &class1,
-                    &class2,
-                    used_int_regs,
-                    used_float_regs);
+            if (use_regs) {
+                // First register
+                {
+                    uint32_t param_size1 = SIR_MIN(param_size, 8);
 
-                if (use_regs) {
-                    // First register
-                    {
-                        uint32_t param_size1 = SIR_MIN(param_size, 8);
+                    MetaValue param_meta_inst1 = param_meta_inst;
+                    param_meta_inst1.size_class = SIZE_CLASSES[param_size1];
 
-                        MetaValue param_meta_inst1 = param_meta_inst;
-                        param_meta_inst1.size_class = SIZE_CLASSES[param_size1];
-
-                        MetaValue param_value1;
-                        switch (class1) {
-                        case SysVParamClass_Int:
-                            param_value1 = create_int_register_value(
-                                param_size1,
-                                SYSV_INT_PARAM_REGS[used_int_regs++]);
-                            break;
-                        case SysVParamClass_SSE:
-                            param_value1 = create_float_register_value(
-                                param_size1,
-                                SYSV_FLOAT_PARAM_REGS[used_float_regs++]);
-                            break;
-                        }
-
-                        builder->encode_memcpy(
-                            param_size1, param_value1, param_meta_inst1);
+                    MetaValue param_value1;
+                    switch (class1) {
+                    case SysVParamClass_Int:
+                        param_value1 = create_int_register_value(
+                            param_size1, SYSV_INT_PARAM_REGS[used_int_regs++]);
+                        break;
+                    case SysVParamClass_SSE:
+                        param_value1 = create_float_register_value(
+                            param_size1,
+                            SYSV_FLOAT_PARAM_REGS[used_float_regs++]);
+                        break;
                     }
-
-                    // Second register
-                    if (param_size > 8) {
-                        uint32_t param_size2 = param_size - 8;
-
-                        MetaValue param_meta_inst2 = param_meta_inst;
-                        param_meta_inst2.size_class = SIZE_CLASSES[param_size2];
-                        param_meta_inst2.regmem.offset += 8;
-
-                        MetaValue param_value2;
-                        switch (class2) {
-                        case SysVParamClass_Int:
-                            param_value2 = create_int_register_value(
-                                param_size2,
-                                SYSV_INT_PARAM_REGS[used_int_regs++]);
-                            break;
-                        case SysVParamClass_SSE:
-                            param_value2 = create_float_register_value(
-                                param_size2,
-                                SYSV_FLOAT_PARAM_REGS[used_float_regs++]);
-                            break;
-                        }
-
-                        builder->encode_memcpy(
-                            param_size2, param_value2, param_meta_inst2);
-                    }
-                } else {
-                    MetaValue param_value = create_int_register_memory_value(
-                        param_size,
-                        RegisterIndex_RBP,
-                        0,
-                        RegisterIndex_None,
-                        stack_param_offset);
-                    stack_param_offset += param_size;
 
                     builder->encode_memcpy(
-                        param_size, param_value, param_meta_inst);
+                        param_size1, param_value1, param_meta_inst1);
                 }
 
-                break;
-            }
+                // Second register
+                if (param_size > 8) {
+                    uint32_t param_size2 = param_size - 8;
+
+                    MetaValue param_meta_inst2 = param_meta_inst;
+                    param_meta_inst2.size_class = SIZE_CLASSES[param_size2];
+                    param_meta_inst2.regmem.offset += 8;
+
+                    MetaValue param_value2;
+                    switch (class2) {
+                    case SysVParamClass_Int:
+                        param_value2 = create_int_register_value(
+                            param_size2, SYSV_INT_PARAM_REGS[used_int_regs++]);
+                        break;
+                    case SysVParamClass_SSE:
+                        param_value2 = create_float_register_value(
+                            param_size2,
+                            SYSV_FLOAT_PARAM_REGS[used_float_regs++]);
+                        break;
+                    }
+
+                    builder->encode_memcpy(
+                        param_size2, param_value2, param_meta_inst2);
+                }
+            } else {
+                MetaValue param_value = create_int_register_memory_value(
+                    param_size,
+                    RegisterIndex_RBP,
+                    0,
+                    RegisterIndex_None,
+                    stack_param_offset);
+                stack_param_offset += param_size;
+
+                builder->encode_memcpy(
+                    param_size, param_value, param_meta_inst);
             }
         }
 

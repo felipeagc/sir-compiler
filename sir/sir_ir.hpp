@@ -91,6 +91,9 @@ struct SIRInst {
         };
         struct {
             SIRInstRef ptr_ref;
+        } load;
+        struct {
+            SIRInstRef ptr_ref;
             SIRInstRef value_ref;
         } store;
         struct {

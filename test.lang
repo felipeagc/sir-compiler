@@ -1,14 +1,14 @@
 fn extern vararg printf(arg: *u8);
 
-fn print_int(x: u64) {
-	var n = x;
-	var i = u32(0);
-	while (i < 8) {
-		printf("%02x", (n >> ((7 - i) * 8)) & 0xff);
-		i = i + 1;
-	}
-	printf("\n");
-}
+// fn print_int(x: u64) {
+// 	var n = x;
+// 	var i = u32(0);
+// 	while (i < 8) {
+// 		printf("%02x", (n >> ((7 - i) * 8)) & 0xff);
+// 		i = i + 1;
+// 	}
+// 	printf("\n");
+// }
 
 // type S struct {
 // 	a: i64,
@@ -36,34 +36,72 @@ type P struct {
     g: i8,
 };
 
-fn ret_simple_struct(s: P): P {
-    var p: P = s;
-    // p.a = 1;
-    p.b = 2;
-    p.c = 3;
-    p.d = 4;
-    p.e = 5;
-    p.f = 6;
-    // p.g = 7;
-    return p;
-}
+// fn ret_simple_struct(s: P): P {
+//     var p: P = s;
+//     // p.a = 1;
+//     p.b = 2;
+//     p.c = 3;
+//     p.d = 4;
+//     p.e = 5;
+//     p.f = 6;
+//     // p.g = 7;
+//     return p;
+// }
 
 fn export main() {
-    printf("%d\n", i32(1));
+    // printf("%d\n", i32(1));
     // var s: S = ret_large_struct();
     // printf("%ld\n", s.a);
 
-    var p0: P = undefined;
-    p0.a = 123;
-    p0.g = 10;
-    p0.c = 99;
-    var p = ret_simple_struct(p0);
-    printf("a = %d\n", i32(p.a));
-    printf("b = %d\n", i32(p.b));
-    printf("c = %d\n", i32(p.c));
-    printf("d = %d\n", i32(p.d));
-    printf("e = %d\n", i32(p.e));
-    printf("f = %d\n", i32(p.f));
-    printf("g = %d\n", i32(p.g));
+    // var p0: P = undefined;
+    // p0.a = 123;
+    // p0.g = 10;
+    // p0.c = 99;
+    // var p = ret_simple_struct(p0);
+    // printf("a = %d\n", i32(p.a));
+    // printf("b = %d\n", i32(p.b));
+    // printf("c = %d\n", i32(p.c));
+    // printf("d = %d\n", i32(p.d));
+    // printf("e = %d\n", i32(p.e));
+    // printf("f = %d\n", i32(p.f));
+    // printf("g = %d\n", i32(p.g));
+
+    // {
+    //     var a: [2]i32 = undefined;
+    //     a[0] = 1;
+    //     a[1] = 2;
+    //     printf("hello %d %d\n", a[0], a[1]);
+    // }
+
+    // {
+    //     var a: P = undefined;
+    //     a.a = 1;
+    //     a.b = 2;
+    //     a.c = 3;
+    //     a.d = 4;
+    //     a.e = 5;
+        
+    //     var addr = &a;
+
+    //     printf("%d\n", i32(a.a));
+    // }
+
+
+    {
+        global a: i32 = undefined;
+        global b: i32 = undefined;
+
+        a = 1;
+        b = 2;
+
+        var ptr = &a;
+        ptr.* = 0x1234;
+
+        printf("%p\n", &a);
+        printf("%p\n", &b);
+
+        printf("%d\n", a);
+        printf("%d\n", b);
+    }
 
 }

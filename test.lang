@@ -36,23 +36,28 @@ type P struct {
     g: i8,
 };
 
-fn ret_simple_struct(): P {
-    var p: P = undefined;
-    p.a = 1;
+fn ret_simple_struct(s: P): P {
+    var p: P = s;
+    // p.a = 1;
     p.b = 2;
     p.c = 3;
     p.d = 4;
     p.e = 5;
     p.f = 6;
-    p.g = 7;
+    // p.g = 7;
     return p;
 }
 
 fn export main() {
+    printf("%d\n", i32(1));
     // var s: S = ret_large_struct();
     // printf("%ld\n", s.a);
 
-    var p = ret_simple_struct();
+    var p0: P = undefined;
+    p0.a = 123;
+    p0.g = 10;
+    p0.c = 99;
+    var p = ret_simple_struct(p0);
     printf("a = %d\n", i32(p.a));
     printf("b = %d\n", i32(p.b));
     printf("c = %d\n", i32(p.c));

@@ -569,10 +569,10 @@ void X64AsmBuilder::encode_mnem2(
     if (source_opkind == OperandKind_Memory &&
         dest_opkind == OperandKind_Memory) {
         int64_t encoding1 =
-            ENCODING_ENTRIES2[Mnem_MOV][OperandKind_Reg][dest->size_class]
+            ENCODING_ENTRIES2[mnem][OperandKind_Reg][dest->size_class]
                              [OperandKind_Memory][source->size_class];
         int64_t encoding2 =
-            ENCODING_ENTRIES2[mnem][OperandKind_Memory][dest->size_class]
+            ENCODING_ENTRIES2[Mnem_MOV][OperandKind_Memory][dest->size_class]
                              [OperandKind_Reg][dest->size_class];
         this->encode(encoding1, FE_AX, source->into_operand());
         source->add_relocation(this);

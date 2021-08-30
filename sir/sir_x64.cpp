@@ -208,37 +208,6 @@ struct MetaValue {
     };
     MetaValueKind kind;
     SizeClass size_class;
-
-    SIR_INLINE
-    int64_t into_operand() const
-    {
-        switch (this->kind) {
-        case MetaValueKind_Unknown:
-        case MetaValueKind_Function:
-        case MetaValueKind_Block:
-        case MetaValueKind_COUNT: SIR_ASSERT(0); break;
-        case MetaValueKind_IRegister:
-        case MetaValueKind_FRegister: return REGISTERS[this->reg.index];
-        case MetaValueKind_IRegisterMemoryPtr:
-        case MetaValueKind_IRegisterMemory:
-            return FE_MEM(
-                REGISTERS[this->regmem.base],
-                this->regmem.scale,
-                REGISTERS[this->regmem.index],
-                this->regmem.offset);
-        case MetaValueKind_GlobalPtr:
-        case MetaValueKind_Global: return FE_MEM(FE_IP, 0, 0, 0);
-        case MetaValueKind_ImmInt: return this->imm_int.u64;
-        }
-
-        return 0;
-    }
-
-    SIR_INLINE void add_relocation(
-        X64AsmBuilder *builder,
-        Mnem mnem,
-        OperandKind other_operand_kind = OperandKind_None,
-        SizeClass other_operand_size_class = SizeClass_None) const;
 };
 
 struct FuncJumpPatch {
@@ -268,59 +237,65 @@ struct X64AsmBuilder {
     SIRArray<SIRInstRef> current_func_params;
     SIRInstRef current_cond;
     SIRInstRef current_func;
-
-    size_t get_code_offset();
-    size_t encode_raw(const uint8_t *bytes, size_t len);
-    size_t encode(
-        uint64_t mnem, FeOp op0 = 0, FeOp op1 = 0, FeOp op2 = 0, FeOp op3 = 0);
-    size_t encode_at(
-        size_t offset,
-        uint64_t mnem,
-        FeOp op0 = 0,
-        FeOp op1 = 0,
-        FeOp op2 = 0,
-        FeOp op3 = 0);
-
-    void encode_mnem0(Mnem mnem);
-    void encode_mnem1(Mnem mnem, const MetaValue *op1);
-    void
-    encode_mnem2(Mnem mnem, const MetaValue *dest, const MetaValue *source);
-    void encode_mnem3(
-        Mnem mnem,
-        const MetaValue *op1,
-        const MetaValue *op2,
-        const MetaValue *op3);
-
-    size_t encode_direct_call(SIRInstRef func_ref);
-    void encode_function_ending(SIRInstRef func_ref);
-
-    void encode_memcpy(
-        size_t value_size, MetaValue source_value, MetaValue dest_value);
 };
 
-SIR_INLINE void MetaValue::add_relocation(
+SIR_INLINE
+static size_t builder_get_code_offset(X64AsmBuilder *builder)
+{
+    return builder->obj_builder->get_section_size(
+        builder->obj_builder, SIRSectionType_Text);
+}
+
+SIR_INLINE
+static int64_t value_into_operand(const MetaValue *value)
+{
+    switch (value->kind) {
+    case MetaValueKind_Unknown:
+    case MetaValueKind_Function:
+    case MetaValueKind_Block:
+    case MetaValueKind_COUNT: SIR_ASSERT(0); break;
+    case MetaValueKind_IRegister:
+    case MetaValueKind_FRegister: return REGISTERS[value->reg.index];
+    case MetaValueKind_IRegisterMemoryPtr:
+    case MetaValueKind_IRegisterMemory:
+        return FE_MEM(
+            REGISTERS[value->regmem.base],
+            value->regmem.scale,
+            REGISTERS[value->regmem.index],
+            value->regmem.offset);
+    case MetaValueKind_GlobalPtr:
+    case MetaValueKind_Global: return FE_MEM(FE_IP, 0, 0, 0);
+    case MetaValueKind_ImmInt: return value->imm_int.u64;
+    }
+
+    return 0;
+}
+
+SIR_INLINE
+static void value_add_relocation(
     X64AsmBuilder *builder,
+    const MetaValue *value,
     Mnem mnem,
-    OperandKind other_operand_kind,
-    SizeClass other_operand_size_class) const
+    OperandKind other_operand_kind = OperandKind_None,
+    SizeClass other_operand_size_class = SizeClass_None)
 {
     (void)mnem;
 
-    if (this->kind == MetaValueKind_Global ||
-        this->kind == MetaValueKind_GlobalPtr) {
-        size_t relocation_offset = builder->get_code_offset() - 4;
+    if (value->kind == MetaValueKind_Global ||
+        value->kind == MetaValueKind_GlobalPtr) {
+        size_t relocation_offset = builder_get_code_offset(builder) - 4;
         if (other_operand_kind == OperandKind_Imm) {
             relocation_offset -= SIZE_CLASS_SIZES[other_operand_size_class];
         }
 
-        int64_t data_offset = this->global.offset;
+        int64_t data_offset = value->global.offset;
         /* if (mnem == Mnem_MOV) { */
         /*     data_offset -= 4; */
         /* } */
 
         builder->obj_builder->add_data_relocation(
             builder->obj_builder,
-            this->global.section_type,
+            value->global.section_type,
             data_offset,
             relocation_offset,
             4);
@@ -328,7 +303,7 @@ SIR_INLINE void MetaValue::add_relocation(
 }
 
 SIR_INLINE
-MetaValue create_int_register_value(uint8_t bytes, RegisterIndex index)
+static MetaValue create_int_register_value(uint8_t bytes, RegisterIndex index)
 {
     ZoneScoped;
 
@@ -341,7 +316,7 @@ MetaValue create_int_register_value(uint8_t bytes, RegisterIndex index)
 }
 
 SIR_INLINE
-MetaValue create_float_register_value(uint8_t bytes, RegisterIndex index)
+static MetaValue create_float_register_value(uint8_t bytes, RegisterIndex index)
 {
     ZoneScoped;
 
@@ -354,7 +329,7 @@ MetaValue create_float_register_value(uint8_t bytes, RegisterIndex index)
 }
 
 SIR_INLINE
-MetaValue create_int_register_memory_value(
+static MetaValue create_int_register_memory_value(
     size_t byte_size,
     RegisterIndex base,
     int32_t scale,
@@ -380,7 +355,7 @@ MetaValue create_int_register_memory_value(
 }
 
 SIR_INLINE
-MetaValue create_stack_value(size_t byte_size, int32_t offset)
+static MetaValue create_stack_value(size_t byte_size, int32_t offset)
 {
     ZoneScoped;
 
@@ -399,7 +374,7 @@ MetaValue create_stack_value(size_t byte_size, int32_t offset)
 }
 
 SIR_INLINE
-MetaValue create_stack_ptr_value(size_t byte_size, int32_t offset)
+static MetaValue create_stack_ptr_value(size_t byte_size, int32_t offset)
 {
     ZoneScoped;
 
@@ -418,7 +393,7 @@ MetaValue create_stack_ptr_value(size_t byte_size, int32_t offset)
 }
 
 SIR_INLINE
-MetaValue create_imm_int_value(uint8_t bytes, uint64_t int_value)
+static MetaValue create_imm_int_value(uint8_t bytes, uint64_t int_value)
 {
     ZoneScoped;
 
@@ -434,7 +409,8 @@ MetaValue create_imm_int_value(uint8_t bytes, uint64_t int_value)
     return value;
 }
 
-SIR_INLINE MetaValue create_global_value(
+SIR_INLINE
+static MetaValue create_global_value(
     X64AsmBuilder *builder,
     uint32_t flags,
     const uint8_t *data,
@@ -472,7 +448,8 @@ SIR_INLINE MetaValue create_global_value(
     return value;
 }
 
-SIR_INLINE MetaValue create_global_ptr_value(
+SIR_INLINE
+static MetaValue create_global_ptr_value(
     X64AsmBuilder *builder,
     uint32_t flags,
     const uint8_t *data,
@@ -485,25 +462,24 @@ SIR_INLINE MetaValue create_global_ptr_value(
 }
 
 SIR_INLINE
-size_t X64AsmBuilder::get_code_offset()
-{
-    return this->obj_builder->get_section_size(
-        this->obj_builder, SIRSectionType_Text);
-}
-
-SIR_INLINE
-size_t X64AsmBuilder::encode_raw(const uint8_t *bytes, size_t len)
+static size_t
+encode_raw(X64AsmBuilder *builder, const uint8_t *bytes, size_t len)
 {
     ZoneScoped;
 
-    this->obj_builder->add_to_section(
-        this->obj_builder, SIRSectionType_Text, (uint8_t *)bytes, len);
+    builder->obj_builder->add_to_section(
+        builder->obj_builder, SIRSectionType_Text, (uint8_t *)bytes, len);
     return len;
 }
 
 SIR_INLINE
-size_t
-X64AsmBuilder::encode(uint64_t mnem, FeOp op0, FeOp op1, FeOp op2, FeOp op3)
+static size_t encode(
+    X64AsmBuilder *builder,
+    uint64_t mnem,
+    FeOp op0,
+    FeOp op1,
+    FeOp op2,
+    FeOp op3)
 {
     ZoneScoped;
 
@@ -514,14 +490,20 @@ X64AsmBuilder::encode(uint64_t mnem, FeOp op0, FeOp op1, FeOp op2, FeOp op3)
     SIR_ASSERT(!failed);
 
     size_t inst_len = (size_t)(ptr - temp);
-    this->obj_builder->add_to_section(
-        this->obj_builder, SIRSectionType_Text, &temp[0], inst_len);
+    builder->obj_builder->add_to_section(
+        builder->obj_builder, SIRSectionType_Text, &temp[0], inst_len);
     return inst_len;
 }
 
 SIR_INLINE
-size_t X64AsmBuilder::encode_at(
-    size_t offset, uint64_t mnem, FeOp op0, FeOp op1, FeOp op2, FeOp op3)
+static size_t encode_at(
+    X64AsmBuilder *builder,
+    size_t offset,
+    uint64_t mnem,
+    FeOp op0,
+    FeOp op1,
+    FeOp op2,
+    FeOp op3)
 {
     ZoneScoped;
 
@@ -532,76 +514,55 @@ size_t X64AsmBuilder::encode_at(
     SIR_ASSERT(!failed);
 
     size_t inst_len = (size_t)(ptr - temp);
-    this->obj_builder->set_section_data(
-        this->obj_builder, SIRSectionType_Text, offset, &temp[0], inst_len);
+    builder->obj_builder->set_section_data(
+        builder->obj_builder, SIRSectionType_Text, offset, &temp[0], inst_len);
     return inst_len;
 }
 
 SIR_INLINE
-size_t X64AsmBuilder::encode_direct_call(SIRInstRef func_ref)
+static size_t encode_direct_call(X64AsmBuilder *builder, SIRInstRef func_ref)
 {
     ZoneScoped;
 
     uint8_t inst_bytes[5] = {0xe8, 0x00, 0x00, 0x00, 0x00};
     size_t inst_len =
-        this->encode_raw(inst_bytes, SIR_CARRAY_LENGTH(inst_bytes));
+        encode_raw(builder, inst_bytes, SIR_CARRAY_LENGTH(inst_bytes));
 
-    size_t curr_offset = this->get_code_offset();
+    size_t curr_offset = builder_get_code_offset(builder);
 
-    MetaValue *meta_inst = &this->meta_insts[func_ref.id];
+    MetaValue *meta_inst = &builder->meta_insts[func_ref.id];
 
-    this->obj_builder->add_procedure_relocation(
-        this->obj_builder, meta_inst->func->symbol_ref, curr_offset - 4, 4);
+    builder->obj_builder->add_procedure_relocation(
+        builder->obj_builder, meta_inst->func->symbol_ref, curr_offset - 4, 4);
 
     return inst_len;
 }
 
-void X64AsmBuilder::encode_function_ending(SIRInstRef func_ref)
-{
-    ZoneScoped;
-
-    MetaFunction *meta_func = this->meta_insts[func_ref.id].func;
-
-    // Restore callee saved registers
-    for (size_t i = 0; i < meta_func->callee_saved_registers_len; ++i) {
-        RegisterIndex reg_index = meta_func->callee_saved_registers[i];
-        if (meta_func->registers_used[reg_index]) {
-            this->encode(
-                FE_MOV64rm,
-                REGISTERS[reg_index],
-                FE_MEM(
-                    FE_BP,
-                    0,
-                    0,
-                    meta_func->saved_register_stack_offset[reg_index]));
-        }
-    }
-
-    // End stack frame
-    this->encode(FE_LEAVE, FE_BP);
-    this->encode(FE_RET);
-}
-
-void X64AsmBuilder::encode_mnem0(Mnem mnem)
+SIR_INLINE
+static void encode_mnem0(X64AsmBuilder *builder, Mnem mnem)
 {
     ZoneScoped;
     int64_t encoding = ENCODING_ENTRIES0[mnem];
-    this->encode(encoding);
+    encode(builder, encoding, 0, 0, 0, 0);
 }
 
-void X64AsmBuilder::encode_mnem1(Mnem mnem, const MetaValue *op1)
+static void
+encode_mnem1(X64AsmBuilder *builder, Mnem mnem, const MetaValue *op1)
 {
     ZoneScoped;
 
     OperandKind op1_opkind = OPERAND_KINDS[op1->kind];
 
     int64_t encoding = ENCODING_ENTRIES1[mnem][op1_opkind][op1->size_class];
-    this->encode(encoding, op1->into_operand());
-    op1->add_relocation(this, mnem, op1_opkind, op1->size_class);
+    encode(builder, encoding, value_into_operand(op1), 0, 0, 0);
+    value_add_relocation(builder, op1, mnem, op1_opkind, op1->size_class);
 }
 
-void X64AsmBuilder::encode_mnem2(
-    Mnem mnem, const MetaValue *dest, const MetaValue *source)
+static void encode_mnem2(
+    X64AsmBuilder *builder,
+    Mnem mnem,
+    const MetaValue *dest,
+    const MetaValue *source)
 {
     ZoneScoped;
 
@@ -617,22 +578,34 @@ void X64AsmBuilder::encode_mnem2(
         int64_t encoding2 =
             ENCODING_ENTRIES2[Mnem_MOV][dest_opkind][dest->size_class]
                              [OperandKind_Reg][dest->size_class];
-        this->encode(encoding1, FE_AX, source->into_operand());
-        source->add_relocation(this, mnem);
-        this->encode(encoding2, dest->into_operand(), FE_AX);
-        dest->add_relocation(this, Mnem_MOV);
+        encode(builder, encoding1, FE_AX, value_into_operand(source), 0, 0);
+        value_add_relocation(builder, source, mnem);
+        encode(builder, encoding2, value_into_operand(dest), FE_AX, 0, 0);
+        value_add_relocation(builder, dest, Mnem_MOV);
     } else {
         int64_t encoding =
             ENCODING_ENTRIES2[mnem][dest_opkind][dest->size_class]
                              [source_opkind][source->size_class];
-        this->encode(encoding, dest->into_operand(), source->into_operand());
-        source->add_relocation(this, mnem, dest_opkind, dest->size_class);
-        dest->add_relocation(this, mnem, source_opkind, source->size_class);
+        encode(
+            builder,
+            encoding,
+            value_into_operand(dest),
+            value_into_operand(source),
+            0,
+            0);
+        value_add_relocation(
+            builder, source, mnem, dest_opkind, dest->size_class);
+        value_add_relocation(
+            builder, dest, mnem, source_opkind, source->size_class);
     }
 }
 
-void X64AsmBuilder::encode_mnem3(
-    Mnem mnem, const MetaValue *op1, const MetaValue *op2, const MetaValue *op3)
+static void encode_mnem3(
+    X64AsmBuilder *builder,
+    Mnem mnem,
+    const MetaValue *op1,
+    const MetaValue *op2,
+    const MetaValue *op3)
 {
     ZoneScoped;
 
@@ -643,14 +616,45 @@ void X64AsmBuilder::encode_mnem3(
     int64_t encoding =
         ENCODING_ENTRIES3[mnem][op1_opkind][op1->size_class][op2_opkind]
                          [op2->size_class][op3_opkind][op3->size_class];
-    this->encode(
+    encode(
+        builder,
         encoding,
-        op1->into_operand(),
-        op2->into_operand(),
-        op3->into_operand());
-    op1->add_relocation(this, mnem, op1_opkind, op1->size_class);
-    op2->add_relocation(this, mnem, op2_opkind, op2->size_class);
-    op3->add_relocation(this, mnem, op3_opkind, op3->size_class);
+        value_into_operand(op1),
+        value_into_operand(op2),
+        value_into_operand(op3),
+        0);
+    value_add_relocation(builder, op1, mnem, op1_opkind, op1->size_class);
+    value_add_relocation(builder, op2, mnem, op2_opkind, op2->size_class);
+    value_add_relocation(builder, op3, mnem, op3_opkind, op3->size_class);
+}
+
+static void encode_function_ending(X64AsmBuilder *builder, SIRInstRef func_ref)
+{
+    ZoneScoped;
+
+    MetaFunction *meta_func = builder->meta_insts[func_ref.id].func;
+
+    // Restore callee saved registers
+    for (size_t i = 0; i < meta_func->callee_saved_registers_len; ++i) {
+        RegisterIndex reg_index = meta_func->callee_saved_registers[i];
+        if (meta_func->registers_used[reg_index]) {
+            encode(
+                builder,
+                FE_MOV64rm,
+                REGISTERS[reg_index],
+                FE_MEM(
+                    FE_BP,
+                    0,
+                    0,
+                    meta_func->saved_register_stack_offset[reg_index]),
+                0,
+                0);
+        }
+    }
+
+    // End stack frame
+    encode(builder, FE_LEAVE, FE_BP, 0, 0, 0);
+    encode(builder, FE_RET, 0, 0, 0, 0);
 }
 
 enum SysVParamClass {
@@ -787,8 +791,11 @@ static bool sysv_param_should_use_regs(
     return use_regs;
 }
 
-void X64AsmBuilder::encode_memcpy(
-    size_t value_size, MetaValue source_value, MetaValue dest_value)
+static void encode_memcpy(
+    X64AsmBuilder *builder,
+    size_t value_size,
+    MetaValue source_value,
+    MetaValue dest_value)
 {
     ZoneScoped;
 
@@ -801,13 +808,13 @@ void X64AsmBuilder::encode_memcpy(
             // Register-sized values
             dest_value.size_class = SIZE_CLASSES[value_size];
             source_value.size_class = SIZE_CLASSES[value_size];
-            this->encode_mnem2(Mnem_MOV, &dest_value, &source_value);
+            encode_mnem2(builder, Mnem_MOV, &dest_value, &source_value);
             return;
         }
         default: {
-            // This part moves non-register sized memory
+            // Builder part moves non-register sized memory
             // in or out of registers. It follows the SystemV ABI convention
-            // for storing memory in registers. I'm not sure if this is OK in
+            // for storing memory in registers. I'm not sure if builder is OK in
             // other ABIs.
 
             uint8_t part_sizes[3];
@@ -856,14 +863,14 @@ void X64AsmBuilder::encode_memcpy(
                         MetaValue imm_val =
                             create_imm_int_value(1, part_sizes[i] * 8);
                         reg_value.size_class = SIZE_CLASSES[part_sizes[i] * 2];
-                        this->encode_mnem2(Mnem_SHL, &reg_value, &imm_val);
+                        encode_mnem2(builder, Mnem_SHL, &reg_value, &imm_val);
                     }
 
                     reg_value.size_class = SIZE_CLASSES[part_sizes[i]];
                     source_mem.size_class = SIZE_CLASSES[part_sizes[i]];
                     source_mem.regmem.offset =
                         source_value.regmem.offset + mem_part_offsets[i];
-                    this->encode_mnem2(Mnem_MOV, &reg_value, &source_mem);
+                    encode_mnem2(builder, Mnem_MOV, &reg_value, &source_mem);
                 }
 
                 if (index_in_tmp_reg > 0) {
@@ -871,8 +878,8 @@ void X64AsmBuilder::encode_memcpy(
                     tmp_reg.size_class = SizeClass_8;
 
                     MetaValue imm_val = create_imm_int_value(1, 32);
-                    this->encode_mnem2(Mnem_SHL, &tmp_reg, &imm_val);
-                    this->encode_mnem2(Mnem_OR, &dest_value, &tmp_reg);
+                    encode_mnem2(builder, Mnem_SHL, &tmp_reg, &imm_val);
+                    encode_mnem2(builder, Mnem_OR, &dest_value, &tmp_reg);
                 }
                 return;
             } else if (
@@ -885,13 +892,14 @@ void X64AsmBuilder::encode_memcpy(
                     dest_mem.size_class = SIZE_CLASSES[part_sizes[i]];
                     dest_mem.regmem.offset =
                         dest_value.regmem.offset + mem_part_offsets[i];
-                    this->encode_mnem2(Mnem_MOV, &dest_mem, &source_value);
+                    encode_mnem2(builder, Mnem_MOV, &dest_mem, &source_value);
 
                     if (i != 0) {
                         MetaValue imm_val =
                             create_imm_int_value(1, part_sizes[i] * 8);
                         source_value.size_class = SizeClass_8;
-                        this->encode_mnem2(Mnem_SHR, &source_value, &imm_val);
+                        encode_mnem2(
+                            builder, Mnem_SHR, &source_value, &imm_val);
                     }
                 }
                 return;
@@ -919,7 +927,7 @@ void X64AsmBuilder::encode_memcpy(
             source_value.size_class = SIZE_CLASSES[multiple];
             dest_value.size_class = SIZE_CLASSES[multiple];
 
-            this->encode_mnem2(Mnem_MOV, &dest_value, &source_value);
+            encode_mnem2(builder, Mnem_MOV, &dest_value, &source_value);
 
             if (source_value.kind == MetaValueKind_IRegisterMemory) {
                 source_value.regmem.offset += multiple;
@@ -1079,7 +1087,7 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
             mnem = Mnem_MOV;
         }
 
-        builder->encode_mnem2(mnem, &dest_value, &source_value);
+        encode_mnem2(builder, mnem, &dest_value, &source_value);
 
         break;
     }
@@ -1094,7 +1102,7 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
             mnem = Mnem_MOV;
         }
 
-        builder->encode_mnem2(mnem, &dest_value, &source_value);
+        encode_mnem2(builder, mnem, &dest_value, &source_value);
 
         break;
     }
@@ -1111,7 +1119,7 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
         SIR_ASSERT(source_size >= dest_size);
 
         source_value.size_class = dest_value.size_class;
-        builder->encode_mnem2(Mnem_MOV, &dest_value, &source_value);
+        encode_mnem2(builder, Mnem_MOV, &dest_value, &source_value);
 
         break;
     }
@@ -1130,10 +1138,10 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
         if (source_size != dest_size) {
             MetaValue xmm0_value = create_float_register_value(
                 SIRTypeSizeOf(builder->module, dest_type), RegisterIndex_XMM0);
-            builder->encode_mnem2(Mnem_SSE_CVTS, &xmm0_value, &source_value);
-            builder->encode_mnem2(Mnem_MOV, &dest_value, &xmm0_value);
+            encode_mnem2(builder, Mnem_SSE_CVTS, &xmm0_value, &source_value);
+            encode_mnem2(builder, Mnem_MOV, &dest_value, &xmm0_value);
         } else {
-            builder->encode_mnem2(Mnem_MOV, &dest_value, &source_value);
+            encode_mnem2(builder, Mnem_MOV, &dest_value, &source_value);
         }
 
         break;
@@ -1153,7 +1161,7 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
         if (source_value.kind == MetaValueKind_ImmInt) {
             tmp_int_value = create_int_register_value(
                 SIZE_CLASS_SIZES[source_value.size_class], RegisterIndex_RAX);
-            builder->encode_mnem2(Mnem_MOV, &tmp_int_value, &source_value);
+            encode_mnem2(builder, Mnem_MOV, &tmp_int_value, &source_value);
             source_value = tmp_int_value;
         }
 
@@ -1161,7 +1169,7 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
         case 1:
         case 2: {
             tmp_int_value = create_int_register_value(4, RegisterIndex_RAX);
-            builder->encode_mnem2(Mnem_MOVSX, &tmp_int_value, &source_value);
+            encode_mnem2(builder, Mnem_MOVSX, &tmp_int_value, &source_value);
             break;
         }
         case 4:
@@ -1175,10 +1183,10 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
         MetaValue dest_reg_value =
             create_float_register_value(dest_size, RegisterIndex_XMM0);
 
-        builder->encode_mnem2(
-            Mnem_SSE_CVTSI2S, &dest_reg_value, &tmp_int_value);
+        encode_mnem2(
+            builder, Mnem_SSE_CVTSI2S, &dest_reg_value, &tmp_int_value);
 
-        builder->encode_mnem2(Mnem_MOV, &dest_value, &dest_reg_value);
+        encode_mnem2(builder, Mnem_MOV, &dest_value, &dest_reg_value);
         break;
     }
 
@@ -1196,7 +1204,7 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
         if (source_value.kind == MetaValueKind_ImmInt) {
             tmp_int_value = create_int_register_value(
                 SIZE_CLASS_SIZES[source_value.size_class], RegisterIndex_RAX);
-            builder->encode_mnem2(Mnem_MOV, &tmp_int_value, &source_value);
+            encode_mnem2(builder, Mnem_MOV, &tmp_int_value, &source_value);
             source_value = tmp_int_value;
         }
 
@@ -1204,12 +1212,12 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
         case 1:
         case 2: {
             tmp_int_value = create_int_register_value(4, RegisterIndex_RAX);
-            builder->encode_mnem2(Mnem_MOVZX, &tmp_int_value, &source_value);
+            encode_mnem2(builder, Mnem_MOVZX, &tmp_int_value, &source_value);
             break;
         }
         case 4: {
             tmp_int_value = create_int_register_value(4, RegisterIndex_RAX);
-            builder->encode_mnem2(Mnem_MOV, &tmp_int_value, &source_value);
+            encode_mnem2(builder, Mnem_MOV, &tmp_int_value, &source_value);
             tmp_int_value = create_int_register_value(8, RegisterIndex_RAX);
             break;
         }
@@ -1223,10 +1231,10 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
         MetaValue dest_reg_value =
             create_float_register_value(dest_size, RegisterIndex_XMM0);
 
-        builder->encode_mnem2(
-            Mnem_SSE_CVTSI2S, &dest_reg_value, &tmp_int_value);
+        encode_mnem2(
+            builder, Mnem_SSE_CVTSI2S, &dest_reg_value, &tmp_int_value);
 
-        builder->encode_mnem2(Mnem_MOV, &dest_value, &dest_reg_value);
+        encode_mnem2(builder, Mnem_MOV, &dest_value, &dest_reg_value);
         break;
         break;
     }
@@ -1241,12 +1249,12 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
         MetaValue dest_reg_value =
             create_int_register_value(SIR_MAX(dest_size, 4), RegisterIndex_RAX);
 
-        builder->encode_mnem2(Mnem_SSE_CVTS2SI, &dest_reg_value, &source_value);
+        encode_mnem2(builder, Mnem_SSE_CVTS2SI, &dest_reg_value, &source_value);
 
         dest_reg_value =
             create_int_register_value(dest_size, RegisterIndex_RAX);
 
-        builder->encode_mnem2(Mnem_MOV, &dest_value, &dest_reg_value);
+        encode_mnem2(builder, Mnem_MOV, &dest_value, &dest_reg_value);
 
         break;
     }
@@ -1259,21 +1267,21 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
 
         MetaValue tmp_reg_value =
             create_int_register_value(dest_size, RegisterIndex_RAX);
-        builder->encode_mnem2(Mnem_MOV, &tmp_reg_value, &source_value);
+        encode_mnem2(builder, Mnem_MOV, &tmp_reg_value, &source_value);
 
         switch (dest_size) {
         case 4: {
-            builder->encode(FE_XOR32ri, FE_AX, -2147483648);
+            encode(builder, FE_XOR32ri, FE_AX, -2147483648, 0, 0);
             break;
         }
         case 8: {
-            builder->encode(FE_MOV64ri, FE_CX, -9223372036854775808ULL);
-            builder->encode(FE_XOR64rr, FE_AX, FE_CX);
+            encode(builder, FE_MOV64ri, FE_CX, -9223372036854775808ULL, 0, 0);
+            encode(builder, FE_XOR64rr, FE_AX, FE_CX, 0, 0);
             break;
         }
         }
 
-        builder->encode_mnem2(Mnem_MOV, &dest_value, &tmp_reg_value);
+        encode_mnem2(builder, Mnem_MOV, &dest_value, &tmp_reg_value);
         break;
     }
 
@@ -1291,14 +1299,14 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
         case SIRBinaryOperation_MAX: SIR_ASSERT(0); break;
 
         case SIRBinaryOperation_IAdd: {
-            builder->encode_mnem2(Mnem_MOV, &dest_value, &left_val);
-            builder->encode_mnem2(Mnem_ADD, &dest_value, &right_val);
+            encode_mnem2(builder, Mnem_MOV, &dest_value, &left_val);
+            encode_mnem2(builder, Mnem_ADD, &dest_value, &right_val);
             break;
         }
 
         case SIRBinaryOperation_ISub: {
-            builder->encode_mnem2(Mnem_MOV, &dest_value, &left_val);
-            builder->encode_mnem2(Mnem_SUB, &dest_value, &right_val);
+            encode_mnem2(builder, Mnem_MOV, &dest_value, &left_val);
+            encode_mnem2(builder, Mnem_SUB, &dest_value, &right_val);
             break;
         }
 
@@ -1321,33 +1329,33 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
 
                 if (left_val.kind == MetaValueKind_ImmInt) {
                     left_val.size_class = SizeClass_4;
-                    builder->encode_mnem2(Mnem_MOV, &ext_ax_value, &left_val);
+                    encode_mnem2(builder, Mnem_MOV, &ext_ax_value, &left_val);
                 } else {
-                    builder->encode_mnem2(ext_mnem, &ext_ax_value, &left_val);
+                    encode_mnem2(builder, ext_mnem, &ext_ax_value, &left_val);
                 }
 
                 if (right_val.kind == MetaValueKind_ImmInt) {
                     right_val.size_class = SizeClass_4;
-                    builder->encode_mnem2(Mnem_MOV, &ext_dx_value, &right_val);
+                    encode_mnem2(builder, Mnem_MOV, &ext_dx_value, &right_val);
                 } else {
-                    builder->encode_mnem2(ext_mnem, &ext_dx_value, &right_val);
+                    encode_mnem2(builder, ext_mnem, &ext_dx_value, &right_val);
                 }
 
-                builder->encode_mnem2(Mnem_MUL, &ext_ax_value, &ext_dx_value);
+                encode_mnem2(builder, Mnem_MUL, &ext_ax_value, &ext_dx_value);
 
                 break;
             }
             default: {
-                builder->encode_mnem2(Mnem_MOV, &ax_value, &left_val);
-                builder->encode_mnem2(Mnem_MOV, &dx_value, &right_val);
+                encode_mnem2(builder, Mnem_MOV, &ax_value, &left_val);
+                encode_mnem2(builder, Mnem_MOV, &dx_value, &right_val);
 
-                builder->encode_mnem2(Mnem_MUL, &ax_value, &dx_value);
+                encode_mnem2(builder, Mnem_MUL, &ax_value, &dx_value);
 
                 break;
             }
             }
 
-            builder->encode_mnem2(Mnem_MOV, &dest_value, &ax_value);
+            encode_mnem2(builder, Mnem_MOV, &dest_value, &ax_value);
 
             break;
         }
@@ -1380,10 +1388,10 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
 
                 if (left_val.kind == MetaValueKind_ImmInt) {
                     left_val.size_class = SizeClass_4;
-                    builder->encode_mnem2(Mnem_MOV, &dividend_value, &left_val);
+                    encode_mnem2(builder, Mnem_MOV, &dividend_value, &left_val);
                 } else {
-                    builder->encode_mnem2(
-                        Mnem_MOVSX, &dividend_value, &left_val);
+                    encode_mnem2(
+                        builder, Mnem_MOVSX, &dividend_value, &left_val);
                 }
 
                 // We need to move the divisor into a register to sign-extend it
@@ -1391,23 +1399,23 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
 
                 if (right_val.kind == MetaValueKind_ImmInt) {
                     right_val.size_class = SizeClass_4;
-                    builder->encode_mnem2(Mnem_MOV, &divisor_value, &right_val);
+                    encode_mnem2(builder, Mnem_MOV, &divisor_value, &right_val);
                 } else {
-                    builder->encode_mnem2(ext_mnem, &divisor_value, &right_val);
+                    encode_mnem2(builder, ext_mnem, &divisor_value, &right_val);
                 }
 
                 break;
             }
             case 4:
             case 8: {
-                builder->encode_mnem2(Mnem_MOV, &dividend_value, &left_val);
+                encode_mnem2(builder, Mnem_MOV, &dividend_value, &left_val);
 
                 // We need to move the divisor into a register if it's an
                 // immediate
                 if (right_val.kind == MetaValueKind_ImmInt) {
                     divisor_value = create_int_register_value(
                         operand_size, RegisterIndex_RCX);
-                    builder->encode_mnem2(Mnem_MOV, &divisor_value, &right_val);
+                    encode_mnem2(builder, Mnem_MOV, &divisor_value, &right_val);
                 }
                 break;
             }
@@ -1415,23 +1423,23 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
             }
 
             if (is_signed) {
-                builder->encode_mnem1(Mnem_C_SEP, &dividend_value);
+                encode_mnem1(builder, Mnem_C_SEP, &dividend_value);
             } else {
                 MetaValue dx_value =
                     create_int_register_value(4, RegisterIndex_RDX);
                 MetaValue zero_value = create_imm_int_value(4, 0);
 
-                builder->encode_mnem2(Mnem_MOV, &dx_value, &zero_value);
+                encode_mnem2(builder, Mnem_MOV, &dx_value, &zero_value);
             }
-            builder->encode_mnem1(div_mnem, &divisor_value);
+            encode_mnem1(builder, div_mnem, &divisor_value);
 
             if (!is_rem) {
                 dividend_value.size_class = SIZE_CLASSES[operand_size];
-                builder->encode_mnem2(Mnem_MOV, &dest_value, &dividend_value);
+                encode_mnem2(builder, Mnem_MOV, &dest_value, &dividend_value);
             } else {
                 MetaValue dx_value =
                     create_int_register_value(operand_size, RegisterIndex_RDX);
-                builder->encode_mnem2(Mnem_MOV, &dest_value, &dx_value);
+                encode_mnem2(builder, Mnem_MOV, &dest_value, &dx_value);
             }
 
             break;
@@ -1440,36 +1448,36 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
         case SIRBinaryOperation_FAdd: {
             MetaValue xmm0_value =
                 create_float_register_value(operand_size, RegisterIndex_XMM0);
-            builder->encode_mnem2(Mnem_MOV, &xmm0_value, &left_val);
-            builder->encode_mnem2(Mnem_SSE_ADD, &xmm0_value, &right_val);
-            builder->encode_mnem2(Mnem_MOV, &dest_value, &xmm0_value);
+            encode_mnem2(builder, Mnem_MOV, &xmm0_value, &left_val);
+            encode_mnem2(builder, Mnem_SSE_ADD, &xmm0_value, &right_val);
+            encode_mnem2(builder, Mnem_MOV, &dest_value, &xmm0_value);
             break;
         }
 
         case SIRBinaryOperation_FSub: {
             MetaValue xmm0_value =
                 create_float_register_value(operand_size, RegisterIndex_XMM0);
-            builder->encode_mnem2(Mnem_MOV, &xmm0_value, &left_val);
-            builder->encode_mnem2(Mnem_SSE_SUB, &xmm0_value, &right_val);
-            builder->encode_mnem2(Mnem_MOV, &dest_value, &xmm0_value);
+            encode_mnem2(builder, Mnem_MOV, &xmm0_value, &left_val);
+            encode_mnem2(builder, Mnem_SSE_SUB, &xmm0_value, &right_val);
+            encode_mnem2(builder, Mnem_MOV, &dest_value, &xmm0_value);
             break;
         }
 
         case SIRBinaryOperation_FMul: {
             MetaValue xmm0_value =
                 create_float_register_value(operand_size, RegisterIndex_XMM0);
-            builder->encode_mnem2(Mnem_MOV, &xmm0_value, &left_val);
-            builder->encode_mnem2(Mnem_SSE_MUL, &xmm0_value, &right_val);
-            builder->encode_mnem2(Mnem_MOV, &dest_value, &xmm0_value);
+            encode_mnem2(builder, Mnem_MOV, &xmm0_value, &left_val);
+            encode_mnem2(builder, Mnem_SSE_MUL, &xmm0_value, &right_val);
+            encode_mnem2(builder, Mnem_MOV, &dest_value, &xmm0_value);
             break;
         }
 
         case SIRBinaryOperation_FDiv: {
             MetaValue xmm0_value =
                 create_float_register_value(operand_size, RegisterIndex_XMM0);
-            builder->encode_mnem2(Mnem_MOV, &xmm0_value, &left_val);
-            builder->encode_mnem2(Mnem_SSE_DIV, &xmm0_value, &right_val);
-            builder->encode_mnem2(Mnem_MOV, &dest_value, &xmm0_value);
+            encode_mnem2(builder, Mnem_MOV, &xmm0_value, &left_val);
+            encode_mnem2(builder, Mnem_SSE_DIV, &xmm0_value, &right_val);
+            encode_mnem2(builder, Mnem_MOV, &dest_value, &xmm0_value);
             break;
         }
 
@@ -1490,10 +1498,16 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
             MetaValue dx_value =
                 create_int_register_value(operand_size, RegisterIndex_RDX);
 
-            builder->encode_mnem2(
-                Mnem_MOV, &ax_value, &builder->meta_insts[inst.op1.id]);
-            builder->encode_mnem2(
-                Mnem_MOV, &dx_value, &builder->meta_insts[inst.op2.id]);
+            encode_mnem2(
+                builder,
+                Mnem_MOV,
+                &ax_value,
+                &builder->meta_insts[inst.op1.id]);
+            encode_mnem2(
+                builder,
+                Mnem_MOV,
+                &dx_value,
+                &builder->meta_insts[inst.op2.id]);
 
             int64_t x86_inst = 0;
             switch (operand_size) {
@@ -1504,46 +1518,29 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
             default: SIR_ASSERT(0); break;
             }
 
-            builder->encode(x86_inst, FE_AX, FE_DX);
+            encode(builder, x86_inst, FE_AX, FE_DX, 0, 0);
 
+            int64_t opcode = 0;
             switch (inst.binop) {
             default: SIR_ASSERT(0); break;
-            case SIRBinaryOperation_IEQ:
-                builder->encode(FE_SETZ8r, FE_AX); // sete
-                break;
-            case SIRBinaryOperation_INE:
-                builder->encode(FE_SETNZ8r, FE_AX); // setne
-                break;
-            case SIRBinaryOperation_UGT:
-                builder->encode(FE_SETA8r, FE_AX); // seta
-                break;
-            case SIRBinaryOperation_UGE:
-                builder->encode(FE_SETNC8r, FE_AX); // setae
-                break;
-            case SIRBinaryOperation_ULT:
-                builder->encode(FE_SETC8r, FE_AX); // setb
-                break;
-            case SIRBinaryOperation_ULE:
-                builder->encode(FE_SETBE8r, FE_AX); // setbe
-                break;
-            case SIRBinaryOperation_SGT:
-                builder->encode(FE_SETG8r, FE_AX); // setg
-                break;
-            case SIRBinaryOperation_SGE:
-                builder->encode(FE_SETGE8r, FE_AX); // setge
-                break;
-            case SIRBinaryOperation_SLT:
-                builder->encode(FE_SETL8r, FE_AX); // setl
-                break;
-            case SIRBinaryOperation_SLE:
-                builder->encode(FE_SETLE8r, FE_AX); // setle
-                break;
+            case SIRBinaryOperation_IEQ: opcode = FE_SETZ8r; break;  // sete
+            case SIRBinaryOperation_INE: opcode = FE_SETNZ8r; break; // setne
+            case SIRBinaryOperation_UGT: opcode = FE_SETA8r; break;  // seta
+            case SIRBinaryOperation_UGE: opcode = FE_SETNC8r; break; // setae
+            case SIRBinaryOperation_ULT: opcode = FE_SETC8r; break;  // setb
+            case SIRBinaryOperation_ULE: opcode = FE_SETBE8r; break; // setbe
+            case SIRBinaryOperation_SGT: opcode = FE_SETG8r; break;  // setg
+            case SIRBinaryOperation_SGE: opcode = FE_SETGE8r; break; // setge
+            case SIRBinaryOperation_SLT: opcode = FE_SETL8r; break;  // setl
+            case SIRBinaryOperation_SLE: opcode = FE_SETLE8r; break; // setle
             }
+
+            encode(builder, opcode, FE_AX, 0, 0, 0);
 
             MetaValue al_value =
                 create_int_register_value(1, RegisterIndex_RAX);
-            builder->encode(FE_AND8ri, FE_AX, 1);
-            builder->encode_mnem2(Mnem_MOV, &dest_value, &al_value);
+            encode(builder, FE_AND8ri, FE_AX, 1, 0, 0);
+            encode_mnem2(builder, Mnem_MOV, &dest_value, &al_value);
             break;
         }
 
@@ -1558,50 +1555,45 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
             MetaValue xmm1_value =
                 create_float_register_value(operand_size, RegisterIndex_XMM1);
 
-            builder->encode_mnem2(Mnem_MOV, &xmm0_value, &left_val);
-            builder->encode_mnem2(Mnem_MOV, &xmm1_value, &right_val);
+            encode_mnem2(builder, Mnem_MOV, &xmm0_value, &left_val);
+            encode_mnem2(builder, Mnem_MOV, &xmm1_value, &right_val);
 
             switch (inst.binop) {
             default: SIR_ASSERT(0); break;
             case SIRBinaryOperation_FEQ:
             case SIRBinaryOperation_FNE:
-                builder->encode_mnem2(
-                    Mnem_SSE_UCOMIS, &xmm0_value, &xmm1_value);
+                encode_mnem2(
+                    builder, Mnem_SSE_UCOMIS, &xmm0_value, &xmm1_value);
                 break;
             case SIRBinaryOperation_FGE:
             case SIRBinaryOperation_FGT:
-                builder->encode_mnem2(
-                    Mnem_SSE_UCOMIS, &xmm0_value, &xmm1_value);
+                encode_mnem2(
+                    builder, Mnem_SSE_UCOMIS, &xmm0_value, &xmm1_value);
                 break;
             case SIRBinaryOperation_FLT:
             case SIRBinaryOperation_FLE:
-                builder->encode_mnem2(
-                    Mnem_SSE_UCOMIS, &xmm1_value, &xmm0_value);
+                encode_mnem2(
+                    builder, Mnem_SSE_UCOMIS, &xmm1_value, &xmm0_value);
                 break;
             }
 
+            int64_t opcode = 0;
             switch (inst.binop) {
             default: SIR_ASSERT(0); break;
-            case SIRBinaryOperation_FEQ:
-                builder->encode(FE_SETZ8r, FE_AX); // sete
-                break;
-            case SIRBinaryOperation_FNE:
-                builder->encode(FE_SETNZ8r, FE_AX); // setne
-                break;
+            case SIRBinaryOperation_FEQ: opcode = FE_SETZ8r; break;  // sete
+            case SIRBinaryOperation_FNE: opcode = FE_SETNZ8r; break; // setne
             case SIRBinaryOperation_FLT:
-            case SIRBinaryOperation_FGT:
-                builder->encode(FE_SETA8r, FE_AX); // seta
-                break;
+            case SIRBinaryOperation_FGT: opcode = FE_SETA8r; break; // seta
             case SIRBinaryOperation_FLE:
-            case SIRBinaryOperation_FGE:
-                builder->encode(FE_SETNC8r, FE_AX); // setae
-                break;
+            case SIRBinaryOperation_FGE: opcode = FE_SETNC8r; break; // setae
             }
+
+            encode(builder, opcode, FE_AX, 0, 0, 0); // setae
 
             MetaValue al_value =
                 create_int_register_value(1, RegisterIndex_RAX);
-            builder->encode(FE_AND8ri, FE_AX, 1);
-            builder->encode_mnem2(Mnem_MOV, &dest_value, &al_value);
+            encode(builder, FE_AND8ri, FE_AX, 1, 0, 0);
+            encode_mnem2(builder, Mnem_MOV, &dest_value, &al_value);
             break;
         }
 
@@ -1616,8 +1608,8 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
             default: SIR_ASSERT(0); break;
             }
 
-            builder->encode_mnem2(Mnem_MOV, &dest_value, &left_val);
-            builder->encode_mnem2(mnem, &dest_value, &right_val);
+            encode_mnem2(builder, Mnem_MOV, &dest_value, &left_val);
+            encode_mnem2(builder, mnem, &dest_value, &right_val);
             break;
         }
 
@@ -1632,7 +1624,7 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
             default: SIR_ASSERT(0); break;
             }
 
-            builder->encode_mnem2(Mnem_MOV, &dest_value, &left_val);
+            encode_mnem2(builder, Mnem_MOV, &dest_value, &left_val);
 
             MetaValue shift_bits_val = right_val;
             if (shift_bits_val.kind == MetaValueKind_ImmInt) {
@@ -1641,13 +1633,13 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
                 // The shift instructions require the RHS register to be CL
                 shift_bits_val = create_int_register_value(
                     SIZE_CLASS_SIZES[right_val.size_class], RegisterIndex_RCX);
-                builder->encode_mnem2(Mnem_MOV, &shift_bits_val, &right_val);
+                encode_mnem2(builder, Mnem_MOV, &shift_bits_val, &right_val);
 
                 shift_bits_val =
                     create_int_register_value(1, RegisterIndex_RCX);
             }
 
-            builder->encode_mnem2(mnem, &dest_value, &shift_bits_val);
+            encode_mnem2(builder, mnem, &dest_value, &shift_bits_val);
             break;
         }
         }
@@ -1663,14 +1655,16 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
 
         MetaValue index_value =
             create_int_register_value(index_size, RegisterIndex_RCX);
-        builder->encode_mnem2(
+        encode_mnem2(
+            builder,
             Mnem_MOV,
             &index_value,
             &builder->meta_insts[inst.array_elem_ptr.index_ref.id]);
 
         MetaValue base_ptr_value =
             create_int_register_value(8, RegisterIndex_RAX);
-        builder->encode_mnem2(
+        encode_mnem2(
+            builder,
             Mnem_MOV,
             &base_ptr_value,
             &builder->meta_insts[inst.array_elem_ptr.accessed_ref.id]);
@@ -1680,8 +1674,8 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
         MetaValue value_addr = create_int_register_memory_value(
             8, RegisterIndex_RAX, scale, RegisterIndex_RCX, 0);
 
-        builder->encode_mnem2(
-            Mnem_LEA, &builder->meta_insts[inst_ref.id], &value_addr);
+        encode_mnem2(
+            builder, Mnem_LEA, &builder->meta_insts[inst_ref.id], &value_addr);
 
         break;
     }
@@ -1709,11 +1703,14 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
         default: {
             MetaValue ptr_value =
                 create_int_register_value(8, RegisterIndex_RAX);
-            builder->encode_mnem2(Mnem_MOV, &ptr_value, &base_ptr_value);
+            encode_mnem2(builder, Mnem_MOV, &ptr_value, &base_ptr_value);
             ptr_value = create_int_register_memory_value(
                 8, RegisterIndex_RAX, 0, RegisterIndex_None, field_offset);
-            builder->encode_mnem2(
-                Mnem_LEA, &builder->meta_insts[inst_ref.id], &ptr_value);
+            encode_mnem2(
+                builder,
+                Mnem_LEA,
+                &builder->meta_insts[inst_ref.id],
+                &ptr_value);
             break;
         }
         }
@@ -1731,7 +1728,7 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
             builder->meta_insts[inst.extract_array_elem.accessed_ref.id];
         SIR_ASSERT(accessed_value.kind == MetaValueKind_IRegisterMemory);
         MetaValue ptr_value = create_int_register_value(8, RegisterIndex_RAX);
-        builder->encode_mnem2(Mnem_LEA, &ptr_value, &accessed_value);
+        encode_mnem2(builder, Mnem_LEA, &ptr_value, &accessed_value);
 
         MetaValue value_addr = create_int_register_memory_value(
             value_size,
@@ -1745,13 +1742,19 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
         case 2:
         case 4:
         case 8: {
-            builder->encode_mnem2(
-                Mnem_MOV, &builder->meta_insts[inst_ref.id], &value_addr);
+            encode_mnem2(
+                builder,
+                Mnem_MOV,
+                &builder->meta_insts[inst_ref.id],
+                &value_addr);
             break;
         }
         default: {
-            builder->encode_memcpy(
-                value_size, value_addr, builder->meta_insts[inst_ref.id]);
+            encode_memcpy(
+                builder,
+                value_size,
+                value_addr,
+                builder->meta_insts[inst_ref.id]);
             break;
         }
         }
@@ -1784,14 +1787,20 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
         case 4:
         case 8: {
             ptr_mem_value.size_class = SIZE_CLASSES[value_size];
-            builder->encode_mnem2(
-                Mnem_MOV, &builder->meta_insts[inst_ref.id], &ptr_mem_value);
+            encode_mnem2(
+                builder,
+                Mnem_MOV,
+                &builder->meta_insts[inst_ref.id],
+                &ptr_mem_value);
             break;
         }
         default: {
             ptr_mem_value.size_class = SizeClass_None;
-            builder->encode_memcpy(
-                value_size, ptr_mem_value, builder->meta_insts[inst_ref.id]);
+            encode_memcpy(
+                builder,
+                value_size,
+                ptr_mem_value,
+                builder->meta_insts[inst_ref.id]);
             break;
         }
         }
@@ -1816,7 +1825,7 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
             /* dest_value.kind = MetaValueKind_Global; */
             MetaValue new_ptr_value =
                 create_int_register_value(8, RegisterIndex_RCX);
-            builder->encode_mnem2(Mnem_MOV, &new_ptr_value, &dest_value);
+            encode_mnem2(builder, Mnem_MOV, &new_ptr_value, &dest_value);
             dest_value = create_int_register_memory_value(
                 value_size, new_ptr_value.reg.index, 0, RegisterIndex_None, 0);
             break;
@@ -1830,7 +1839,7 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
         case MetaValueKind_IRegisterMemory: {
             MetaValue new_ptr_value =
                 create_int_register_value(8, RegisterIndex_RCX);
-            builder->encode_mnem2(Mnem_MOV, &new_ptr_value, &dest_value);
+            encode_mnem2(builder, Mnem_MOV, &new_ptr_value, &dest_value);
             dest_value = create_int_register_memory_value(
                 value_size, new_ptr_value.reg.index, 0, RegisterIndex_None, 0);
             break;
@@ -1841,7 +1850,7 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
         }
         }
 
-        builder->encode_memcpy(value_size, stored_value, dest_value);
+        encode_memcpy(builder, value_size, stored_value, dest_value);
 
         break;
     }
@@ -1868,7 +1877,7 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
         case MetaValueKind_IRegisterMemory: {
             MetaValue new_ptr_value =
                 create_int_register_value(8, RegisterIndex_RCX);
-            builder->encode_mnem2(Mnem_MOV, &new_ptr_value, &source_value);
+            encode_mnem2(builder, Mnem_MOV, &new_ptr_value, &source_value);
             source_value = create_int_register_memory_value(
                 value_size, new_ptr_value.reg.index, 0, RegisterIndex_None, 0);
             break;
@@ -1879,8 +1888,11 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
         }
         }
 
-        builder->encode_memcpy(
-            value_size, source_value, builder->meta_insts[inst_ref.id]);
+        encode_memcpy(
+            builder,
+            value_size,
+            source_value,
+            builder->meta_insts[inst_ref.id]);
 
         break;
     }
@@ -1956,8 +1968,11 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
                             break;
                         }
 
-                        builder->encode_memcpy(
-                            param_size1, param_meta_inst1, param_value1);
+                        encode_memcpy(
+                            builder,
+                            param_size1,
+                            param_meta_inst1,
+                            param_value1);
                     }
 
                     // Second register
@@ -1982,8 +1997,11 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
                             break;
                         }
 
-                        builder->encode_memcpy(
-                            param_size2, param_meta_inst2, param_value2);
+                        encode_memcpy(
+                            builder,
+                            param_size2,
+                            param_meta_inst2,
+                            param_value2);
                     }
                 } else {
                     param_stack_offset =
@@ -2000,8 +2018,11 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
                     param_stack_offset +=
                         param_size; // TODO: not sure if builder should have
                                     // alignment added to it
-                    builder->encode_memcpy(
-                        param_size, source_param_value, dest_param_value);
+                    encode_memcpy(
+                        builder,
+                        param_size,
+                        source_param_value,
+                        dest_param_value);
                 }
             }
 
@@ -2011,8 +2032,8 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
                     create_imm_int_value(4, used_float_regs);
                 MetaValue float_count_reg =
                     create_int_register_value(4, RegisterIndex_RAX);
-                builder->encode_mnem2(
-                    Mnem_MOV, &float_count_reg, &float_count_imm);
+                encode_mnem2(
+                    builder, Mnem_MOV, &float_count_reg, &float_count_imm);
             }
 
             break;
@@ -2022,7 +2043,7 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
         // Reset parameter list
         builder->current_func_params.len = 0;
 
-        builder->encode_direct_call(called_func_ref);
+        encode_direct_call(builder, called_func_ref);
 
         // Move returned values to result location
 
@@ -2060,8 +2081,11 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
 
                     MetaValue returned_value1 = returned_value;
 
-                    builder->encode_memcpy(
-                        SIR_MIN(8, return_type_size), loc1, returned_value1);
+                    encode_memcpy(
+                        builder,
+                        SIR_MIN(8, return_type_size),
+                        loc1,
+                        returned_value1);
                 }
 
                 // Second register
@@ -2084,8 +2108,8 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
                     MetaValue returned_value2 = returned_value;
                     returned_value2.regmem.offset += 8;
 
-                    builder->encode_memcpy(
-                        return_type_size - 8, loc2, returned_value2);
+                    encode_memcpy(
+                        builder, return_type_size - 8, loc2, returned_value2);
                 }
             } else {
                 SIR_ASSERT(!"unimplemented returning larger values");
@@ -2098,7 +2122,7 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
     }
 
     case SIRInstKind_ReturnVoid: {
-        builder->encode_function_ending(func_ref);
+        encode_function_ending(builder, func_ref);
         break;
     }
 
@@ -2144,8 +2168,11 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
 
                     MetaValue returned_value1 = returned_value;
 
-                    builder->encode_memcpy(
-                        SIR_MIN(8, return_type_size), returned_value1, loc1);
+                    encode_memcpy(
+                        builder,
+                        SIR_MIN(8, return_type_size),
+                        returned_value1,
+                        loc1);
                 }
 
                 // Second register
@@ -2167,8 +2194,8 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
                     MetaValue returned_value2 = returned_value;
                     returned_value2.regmem.offset += 8;
 
-                    builder->encode_memcpy(
-                        return_type_size - 8, returned_value2, loc2);
+                    encode_memcpy(
+                        builder, return_type_size - 8, returned_value2, loc2);
                 }
             } else {
                 SIR_ASSERT(!"TODO: unimplemented returning larger values");
@@ -2177,7 +2204,7 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
         }
         }
 
-        builder->encode_function_ending(func_ref);
+        encode_function_ending(builder, func_ref);
         break;
     }
 
@@ -2198,7 +2225,8 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
 
                 if (next_inst.phi_incoming.block_ref.id ==
                     builder->current_block.id) {
-                    builder->encode_memcpy(
+                    encode_memcpy(
+                        builder,
                         SIRTypeSizeOf(
                             builder->module,
                             SIRModuleGetInstType(builder->module, phi_ref)),
@@ -2212,12 +2240,12 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
 
         FuncJumpPatch patch = {
             .instruction = FE_JMP | FE_JMPL,
-            .instruction_offset = builder->get_code_offset(),
+            .instruction_offset = builder_get_code_offset(builder),
             .destination_block = inst.op1,
         };
         meta_func->jump_patches.push_back(patch);
 
-        builder->encode(FE_JMP | FE_JMPL, -patch.instruction_offset);
+        encode(builder, FE_JMP | FE_JMPL, -patch.instruction_offset, 0, 0, 0);
 
         break;
     }
@@ -2276,18 +2304,23 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
             }
         }
 
-        builder->encode_mnem2(
+        encode_mnem2(
+            builder,
             Mnem_MOV,
             &al_value,
             &builder->meta_insts[builder->current_cond.id]);
 
-        builder->encode(
+        encode(
+            builder,
             FE_TEST8rr,
             REGISTERS[al_value.reg.index],
-            REGISTERS[al_value.reg.index]);
+            REGISTERS[al_value.reg.index],
+            0,
+            0);
 
         if (true_phi.id) {
-            builder->encode_memcpy(
+            encode_memcpy(
+                builder,
                 SIRTypeSizeOf(
                     builder->module,
                     SIRModuleGetInstType(builder->module, true_phi)),
@@ -2297,14 +2330,16 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
 
         FuncJumpPatch true_patch = {
             .instruction = FE_JNZ | FE_JMPL,
-            .instruction_offset = builder->get_code_offset(),
+            .instruction_offset = builder_get_code_offset(builder),
             .destination_block = true_block,
         };
         meta_func->jump_patches.push_back(true_patch);
-        builder->encode(FE_JNZ | FE_JMPL, -true_patch.instruction_offset);
+        encode(
+            builder, FE_JNZ | FE_JMPL, -true_patch.instruction_offset, 0, 0, 0);
 
         if (false_phi.id) {
-            builder->encode_memcpy(
+            encode_memcpy(
+                builder,
                 SIRTypeSizeOf(
                     builder->module,
                     SIRModuleGetInstType(builder->module, false_phi)),
@@ -2314,11 +2349,17 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
 
         FuncJumpPatch false_patch = {
             .instruction = FE_JMP | FE_JMPL,
-            .instruction_offset = builder->get_code_offset(),
+            .instruction_offset = builder_get_code_offset(builder),
             .destination_block = false_block,
         };
         meta_func->jump_patches.push_back(false_patch);
-        builder->encode(FE_JMP | FE_JMPL, -false_patch.instruction_offset);
+        encode(
+            builder,
+            FE_JMP | FE_JMPL,
+            -false_patch.instruction_offset,
+            0,
+            0,
+            0);
 
         break;
     }
@@ -2391,8 +2432,8 @@ move_func_params_to_stack(X64AsmBuilder *builder, SIRFunction *func)
                         break;
                     }
 
-                    builder->encode_memcpy(
-                        param_size1, param_value1, param_meta_inst1);
+                    encode_memcpy(
+                        builder, param_size1, param_value1, param_meta_inst1);
                 }
 
                 // Second register
@@ -2416,8 +2457,8 @@ move_func_params_to_stack(X64AsmBuilder *builder, SIRFunction *func)
                         break;
                     }
 
-                    builder->encode_memcpy(
-                        param_size2, param_value2, param_meta_inst2);
+                    encode_memcpy(
+                        builder, param_size2, param_value2, param_meta_inst2);
                 }
             } else {
                 MetaValue param_value = create_int_register_memory_value(
@@ -2428,8 +2469,8 @@ move_func_params_to_stack(X64AsmBuilder *builder, SIRFunction *func)
                     stack_param_offset);
                 stack_param_offset += param_size;
 
-                builder->encode_memcpy(
-                    param_size, param_value, param_meta_inst);
+                encode_memcpy(
+                    builder, param_size, param_value, param_meta_inst);
             }
         }
 
@@ -2790,9 +2831,9 @@ static void generate_function(X64AsmBuilder *builder, SIRInstRef func_ref)
 
     // Begin stack frame
     meta_func->stack_size = SIR_ROUND_UP(0x10, meta_func->stack_size);
-    builder->encode(FE_PUSHr, FE_BP);
-    builder->encode(FE_MOV64rr, FE_BP, FE_SP);
-    builder->encode(FE_SUB64ri, FE_SP, meta_func->stack_size);
+    encode(builder, FE_PUSHr, FE_BP, 0, 0, 0);
+    encode(builder, FE_MOV64rr, FE_BP, FE_SP, 0, 0);
+    encode(builder, FE_SUB64ri, FE_SP, meta_func->stack_size, 0, 0);
 
     // Move parameters to stack
     move_func_params_to_stack(builder, func);
@@ -2801,14 +2842,17 @@ static void generate_function(X64AsmBuilder *builder, SIRInstRef func_ref)
     for (size_t i = 0; i < meta_func->callee_saved_registers_len; ++i) {
         RegisterIndex reg_index = meta_func->callee_saved_registers[i];
         if (meta_func->registers_used[reg_index]) {
-            builder->encode(
+            encode(
+                builder,
                 FE_MOV64mr,
                 FE_MEM(
                     FE_BP,
                     0,
                     0,
                     meta_func->saved_register_stack_offset[reg_index]),
-                REGISTERS[reg_index]);
+                REGISTERS[reg_index],
+                0,
+                0);
         }
     }
 
@@ -2821,13 +2865,13 @@ static void generate_function(X64AsmBuilder *builder, SIRInstRef func_ref)
         *meta_block = {};
 
         meta_block->kind = MetaValueKind_Block;
-        meta_block->block.offset = builder->get_code_offset();
+        meta_block->block.offset = builder_get_code_offset(builder);
 
         builder->current_block = block_ref;
 
         for (SIRInstRef inst_ref : block.block->inst_refs) {
             generate_inst(builder, func_ref, inst_ref);
-            /* builder->encode(FE_NOP); */
+            // encode(builder, FE_NOP, 0, 0, 0, 0);
         }
     }
 
@@ -2837,10 +2881,14 @@ static void generate_function(X64AsmBuilder *builder, SIRInstRef func_ref)
     for (const FuncJumpPatch &jump_patch : meta_func->jump_patches) {
         MetaValue *meta_block =
             &builder->meta_insts[jump_patch.destination_block.id];
-        builder->encode_at(
+        encode_at(
+            builder,
             jump_patch.instruction_offset,
             jump_patch.instruction,
-            meta_block->block.offset - jump_patch.instruction_offset);
+            meta_block->block.offset - jump_patch.instruction_offset,
+            0,
+            0,
+            0);
     }
 
     size_t function_end_offset = builder->obj_builder->get_section_size(

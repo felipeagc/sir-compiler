@@ -119,6 +119,43 @@ enum MetaValueKind : uint8_t {
     MetaValueKind_COUNT,
 };
 
+static const char *REGISTER_NAMES[RegisterIndex_COUNT] = {
+    "none",
+    "rax", // RegisterIndex_RAX,
+    "rbx", // RegisterIndex_RBX,
+    "rcx", // RegisterIndex_RCX,
+    "rdx", // RegisterIndex_RDX,
+    "rsi", // RegisterIndex_RSI,
+    "rdi", // RegisterIndex_RDI,
+    "rbp", // RegisterIndex_RBP,
+    "rsp", // RegisterIndex_RSP,
+    "r8",  // RegisterIndex_R8,
+    "r9",  // RegisterIndex_R9,
+    "r10", // RegisterIndex_R10,
+    "r11", // RegisterIndex_R11,
+    "r12", // RegisterIndex_R12,
+    "r13", // RegisterIndex_R13,
+    "r14", // RegisterIndex_R14,
+    "r15", // RegisterIndex_R15,
+
+    "xmm0",  // RegisterIndex_XMM0,
+    "xmm1",  // RegisterIndex_XMM1,
+    "xmm2",  // RegisterIndex_XMM2,
+    "xmm3",  // RegisterIndex_XMM3,
+    "xmm4",  // RegisterIndex_XMM4,
+    "xmm5",  // RegisterIndex_XMM5,
+    "xmm6",  // RegisterIndex_XMM6,
+    "xmm7",  // RegisterIndex_XMM7,
+    "xmm8",  // RegisterIndex_XMM8,
+    "xmm9",  // RegisterIndex_XMM9,
+    "xmm10", // RegisterIndex_XMM10,
+    "xmm11", // RegisterIndex_XMM11,
+    "xmm12", // RegisterIndex_XMM12,
+    "xmm13", // RegisterIndex_XMM13,
+    "xmm14", // RegisterIndex_XMM14,
+    "xmm15", // RegisterIndex_XMM15,
+};
+
 static SizeClass SIZE_CLASSES[9];
 static size_t SIZE_CLASS_SIZES[SizeClass_COUNT];
 
@@ -2903,6 +2940,57 @@ static void generate_function(X64AsmBuilder *builder, SIRInstRef func_ref)
         function_size);
 }
 
+static void
+inst_info_printer(void *user_data, SIRInstRef inst_ref, SIRStringBuilder *sb)
+{
+    X64AsmBuilder *builder = (X64AsmBuilder *)user_data;
+
+    MetaValue *meta_value = &builder->meta_insts[inst_ref.id];
+    switch (meta_value->kind) {
+    case MetaValueKind_FRegister:
+    case MetaValueKind_IRegister: {
+        sb->sprintf("%s", REGISTER_NAMES[meta_value->reg.index]);
+        break;
+    }
+    case MetaValueKind_IRegisterMemoryPtr:
+    case MetaValueKind_IRegisterMemory: {
+        sb->append('[');
+        sb->append(SIR_CSTR(REGISTER_NAMES[meta_value->regmem.base]));
+        if (meta_value->regmem.index != RegisterIndex_None) {
+            sb->sprintf(
+                "+%s*%d",
+                REGISTER_NAMES[meta_value->regmem.index],
+                meta_value->regmem.scale);
+        }
+        if (meta_value->regmem.offset < 0) {
+            sb->sprintf("%d", meta_value->regmem.offset);
+        } else if (meta_value->regmem.offset > 0) {
+            sb->sprintf("+%d", meta_value->regmem.offset);
+        }
+        sb->append(']');
+        break;
+    }
+    case MetaValueKind_GlobalPtr:
+    case MetaValueKind_Global: {
+        sb->append('[');
+        switch (meta_value->global.section_type) {
+        case SIRSectionType_Text: sb->append(SIR_STR(".text")); break;
+        case SIRSectionType_Data: sb->append(SIR_STR(".data")); break;
+        case SIRSectionType_ROData: sb->append(SIR_STR(".rodata")); break;
+        case SIRSectionType_BSS: sb->append(SIR_STR(".bss")); break;
+        case SIRSectionType_None: SIR_ASSERT(0); break;
+        }
+        sb->sprintf("+%ld]", meta_value->global.offset);
+        break;
+    }
+    case MetaValueKind_ImmInt: {
+        sb->append(SIR_STR("imm"));
+        break;
+    }
+    default: break;
+    }
+}
+
 static void generate(SIRAsmBuilder *asm_builder)
 {
     ZoneScoped;
@@ -2922,6 +3010,17 @@ static void generate(SIRAsmBuilder *asm_builder)
     for (SIRInstRef func_ref : builder->module->functions) {
         generate_function(builder, func_ref);
     }
+
+#if !NDEBUG
+    printf("===============================\n");
+    printf("|       X64 instr info:       |\n");
+    printf("===============================\n\n");
+    size_t str_len = 0;
+    char *module_str = SIRModulePrintToStringWithAux(
+        builder->module, &str_len, (void *)builder, inst_info_printer);
+    printf("%.*s", (int)str_len, module_str);
+    free(module_str);
+#endif
 }
 
 static void destroy(SIRAsmBuilder *asm_builder)

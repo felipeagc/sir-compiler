@@ -70,12 +70,18 @@ static const char *binop_to_string(SIRBinaryOperation op)
     return "<unknown op>";
 }
 
-static void
-print_instruction(SIRModule *module, SIRInstRef inst_ref, SIRStringBuilder *sb)
+static void print_instruction(
+    SIRModule *module,
+    SIRInstRef inst_ref,
+    SIRStringBuilder *sb,
+    void *user_data,
+    SIRAuxInstPrinter *aux_printer)
 {
     ZoneScoped;
 
     SIRInst inst = module->insts[inst_ref.id];
+
+    int64_t start_pos = sb->array.len;
 
     switch (inst.kind) {
     case SIRInstKind_Unknown: SIR_ASSERT(0); break;
@@ -399,11 +405,28 @@ print_instruction(SIRModule *module, SIRInstRef inst_ref, SIRStringBuilder *sb)
     }
     }
 
+    if (aux_printer) {
+        int64_t end_pos = sb->array.len;
+        int64_t inst_len = end_pos - start_pos;
+
+        int64_t padding = SIR_MAX(0, 50 - inst_len);
+        for (int64_t i = 0; i < padding; ++i) {
+            sb->append(' ');
+        }
+
+        sb->append(SIR_STR(" ; "));
+        aux_printer(user_data, inst_ref, sb);
+    }
+
     sb->append(SIR_STR("\n"));
 }
 
-static void
-print_block(SIRModule *module, SIRInstRef block_ref, SIRStringBuilder *sb)
+static void print_block(
+    SIRModule *module,
+    SIRInstRef block_ref,
+    SIRStringBuilder *sb,
+    void *user_data,
+    SIRAuxInstPrinter *aux_printer)
 {
     ZoneScoped;
 
@@ -413,14 +436,18 @@ print_block(SIRModule *module, SIRInstRef block_ref, SIRStringBuilder *sb)
 
     for (SIRInstRef inst_ref : block->block->inst_refs) {
         sb->append(SIR_STR("    "));
-        print_instruction(module, inst_ref, sb);
+        print_instruction(module, inst_ref, sb, user_data, aux_printer);
     }
 
     sb->append(SIR_STR("\n"));
 }
 
-static void
-print_function(SIRModule *module, SIRInstRef func_ref, SIRStringBuilder *sb)
+static void print_function(
+    SIRModule *module,
+    SIRInstRef func_ref,
+    SIRStringBuilder *sb,
+    void *user_data,
+    SIRAuxInstPrinter *aux_printer)
 {
     ZoneScoped;
 
@@ -467,7 +494,7 @@ print_function(SIRModule *module, SIRInstRef func_ref, SIRStringBuilder *sb)
     }
 
     for (SIRInstRef block_ref : func->blocks) {
-        print_block(module, block_ref, sb);
+        print_block(module, block_ref, sb, user_data, aux_printer);
     }
 
     sb->append(SIR_STR("}\n\n"));
@@ -623,32 +650,42 @@ void SIRModuleDestroy(SIRModule *module)
     SIRFree(parent_allocator, module);
 }
 
-char *SIRModulePrintToString(SIRModule *module, size_t *str_len)
+char *SIRModulePrintToStringWithAux(
+    SIRModule *module,
+    size_t *str_len,
+    void *user_data,
+    SIRAuxInstPrinter *aux_printer)
 {
     ZoneScoped;
 
     SIRStringBuilder sb = SIRStringBuilder::create(&SIR_MALLOC_ALLOCATOR);
 
     for (SIRInstRef const_ref : module->consts) {
-        print_instruction(module, const_ref, &sb);
+        print_instruction(module, const_ref, &sb, user_data, aux_printer);
     }
 
     sb.append(SIR_STR("\n"));
 
     for (SIRInstRef global_ref : module->globals) {
-        print_instruction(module, global_ref, &sb);
+        print_instruction(module, global_ref, &sb, user_data, aux_printer);
     }
 
     sb.append(SIR_STR("\n"));
 
     for (SIRInstRef func_ref : module->functions) {
-        print_function(module, func_ref, &sb);
+        print_function(module, func_ref, &sb, user_data, aux_printer);
     }
 
     SIRString result = sb.build_null_terminated(&SIR_MALLOC_ALLOCATOR);
     sb.destroy();
     *str_len = result.len;
     return (char *)result.ptr;
+}
+
+char *SIRModulePrintToString(SIRModule *module, size_t *str_len)
+{
+    ZoneScoped;
+    return SIRModulePrintToStringWithAux(module, str_len, NULL, NULL);
 }
 
 SIRType *SIRModuleGetVoidType(SIRModule *module)

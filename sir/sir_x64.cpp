@@ -1715,13 +1715,27 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
             &builder->meta_insts[inst.array_elem_ptr.accessed_ref.id]);
 
         int32_t scale = SIRTypeSizeOf(builder->module, inst.type->pointer.sub);
-        // TODO: scale can only be 1, 2, 4, or 8
+        switch (scale) {
+        case 1:
+        case 2:
+        case 4:
+        case 8: {
+            MetaValue value_addr = create_int_register_memory_value(
+                8, RegisterIndex_RAX, scale, RegisterIndex_RCX, 0);
 
-        MetaValue value_addr = create_int_register_memory_value(
-            8, RegisterIndex_RAX, scale, RegisterIndex_RCX, 0);
-
-        encode_mnem2(
-            builder, Mnem_LEA, &builder->meta_insts[inst_ref.id], &value_addr);
+            encode_mnem2(
+                builder,
+                Mnem_LEA,
+                &builder->meta_insts[inst_ref.id],
+                &value_addr);
+            break;
+        }
+        default: {
+            // TODO: scale can only be 1, 2, 4, or 8
+            SIR_ASSERT(!"array access unimplemented for odd value sizes");
+            break;
+        }
+        }
 
         break;
     }

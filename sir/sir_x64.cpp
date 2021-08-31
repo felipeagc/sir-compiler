@@ -1,9 +1,10 @@
 #include "sir_obj.hpp"
 #include "sir_x64_encoder.h"
 
-struct X64AsmBuilder;
+typedef struct X64AsmBuilder X64AsmBuilder;
 
-enum RegisterIndex : uint8_t {
+typedef uint8_t RegisterIndex;
+typedef enum {
     RegisterIndex_None = 0,
 
     RegisterIndex_RAX,
@@ -41,7 +42,7 @@ enum RegisterIndex : uint8_t {
     RegisterIndex_XMM15,
 
     RegisterIndex_COUNT,
-};
+} RegisterIndexOptions;
 
 static int64_t REGISTERS[] = {
     0,
@@ -55,16 +56,18 @@ static int64_t REGISTERS[] = {
     FE_XMM12, FE_XMM13, FE_XMM14, FE_XMM15,
 };
 
-enum SizeClass : uint8_t {
+typedef uint8_t SizeClass;
+typedef enum {
     SizeClass_None = 0,
     SizeClass_1,
     SizeClass_2,
     SizeClass_4,
     SizeClass_8,
     SizeClass_COUNT,
-};
+} SizeClassOptions;
 
-enum OperandKind : uint8_t {
+typedef uint8_t OperandKind;
+typedef enum {
     OperandKind_None = 0,
     OperandKind_Reg,
     OperandKind_FReg,
@@ -72,9 +75,10 @@ enum OperandKind : uint8_t {
     OperandKind_Memory,
     OperandKind_MemoryPtr,
     OperandKind_COUNT,
-};
+} OperandKindOptions;
 
-enum Mnem : uint8_t {
+typedef uint8_t Mnem;
+typedef enum {
     Mnem_Unknown = 0,
     Mnem_MOV,
     Mnem_MOVSX,
@@ -101,11 +105,10 @@ enum Mnem : uint8_t {
     Mnem_SSE_CVTSI2S,
     Mnem_SSE_CVTS2SI,
     Mnem_COUNT,
-};
+} MnemOptions;
 
-struct MetaFunction;
-
-enum MetaValueKind : uint8_t {
+typedef uint8_t MetaValueKind;
+typedef enum {
     MetaValueKind_Unknown = 0,
     MetaValueKind_Function,
     MetaValueKind_Block,
@@ -117,7 +120,7 @@ enum MetaValueKind : uint8_t {
     MetaValueKind_IRegisterMemoryPtr,
     MetaValueKind_GlobalPtr,
     MetaValueKind_COUNT,
-};
+} MetaValueKindOptions;
 
 static const char *REGISTER_NAMES[RegisterIndex_COUNT] = {
     "none",
@@ -219,7 +222,12 @@ static RegisterIndex SYSV_CALLER_SAVED[] = {
     RegisterIndex_R11,
 };
 
-struct MetaValue {
+typedef struct MetaFunction MetaFunction;
+
+typedef struct MetaValue {
+    MetaValueKind kind;
+    SizeClass size_class;
+    SIRSectionType section_type;
     union {
         struct {
             uint64_t offset;
@@ -233,25 +241,22 @@ struct MetaValue {
             uint8_t bytes;
         } reg;
         struct {
-            int32_t scale;
             int32_t offset;
+            uint8_t scale;
             RegisterIndex base;
             RegisterIndex index;
         } regmem;
         struct {
             int64_t offset;
-            SIRSectionType section_type;
         } global;
     };
-    MetaValueKind kind;
-    SizeClass size_class;
-};
+} MetaValue;
 
-struct FuncJumpPatch {
+typedef struct FuncJumpPatch {
     int64_t instruction;
     size_t instruction_offset;
     SIRInstRef destination_block;
-};
+} FuncJumpPatch;
 
 struct MetaFunction {
     uint32_t stack_size;
@@ -286,7 +291,7 @@ static size_t builder_get_code_offset(X64AsmBuilder *builder)
 SIR_INLINE
 static int64_t value_into_operand(const MetaValue *value)
 {
-    switch (value->kind) {
+    switch ((MetaValueKindOptions)value->kind) {
     case MetaValueKind_Unknown:
     case MetaValueKind_Function:
     case MetaValueKind_Block:
@@ -332,7 +337,7 @@ static void value_add_relocation(
 
         builder->obj_builder->add_data_relocation(
             builder->obj_builder,
-            value->global.section_type,
+            value->section_type,
             data_offset,
             relocation_offset,
             4);
@@ -374,6 +379,9 @@ static MetaValue create_int_register_memory_value(
     int32_t offset)
 {
     ZoneScoped;
+
+    SIR_ASSERT(
+        scale == 0 || scale == 1 || scale == 2 || scale == 4 || scale == 8);
 
     MetaValue value = {};
     value.kind = MetaValueKind_IRegisterMemory;
@@ -481,7 +489,7 @@ static MetaValue create_global_value(
     default: value.size_class = SizeClass_None; break;
     }
     value.global.offset = offset;
-    value.global.section_type = section_type;
+    value.section_type = section_type;
     return value;
 }
 
@@ -1707,6 +1715,7 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
             &builder->meta_insts[inst.array_elem_ptr.accessed_ref.id]);
 
         int32_t scale = SIRTypeSizeOf(builder->module, inst.type->pointer.sub);
+        // TODO: scale can only be 1, 2, 4, or 8
 
         MetaValue value_addr = create_int_register_memory_value(
             8, RegisterIndex_RAX, scale, RegisterIndex_RCX, 0);
@@ -1731,7 +1740,7 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
 
         MetaValue base_ptr_value =
             builder->meta_insts[inst.struct_elem_ptr.accessed_ref.id];
-        switch (base_ptr_value.kind) {
+        switch ((MetaValueKindOptions)base_ptr_value.kind) {
         case MetaValueKind_IRegisterMemoryPtr: {
             base_ptr_value.regmem.offset += field_offset;
             builder->meta_insts[inst_ref.id] = base_ptr_value;
@@ -1770,9 +1779,9 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
         MetaValue value_addr = create_int_register_memory_value(
             value_size,
             RegisterIndex_RAX,
-            value_size * elem_index,
+            0,
             RegisterIndex_None,
-            0);
+            value_size * elem_index);
 
         switch (value_size) {
         case 1:
@@ -1853,7 +1862,7 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
         MetaValue stored_value = builder->meta_insts[inst.store.value_ref.id];
 
         MetaValue dest_value = builder->meta_insts[inst.store.ptr_ref.id];
-        switch (dest_value.kind) {
+        switch ((MetaValueKindOptions)dest_value.kind) {
         case MetaValueKind_IRegisterMemoryPtr: {
             dest_value.kind = MetaValueKind_IRegisterMemory;
             break;
@@ -1896,7 +1905,7 @@ generate_inst(X64AsmBuilder *builder, SIRInstRef func_ref, SIRInstRef inst_ref)
         size_t value_size = SIRTypeSizeOf(builder->module, inst.type);
 
         MetaValue source_value = builder->meta_insts[inst.load.ptr_ref.id];
-        switch (source_value.kind) {
+        switch ((MetaValueKindOptions)source_value.kind) {
         case MetaValueKind_IRegisterMemoryPtr: {
             source_value.kind = MetaValueKind_IRegisterMemory;
             break;
@@ -2946,7 +2955,7 @@ inst_info_printer(void *user_data, SIRInstRef inst_ref, SIRStringBuilder *sb)
     X64AsmBuilder *builder = (X64AsmBuilder *)user_data;
 
     MetaValue *meta_value = &builder->meta_insts[inst_ref.id];
-    switch (meta_value->kind) {
+    switch ((MetaValueKindOptions)meta_value->kind) {
     case MetaValueKind_FRegister:
     case MetaValueKind_IRegister: {
         sb->sprintf("%s", REGISTER_NAMES[meta_value->reg.index]);
@@ -2973,7 +2982,7 @@ inst_info_printer(void *user_data, SIRInstRef inst_ref, SIRStringBuilder *sb)
     case MetaValueKind_GlobalPtr:
     case MetaValueKind_Global: {
         sb->append('[');
-        switch (meta_value->global.section_type) {
+        switch (meta_value->section_type) {
         case SIRSectionType_Text: sb->append(SIR_STR(".text")); break;
         case SIRSectionType_Data: sb->append(SIR_STR(".data")); break;
         case SIRSectionType_ROData: sb->append(SIR_STR(".rodata")); break;

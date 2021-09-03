@@ -1,151 +1,151 @@
 fn extern vararg printf(_: *u8);
 
 fn export main(): i32 {
-	// Integer addition
+    // Integer addition
 
-	printf("%d\n",  i32(u8(1 + 2)));
-	printf("%d\n", i32(u16(1 + 2)));
-	printf("%d\n", i32(u32(1 + 2)));
-	printf("%d\n", i32(u64(1 + 2)));
+    printf("%d\n",  i32(u8(1 + 2)));
+    printf("%d\n", i32(u16(1 + 2)));
+    printf("%d\n", i32(u32(1 + 2)));
+    printf("%d\n", i32(u64(1 + 2)));
 
-	printf("\n");
+    printf("\n");
 
-	printf("%d\n",  i32(i8(1 + 2)));
-	printf("%d\n", i32(i16(1 + 2)));
-	printf("%d\n", i32(i32(1 + 2)));
-	printf("%d\n", i32(i64(1 + 2)));
+    printf("%d\n",  i32(i8(1 + 2)));
+    printf("%d\n", i32(i16(1 + 2)));
+    printf("%d\n", i32(i32(1 + 2)));
+    printf("%d\n", i32(i64(1 + 2)));
 
-	printf("\n");
+    printf("\n");
 
-	// Integer subtraction
+    // Integer subtraction
 
-	printf("%d\n",  i32(u8(9 - 2)));
-	printf("%d\n", i32(u16(9 - 2)));
-	printf("%d\n", i32(u32(9 - 2)));
-	printf("%d\n", i32(u64(9 - 2)));
+    printf("%d\n",  i32(u8(9 - 2)));
+    printf("%d\n", i32(u16(9 - 2)));
+    printf("%d\n", i32(u32(9 - 2)));
+    printf("%d\n", i32(u64(9 - 2)));
 
-	printf("\n");
+    printf("\n");
 
-	printf("%d\n",  i32(i8(9 - 2)));
-	printf("%d\n", i32(i16(9 - 2)));
-	printf("%d\n", i32(i32(9 - 2)));
-	printf("%d\n", i32(i64(9 - 2)));
+    printf("%d\n",  i32(i8(9 - 2)));
+    printf("%d\n", i32(i16(9 - 2)));
+    printf("%d\n", i32(i32(9 - 2)));
+    printf("%d\n", i32(i64(9 - 2)));
 
-	printf("\n");
-	
-	// Integer multiplication
+    printf("\n");
+    
+    // Integer multiplication
 
-	printf("%d\n",  i32(u8(2 * 3)));
-	printf("%d\n", i32(u16(2 * 3)));
-	printf("%d\n", i32(u32(2 * 3)));
-	printf("%d\n", i32(u64(2 * 3)));
+    printf("%d\n",  i32(u8(2 * 3)));
+    printf("%d\n", i32(u16(2 * 3)));
+    printf("%d\n", i32(u32(2 * 3)));
+    printf("%d\n", i32(u64(2 * 3)));
 
-	printf("\n");
+    printf("\n");
 
-	printf("%d\n",  i32(i8(2 * 3)));
-	printf("%d\n", i32(i16(2 * 3)));
-	printf("%d\n", i32(i32(2 * 3)));
-	printf("%d\n", i32(i64(2 * 3)));
+    printf("%d\n",  i32(i8(2 * 3)));
+    printf("%d\n", i32(i16(2 * 3)));
+    printf("%d\n", i32(i32(2 * 3)));
+    printf("%d\n", i32(i64(2 * 3)));
 
-	printf("\n");
+    printf("\n");
 
-	// Integer division
+    // Integer division
 
-	printf("%d\n",  i32(u8(4 / 2)));
-	printf("%d\n", i32(u16(4 / 2)));
-	printf("%d\n", i32(u32(4 / 2)));
-	printf("%d\n", i32(u64(4 / 2)));
+    printf("%d\n",  i32(u8(4 / 2)));
+    printf("%d\n", i32(u16(4 / 2)));
+    printf("%d\n", i32(u32(4 / 2)));
+    printf("%d\n", i32(u64(4 / 2)));
 
-	printf("\n");
+    printf("\n");
 
-	printf("%d\n",  i32(i8(4 / 2)));
-	printf("%d\n", i32(i16(4 / 2)));
-	printf("%d\n", i32(i32(4 / 2)));
-	printf("%d\n", i32(i64(4 / 2)));
-	
-	printf("\n");
+    printf("%d\n",  i32(i8(4 / 2)));
+    printf("%d\n", i32(i16(4 / 2)));
+    printf("%d\n", i32(i32(4 / 2)));
+    printf("%d\n", i32(i64(4 / 2)));
+    
+    printf("\n");
 
-	// Integer remainder
+    // Integer remainder
 
-	printf("%d\n",  i32(u8(17 % 11)));
-	printf("%d\n", i32(u16(17 % 11)));
-	printf("%d\n", i32(u32(17 % 11)));
-	printf("%d\n", i32(u64(17 % 11)));
+    printf("%d\n",  i32(u8(17 % 11)));
+    printf("%d\n", i32(u16(17 % 11)));
+    printf("%d\n", i32(u32(17 % 11)));
+    printf("%d\n", i32(u64(17 % 11)));
 
-	printf("\n");
+    printf("\n");
 
-	printf("%d\n",  i32(i8(17 % 11)));
-	printf("%d\n", i32(i16(17 % 11)));
-	printf("%d\n", i32(i32(17 % 11)));
-	printf("%d\n", i32(i64(17 % 11)));
+    printf("%d\n",  i32(i8(17 % 11)));
+    printf("%d\n", i32(i16(17 % 11)));
+    printf("%d\n", i32(i32(17 % 11)));
+    printf("%d\n", i32(i64(17 % 11)));
 
-	printf("\n");
+    printf("\n");
 
-	// Integer AND
+    // Integer AND
 
-	printf("%d\n",  i32(u8(0x0f & 0xf0)));
-	printf("%d\n", i32(u16(0x0f & 0xf0)));
-	printf("%d\n", i32(u32(0x0f & 0xf0)));
-	printf("%d\n", i32(u64(0x0f & 0xf0)));
+    printf("%d\n",  i32(u8(0x0f & 0xf0)));
+    printf("%d\n", i32(u16(0x0f & 0xf0)));
+    printf("%d\n", i32(u32(0x0f & 0xf0)));
+    printf("%d\n", i32(u64(0x0f & 0xf0)));
 
-	printf("\n");
+    printf("\n");
 
-	printf("%d\n",  i32(i8(0x0f & 0xf0)));
-	printf("%d\n", i32(i16(0x0f & 0xf0)));
-	printf("%d\n", i32(i32(0x0f & 0xf0)));
-	printf("%d\n", i32(i64(0x0f & 0xf0)));
+    printf("%d\n",  i32(i8(0x0f & 0xf0)));
+    printf("%d\n", i32(i16(0x0f & 0xf0)));
+    printf("%d\n", i32(i32(0x0f & 0xf0)));
+    printf("%d\n", i32(i64(0x0f & 0xf0)));
 
-	printf("\n");
+    printf("\n");
 
-	// Integer OR
+    // Integer OR
 
-	printf("%d\n",  i32(u8(0x08 | 0x40)));
-	printf("%d\n", i32(u16(0x08 | 0x40)));
-	printf("%d\n", i32(u32(0x08 | 0x40)));
-	printf("%d\n", i32(u64(0x08 | 0x40)));
+    printf("%d\n",  i32(u8(0x08 | 0x40)));
+    printf("%d\n", i32(u16(0x08 | 0x40)));
+    printf("%d\n", i32(u32(0x08 | 0x40)));
+    printf("%d\n", i32(u64(0x08 | 0x40)));
 
-	printf("\n");
+    printf("\n");
 
-	printf("%d\n",  i32(i8(0x08 | 0x40)));
-	printf("%d\n", i32(i16(0x08 | 0x40)));
-	printf("%d\n", i32(i32(0x08 | 0x40)));
-	printf("%d\n", i32(i64(0x08 | 0x40)));
+    printf("%d\n",  i32(i8(0x08 | 0x40)));
+    printf("%d\n", i32(i16(0x08 | 0x40)));
+    printf("%d\n", i32(i32(0x08 | 0x40)));
+    printf("%d\n", i32(i64(0x08 | 0x40)));
 
-	printf("\n");
+    printf("\n");
 
-	// Integer XOR
+    // Integer XOR
 
-	printf("%d\n",  i32(u8(0x48 ^ 0x40)));
-	printf("%d\n", i32(u16(0x48 ^ 0x40)));
-	printf("%d\n", i32(u32(0x48 ^ 0x40)));
-	printf("%d\n", i32(u64(0x48 ^ 0x40)));
+    printf("%d\n",  i32(u8(0x48 ^ 0x40)));
+    printf("%d\n", i32(u16(0x48 ^ 0x40)));
+    printf("%d\n", i32(u32(0x48 ^ 0x40)));
+    printf("%d\n", i32(u64(0x48 ^ 0x40)));
 
-	printf("\n");
+    printf("\n");
 
-	printf("%d\n",  i32(i8(0x48 ^ 0x40)));
-	printf("%d\n", i32(i16(0x48 ^ 0x40)));
-	printf("%d\n", i32(i32(0x48 ^ 0x40)));
-	printf("%d\n", i32(i64(0x48 ^ 0x40)));
+    printf("%d\n",  i32(i8(0x48 ^ 0x40)));
+    printf("%d\n", i32(i16(0x48 ^ 0x40)));
+    printf("%d\n", i32(i32(0x48 ^ 0x40)));
+    printf("%d\n", i32(i64(0x48 ^ 0x40)));
 
-	printf("\n");
+    printf("\n");
 
-	// Float addition
-	printf("%.2f\n", f64(f32(5 + 2)));
-	printf("%.2f\n", f64(5 + 2));
-	printf("\n");
+    // Float addition
+    printf("%.2f\n", f64(f32(5 + 2)));
+    printf("%.2f\n", f64(5 + 2));
+    printf("\n");
 
-	// Float subtraction
-	printf("%.2f\n", f64(f32(5 - 2)));
-	printf("%.2f\n", f64(5 - 2));
-	printf("\n");
+    // Float subtraction
+    printf("%.2f\n", f64(f32(5 - 2)));
+    printf("%.2f\n", f64(5 - 2));
+    printf("\n");
 
-	// Float multiplication
-	printf("%.2f\n", f64(f32(5 * 2)));
-	printf("%.2f\n", f64(5 * 2));
-	printf("\n");
+    // Float multiplication
+    printf("%.2f\n", f64(f32(5 * 2)));
+    printf("%.2f\n", f64(5 * 2));
+    printf("\n");
 
-	// Float division
-	printf("%.2f\n", f64(f32(5 / 2)));
+    // Float division
+    printf("%.2f\n", f64(f32(5 / 2)));
 	printf("%.2f\n", f64(5 / 2));
 
 	return 0;

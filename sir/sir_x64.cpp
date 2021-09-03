@@ -219,6 +219,7 @@ static RegisterIndex SYSV_CALLER_SAVED[] = {
     RegisterIndex_RDI,
     RegisterIndex_R8,
     RegisterIndex_R9,
+    RegisterIndex_R10,
     RegisterIndex_R11,
 };
 
@@ -261,6 +262,8 @@ typedef struct FuncJumpPatch {
 struct MetaFunction {
     uint32_t stack_size;
     SIRArray<FuncJumpPatch> jump_patches;
+    SIRArray<RegisterIndex> free_int_registers;
+    SIRArray<RegisterIndex> free_float_registers;
     bool registers_used[RegisterIndex_COUNT];
     int32_t saved_register_stack_offset[RegisterIndex_COUNT];
     const RegisterIndex *caller_saved_registers;
@@ -700,6 +703,36 @@ static void encode_function_ending(X64AsmBuilder *builder, SIRInstRef func_ref)
     // End stack frame
     encode(builder, FE_LEAVE, FE_BP, 0, 0, 0);
     encode(builder, FE_RET, 0, 0, 0, 0);
+}
+
+static RegisterIndex alloc_int_register(MetaFunction *func)
+{
+    if (func->free_int_registers.len == 0) return RegisterIndex_None;
+    RegisterIndex reg =
+        func->free_int_registers[func->free_int_registers.len - 1];
+    func->free_int_registers.pop();
+    func->registers_used[reg] = true;
+    return reg;
+}
+
+static void free_int_register(MetaFunction *func, RegisterIndex reg)
+{
+    func->free_int_registers.push_back(reg);
+}
+
+static RegisterIndex alloc_float_register(MetaFunction *func)
+{
+    if (func->free_float_registers.len == 0) return RegisterIndex_None;
+    RegisterIndex reg =
+        func->free_float_registers[func->free_float_registers.len - 1];
+    func->free_float_registers.pop();
+    func->registers_used[reg] = true;
+    return reg;
+}
+
+static void free_float_register(MetaFunction *func, RegisterIndex reg)
+{
+    func->free_float_registers.push_back(reg);
 }
 
 enum SysVParamClass {
@@ -2798,6 +2831,41 @@ static void generate_function(X64AsmBuilder *builder, SIRInstRef func_ref)
 
     meta_func->jump_patches =
         SIRArray<FuncJumpPatch>::create((SIRAllocator *)builder->module->arena);
+
+    meta_func->free_int_registers =
+        SIRArray<RegisterIndex>::create((SIRAllocator *)builder->module->arena);
+    meta_func->free_int_registers.reserve(16);
+
+    meta_func->free_int_registers.push_back(RegisterIndex_RBX);
+    meta_func->free_int_registers.push_back(RegisterIndex_R8);
+    meta_func->free_int_registers.push_back(RegisterIndex_R9);
+    meta_func->free_int_registers.push_back(RegisterIndex_R10);
+    meta_func->free_int_registers.push_back(RegisterIndex_R11);
+    meta_func->free_int_registers.push_back(RegisterIndex_R12);
+    meta_func->free_int_registers.push_back(RegisterIndex_R13);
+    meta_func->free_int_registers.push_back(RegisterIndex_R14);
+    meta_func->free_int_registers.push_back(RegisterIndex_R15);
+
+    meta_func->free_float_registers =
+        SIRArray<RegisterIndex>::create((SIRAllocator *)builder->module->arena);
+    meta_func->free_float_registers.reserve(16);
+
+    meta_func->free_float_registers.push_back(RegisterIndex_XMM0);
+    meta_func->free_float_registers.push_back(RegisterIndex_XMM1);
+    meta_func->free_float_registers.push_back(RegisterIndex_XMM2);
+    meta_func->free_float_registers.push_back(RegisterIndex_XMM3);
+    meta_func->free_float_registers.push_back(RegisterIndex_XMM4);
+    meta_func->free_float_registers.push_back(RegisterIndex_XMM5);
+    meta_func->free_float_registers.push_back(RegisterIndex_XMM6);
+    meta_func->free_float_registers.push_back(RegisterIndex_XMM7);
+    meta_func->free_float_registers.push_back(RegisterIndex_XMM8);
+    meta_func->free_float_registers.push_back(RegisterIndex_XMM9);
+    meta_func->free_float_registers.push_back(RegisterIndex_XMM10);
+    meta_func->free_float_registers.push_back(RegisterIndex_XMM11);
+    meta_func->free_float_registers.push_back(RegisterIndex_XMM12);
+    meta_func->free_float_registers.push_back(RegisterIndex_XMM13);
+    meta_func->free_float_registers.push_back(RegisterIndex_XMM14);
+    meta_func->free_float_registers.push_back(RegisterIndex_XMM15);
 
     switch (func->calling_convention) {
     case SIRCallingConvention_SystemV: {

@@ -84,28 +84,29 @@ fn export main() {
     //     a.c = 3;
     //     a.d = 4;
     //     a.e = 5;
-        
+
     //     var addr = &a;
 
     //     printf("%d\n", i32(a.a));
     // }
 
 
-    {
-        global a: i32 = undefined;
-        global b: i32 = undefined;
+    // {
+    //     global a: i32 = undefined;
+    //     global b: i32 = undefined;
 
-        a = 1;
-        b = 2;
+    //     a = 1;
+    //     b = 2;
 
-        var ptr = &a;
-        ptr.* = 0x1234;
+    //     var ptr = &a;
+    //     ptr.* = 0x1234;
 
-        printf("%p\n", &a);
-        printf("%p\n", &b);
+    //     printf("%p\n", &a);
+    //     printf("%p\n", &b);
 
-        printf("%d\n", a);
-        printf("%d\n", b);
-    }
+    //     printf("%d\n", a);
+    //     printf("%d\n", b);
+    // }
 
+    var a = i32(1) + i32(2) + i32(3) + i32(4);
 }

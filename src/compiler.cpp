@@ -189,10 +189,10 @@ Compiler Compiler::create()
     keyword_map.set("undefined", TokenKind_Undefined);
     keyword_map.set("true", TokenKind_True);
     keyword_map.set("false", TokenKind_False);
-    keyword_map.set("when", TokenKind_When);
     keyword_map.set("if", TokenKind_If);
     keyword_map.set("else", TokenKind_Else);
     keyword_map.set("while", TokenKind_While);
+    keyword_map.set("#if", TokenKind_ComptimeIf);
     keyword_map.set("break", TokenKind_Break);
     keyword_map.set("continue", TokenKind_Continue);
     keyword_map.set("return", TokenKind_Return);

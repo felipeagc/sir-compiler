@@ -162,10 +162,10 @@ enum TokenKind {
     TokenKind_Type,
     TokenKind_Struct,
     TokenKind_Union,
-    TokenKind_When,
     TokenKind_If,
     TokenKind_Else,
     TokenKind_While,
+    TokenKind_ComptimeIf,
     TokenKind_Break,
     TokenKind_Continue,
     TokenKind_Return,
@@ -496,7 +496,7 @@ enum StmtKind : uint8_t {
     StmtKind_Block,
     StmtKind_Expr,
     StmtKind_Decl,
-    StmtKind_When,
+    StmtKind_ComptimeIf,
     StmtKind_If,
     StmtKind_While,
     StmtKind_Return,
@@ -522,7 +522,7 @@ struct Stmt {
             StmtRef true_stmt_ref;
             StmtRef false_stmt_ref;
             bool cond_value;
-        } when;
+        } comptime_if;
         struct {
             ExprRef cond_expr_ref;
             StmtRef true_stmt_ref;

@@ -225,7 +225,9 @@ fn export main() {
         test_large_params(s);
     }
 
-    when (sum(2, 1) < 0) {
+    #if (sum(2, 1) < 0) {
         printf("Do not print\n");
+    } else {
+        printf("Print\n");
     }
 }

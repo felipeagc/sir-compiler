@@ -679,7 +679,8 @@ static void analyze_expr(
             Type inner_type = inner_ref.get(compiler);
 
             if (inner_type.kind != TypeKind_Pointer) {
-                String type_string = subtype_ref.get(compiler).to_string(compiler);
+                String type_string =
+                    subtype_ref.get(compiler).to_string(compiler);
                 compiler->add_error(
                     compiler->expr_locs[expr_ref],
                     "cannot dereference variable of type: '%.*s'",
@@ -693,14 +694,16 @@ static void analyze_expr(
             break;
         }
         case UnaryOp_Negate: {
-            analyze_expr(compiler, state, expr.unary.left_ref, expected_type_ref);
+            analyze_expr(
+                compiler, state, expr.unary.left_ref, expected_type_ref);
 
             TypeRef subtype_ref = compiler->expr_types[expr.unary.left_ref];
             TypeRef inner_ref = subtype_ref.inner(compiler);
             Type inner_type = inner_ref.get(compiler);
 
             if (!inner_type.is_numeric()) {
-                String type_string = subtype_ref.get(compiler).to_string(compiler);
+                String type_string =
+                    subtype_ref.get(compiler).to_string(compiler);
                 compiler->add_error(
                     compiler->expr_locs[expr_ref],
                     "cannot negate variable of type: '%.*s'",
@@ -713,14 +716,16 @@ static void analyze_expr(
             break;
         }
         case UnaryOp_Not: {
-            analyze_expr(compiler, state, expr.unary.left_ref, expected_type_ref);
+            analyze_expr(
+                compiler, state, expr.unary.left_ref, expected_type_ref);
 
             TypeRef subtype_ref = compiler->expr_types[expr.unary.left_ref];
             TypeRef inner_ref = subtype_ref.inner(compiler);
             Type inner_type = inner_ref.get(compiler);
 
             if (inner_type.kind != TypeKind_Bool) {
-                String type_string = subtype_ref.get(compiler).to_string(compiler);
+                String type_string =
+                    subtype_ref.get(compiler).to_string(compiler);
                 compiler->add_error(
                     compiler->expr_locs[expr_ref],
                     "cannot use boolean 'not' on variable of type: '%.*s'",
@@ -733,14 +738,16 @@ static void analyze_expr(
             break;
         }
         case UnaryOp_BitNot: {
-            analyze_expr(compiler, state, expr.unary.left_ref, expected_type_ref);
+            analyze_expr(
+                compiler, state, expr.unary.left_ref, expected_type_ref);
 
             TypeRef subtype_ref = compiler->expr_types[expr.unary.left_ref];
             TypeRef inner_ref = subtype_ref.inner(compiler);
             Type inner_type = inner_ref.get(compiler);
 
             if (inner_type.kind != TypeKind_Int) {
-                String type_string = subtype_ref.get(compiler).to_string(compiler);
+                String type_string =
+                    subtype_ref.get(compiler).to_string(compiler);
                 compiler->add_error(
                     compiler->expr_locs[expr_ref],
                     "cannot use bitwise 'not' on variable of type: '%.*s'",
@@ -1175,11 +1182,12 @@ analyze_stmt(Compiler *compiler, AnalyzerState *state, StmtRef stmt_ref)
         break;
     }
 
-    case StmtKind_When: {
+    case StmtKind_ComptimeIf: {
         TypeRef bool_type = compiler->bool_type;
-        analyze_expr(compiler, state, stmt.when.cond_expr_ref, bool_type);
+        analyze_expr(
+            compiler, state, stmt.comptime_if.cond_expr_ref, bool_type);
 
-        if (compiler->expr_types[stmt.when.cond_expr_ref].id == 0) {
+        if (compiler->expr_types[stmt.comptime_if.cond_expr_ref].id == 0) {
             break;
         }
 
@@ -1188,25 +1196,25 @@ analyze_stmt(Compiler *compiler, AnalyzerState *state, StmtRef stmt_ref)
         bool *interp_value = (bool *)codegen_interp_expr(
             compiler,
             state->codegen_ctx,
-            stmt.when.cond_expr_ref,
+            stmt.comptime_if.cond_expr_ref,
             &err_code,
             &interp_value_size);
 
         if (interp_value_size != sizeof(bool) ||
             err_code != SIRInterpResult_Success) {
             compiler->add_error(
-                compiler->expr_locs[stmt.when.cond_expr_ref],
+                compiler->expr_locs[stmt.comptime_if.cond_expr_ref],
                 "could not evaluate compile time expression: \"%s\"",
                 get_sir_interp_err_string(err_code));
             break;
         }
 
-        stmt.when.cond_value = *interp_value;
+        stmt.comptime_if.cond_value = *interp_value;
 
-        if (stmt.when.cond_value) {
-            analyze_stmt(compiler, state, stmt.when.true_stmt_ref);
-        } else if (stmt.when.false_stmt_ref.id) {
-            analyze_stmt(compiler, state, stmt.when.false_stmt_ref);
+        if (stmt.comptime_if.cond_value) {
+            analyze_stmt(compiler, state, stmt.comptime_if.true_stmt_ref);
+        } else if (stmt.comptime_if.false_stmt_ref.id) {
+            analyze_stmt(compiler, state, stmt.comptime_if.false_stmt_ref);
         }
 
         break;

@@ -74,7 +74,7 @@ static inline String token_kind_to_string(TokenKind kind)
     case TokenKind_Type: return "type";
     case TokenKind_Struct: return "struct";
     case TokenKind_Union: return "union";
-    case TokenKind_When: return "when";
+    case TokenKind_ComptimeIf: return "#if";
     case TokenKind_If: return "if";
     case TokenKind_Else: return "else";
     case TokenKind_While: return "while";
@@ -197,6 +197,7 @@ enum EqClass : uint8_t {
     EqClass_Percent,        // %
     EqClass_Question,       // ?
     EqClass_At,             // @
+    EqClass_Pound,          // #
     EqClass_EOF,            // \0
     EqClass_COUNT,
 };
@@ -206,6 +207,7 @@ enum State : uint8_t {
 
     State_Whitespace,
     State_Identifier,
+    State_ComptimeIdentifier,
     State_BuiltinIdentifier,
     State_StringLiteral,
     State_IntLiteral,
@@ -264,6 +266,7 @@ enum State : uint8_t {
     State_UCommentBody,
 
     State_UIdentifier,
+    State_UComptimeIdentifier,
     State_UBuiltinIdentifier,
     State_UIntLiteral,
     State_UHexIntLiteral,
@@ -429,6 +432,14 @@ struct TokenizerState {
                 String{&state.text[token->loc.offset], token->loc.len};
             if (!compiler->keyword_map.get(ident_str, &token->kind)) {
                 token->str = ident_str;
+            }
+            break;
+        }
+        case State_ComptimeIdentifier: {
+            String ident_str =
+                String{&state.text[token->loc.offset], token->loc.len};
+            if (!compiler->keyword_map.get(ident_str, &token->kind)) {
+                token->kind = TokenKind_Error;
             }
             break;
         }
@@ -1355,26 +1366,26 @@ parse_stmt(Compiler *compiler, ParserState *state, Location *stmt_loc)
     Token next_token = state->peek_token();
 
     switch (next_token.kind) {
-    case TokenKind_When: {
-        Token when_token = state->next_token();
-        *stmt_loc = when_token.loc;
+    case TokenKind_ComptimeIf: {
+        Token comptime_if_token = state->next_token();
+        *stmt_loc = comptime_if_token.loc;
 
-        stmt.kind = StmtKind_When;
-        stmt.when = {};
+        stmt.kind = StmtKind_ComptimeIf;
+        stmt.comptime_if = {};
 
         state->consume_token(compiler, TokenKind_LParen);
 
         Location cond_expr_loc = {};
         Expr cond_expr = parse_expr(compiler, state, &cond_expr_loc);
 
-        stmt.when.cond_expr_ref = compiler->add_expr(cond_expr_loc, cond_expr);
+        stmt.comptime_if.cond_expr_ref = compiler->add_expr(cond_expr_loc, cond_expr);
 
         state->consume_token(compiler, TokenKind_RParen);
 
         Location true_stmt_loc = {};
         Stmt true_stmt = parse_stmt(compiler, state, &true_stmt_loc);
 
-        stmt.when.true_stmt_ref = compiler->add_stmt(true_stmt_loc, true_stmt);
+        stmt.comptime_if.true_stmt_ref = compiler->add_stmt(true_stmt_loc, true_stmt);
 
         next_token = state->peek_token();
         if (next_token.kind == TokenKind_Else) {
@@ -1382,7 +1393,7 @@ parse_stmt(Compiler *compiler, ParserState *state, Location *stmt_loc)
 
             Location false_stmt_loc = {};
             Stmt false_stmt = parse_stmt(compiler, state, &false_stmt_loc);
-            stmt.when.false_stmt_ref =
+            stmt.comptime_if.false_stmt_ref =
                 compiler->add_stmt(false_stmt_loc, false_stmt);
         }
         break;
@@ -1858,6 +1869,7 @@ void init_parser_tables()
     EQ_CLASSES[(int)'\\'] = EqClass_BackSlash;
     EQ_CLASSES[(int)'%'] = EqClass_Percent;
     EQ_CLASSES[(int)'@'] = EqClass_At;
+    EQ_CLASSES[(int)'#'] = EqClass_Pound;
     EQ_CLASSES[(int)'?'] = EqClass_Question;
     EQ_CLASSES[(int)'\0'] = EqClass_EOF;
     EQ_CLASSES[(int)' '] = EqClass_Whitespace;
@@ -1887,6 +1899,7 @@ void init_parser_tables()
     TRANSITION[State_UCommentBody][EqClass_CarriageReturn] = State_UWhitespace;
 
     end_transition(State_UIdentifier, State_Identifier);
+    end_transition(State_UComptimeIdentifier, State_ComptimeIdentifier);
     end_transition(State_UBuiltinIdentifier, State_BuiltinIdentifier);
     end_transition(State_UIntLiteral, State_IntLiteral);
     end_transition(State_UZeroIntLiteral, State_IntLiteral);
@@ -1994,6 +2007,15 @@ void init_parser_tables()
     TRANSITION[State_UIdentifier][EqClass_Digit] = State_UIdentifier;
     TRANSITION[State_UIdentifier][EqClass_DigitZero] = State_UIdentifier;
     TRANSITION[State_UIdentifier][EqClass_Underscore] = State_UIdentifier;
+
+    // Comptime identifier token
+    TRANSITION[State_Start][EqClass_Pound] = State_UComptimeIdentifier;
+    TRANSITION[State_UComptimeIdentifier][EqClass_Letter] =
+        State_UComptimeIdentifier;
+    TRANSITION[State_UComptimeIdentifier][EqClass_LetterX] =
+        State_UComptimeIdentifier;
+    TRANSITION[State_UComptimeIdentifier][EqClass_LetterHex] =
+        State_UComptimeIdentifier;
 
     // Builtin identifier token
     TRANSITION[State_Start][EqClass_At] = State_UBuiltinIdentifier;

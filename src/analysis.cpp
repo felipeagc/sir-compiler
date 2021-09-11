@@ -127,12 +127,24 @@ static void analyze_expr(
             state,
             expr.distinct_type.sub_expr_ref,
             compiler->type_type);
+
         TypeRef sub_type =
             compiler->expr_as_types[expr.distinct_type.sub_expr_ref];
         if (sub_type.id) {
             compiler->expr_types[expr_ref] = compiler->type_type;
-            compiler->expr_as_types[expr_ref] =
-                compiler->create_distinct_type(sub_type);
+
+            // The expression's type was set and named during analysis of the
+            // outer DeclKind_Type
+            TypeRef expr_as_type = compiler->expr_as_types[expr_ref];
+            if (!expr_as_type) {
+                compiler->add_error(
+                    compiler->expr_locs[expr_ref],
+                    "distinct types must be named");
+            } else {
+                LANG_ASSERT(
+                    expr_as_type.get(compiler).kind == TypeKind_Distinct);
+                compiler->set_distinct_type_alias(expr_as_type, sub_type);
+            }
         }
         break;
     }
@@ -240,8 +252,17 @@ static void analyze_expr(
         }
 
         compiler->expr_types[expr_ref] = compiler->type_type;
-        compiler->expr_as_types[expr_ref] = compiler->create_struct_type(
-            field_types, expr.struct_type.field_names.as_slice());
+        if (compiler->expr_as_types[expr_ref]) {
+            // Named struct created previously
+            compiler->set_named_struct_body(
+                compiler->expr_as_types[expr_ref],
+                field_types,
+                expr.struct_type.field_names.as_slice());
+        } else {
+            // Anonymous struct
+            compiler->expr_as_types[expr_ref] = compiler->create_struct_type(
+                field_types, expr.struct_type.field_names.as_slice());
+        }
 
         break;
     }
@@ -605,6 +626,7 @@ static void analyze_expr(
         String accessed_field = ident_expr.ident.str;
 
         switch (accessed_type.kind) {
+        case TypeKind_NamedStruct:
         case TypeKind_Struct: {
             uint32_t field_index = 0;
             if (!accessed_type.struct_.field_map.get(
@@ -1265,11 +1287,33 @@ analyze_decl(Compiler *compiler, AnalyzerState *state, DeclRef decl_ref)
             scope->add(compiler, decl_ref);
         }
 
+        ExprRef type_expr_ref = decl.type_decl.type_expr;
+        Expr type_expr = type_expr_ref.get(compiler);
+        TypeRef expr_as_type = {};
+        switch (type_expr.kind) {
+        case ExprKind_StructType: {
+            expr_as_type = compiler->create_named_struct_type(decl_name);
+            break;
+        }
+        case ExprKind_DistinctType: {
+            expr_as_type = compiler->create_distinct_type(decl_name);
+            break;
+        }
+        default: break;
+        }
+
+        if (expr_as_type) {
+            compiler->expr_as_types[type_expr_ref] = expr_as_type;
+            compiler->decl_as_types[decl_ref] = expr_as_type;
+            compiler->decl_types[decl_ref] = compiler->type_type;
+        }
+
         analyze_expr(
             compiler, state, decl.type_decl.type_expr, compiler->type_type);
-        TypeRef as_type_ref = compiler->expr_as_types[decl.type_decl.type_expr];
-        if (as_type_ref.id > 0) {
-            compiler->decl_as_types[decl_ref] = as_type_ref;
+
+        expr_as_type = compiler->expr_as_types[decl.type_decl.type_expr];
+        if (expr_as_type) {
+            compiler->decl_as_types[decl_ref] = expr_as_type;
             compiler->decl_types[decl_ref] = compiler->type_type;
         }
         break;

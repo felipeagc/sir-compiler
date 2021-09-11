@@ -1,5 +1,11 @@
 fn extern vararg printf(arg: *u8);
 
+// #if (@defined("hello")) {
+//     type AAAA struct {
+//         a: i32,
+//     };
+// }
+
 // fn print_int(x: u64) {
 // 	var n = x;
 // 	var i = u32(0);
@@ -27,6 +33,7 @@ fn extern vararg printf(arg: *u8);
 // }
 
 type P struct {
+    p: *P,
     a: i8,
     b: i8,
     c: i8,
@@ -107,6 +114,10 @@ fn export main() {
     //     printf("%d\n", a);
     //     printf("%d\n", b);
     // }
+    var p: P = undefined;
+    p.p = &p;
+    printf("%p\n", &p);
+    printf("%p\n", p.p);
 
     var a = i32(1) + i32(2) + i32(3) + i32(4);
 }

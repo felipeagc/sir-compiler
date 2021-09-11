@@ -132,6 +132,9 @@ Compiler Compiler::create()
     Array<Type> types = Array<Type>::create(MallocAllocator::get_instance());
     types.push_back({}); // 0th type
 
+    StringMap<TypeRef> named_type_map =
+        StringMap<TypeRef>::create(MallocAllocator::get_instance());
+
     Array<Decl> decls = Array<Decl>::create(MallocAllocator::get_instance());
     decls.push_back({}); // 0th decl
 
@@ -225,11 +228,10 @@ Compiler Compiler::create()
         .errors = errors,
         .sb = sb,
 
-        .distinct_type_counter = 0,
-
         .defines = defines,
         .files = files,
         .type_map = type_map,
+        .named_type_map = named_type_map,
         .types = types,
         .decls = decls,
         .stmts = stmts,
@@ -417,6 +419,7 @@ void Compiler::destroy()
     this->expr_types.destroy();
     this->expr_as_types.destroy();
     this->type_map.destroy();
+    this->named_type_map.destroy();
     this->types.destroy();
     this->files.destroy();
 
@@ -592,13 +595,29 @@ TypeRef Compiler::create_pointer_type(TypeRef sub)
     return this->get_cached_type(type);
 }
 
-TypeRef Compiler::create_distinct_type(TypeRef sub)
+TypeRef Compiler::create_distinct_type(const String &name)
 {
     Type type = {};
     type.kind = TypeKind_Distinct;
-    type.distinct.sub_type = sub;
-    type.distinct.index = this->distinct_type_counter++;
+
+    String chosen_name = name;
+    uint32_t type_index = 0;
+    while (this->named_type_map.get(chosen_name)) {
+        type_index++;
+        chosen_name = this->arena->sprintf(
+            "%.*s.%u", (int)name.len, name.ptr, type_index);
+    }
+
+    type.str = this->arena->sprintf(
+        "@named_type(%.*s)", (int)chosen_name.len, chosen_name.ptr);
+
     return this->get_cached_type(type);
+}
+
+void Compiler::set_distinct_type_alias(TypeRef distinct_type, TypeRef sub)
+{
+    Type *type = &this->types[distinct_type.id];
+    type->distinct.sub_type = sub;
 }
 
 TypeRef
@@ -613,6 +632,38 @@ Compiler::create_struct_type(Slice<TypeRef> fields, Slice<String> field_names)
         type.struct_.field_map.set(field_names[i], i);
     }
     return this->get_cached_type(type);
+}
+
+TypeRef Compiler::create_named_struct_type(const String &name)
+{
+    Type type = {};
+    type.kind = TypeKind_NamedStruct;
+
+    String chosen_name = name;
+    uint32_t type_index = 0;
+    while (this->named_type_map.get(chosen_name)) {
+        type_index++;
+        chosen_name = this->arena->sprintf(
+            "%.*s.%u", (int)name.len, name.ptr, type_index);
+    }
+
+    type.str = this->arena->sprintf(
+        "@named_type(%.*s)", (int)chosen_name.len, chosen_name.ptr);
+    TypeRef type_ref = this->get_cached_type(type);
+    this->named_type_map.set(chosen_name, type_ref);
+    return type_ref;
+}
+
+void Compiler::set_named_struct_body(
+    TypeRef struct_type, Slice<TypeRef> fields, Slice<String> field_names)
+{
+    Type *type = &this->types[struct_type.id];
+    type->struct_.field_types = fields;
+    type->struct_.field_names = field_names;
+    type->struct_.field_map = StringMap<uint32_t>::create(this->arena, 32);
+    for (size_t i = 0; i < field_names.len; ++i) {
+        type->struct_.field_map.set(field_names[i], i);
+    }
 }
 
 TypeRef Compiler::create_tuple_type(Slice<TypeRef> fields)
@@ -715,13 +766,8 @@ String Type::to_string(Compiler *compiler)
         break;
     }
     case TypeKind_Distinct: {
-        String sub_str =
-            compiler->types[this->distinct.sub_type.id].to_string(compiler);
-        this->str = compiler->arena->sprintf(
-            "@dist(%.*s, %u)",
-            (int)sub_str.len,
-            sub_str.ptr,
-            this->distinct.index);
+        // Distinct types should already have been named
+        LANG_ASSERT(0);
         break;
     }
     case TypeKind_Array: {
@@ -788,6 +834,11 @@ String Type::to_string(Compiler *compiler)
         this->str = sb.build_null_terminated(compiler->arena);
 
         sb.destroy();
+        break;
+    }
+    case TypeKind_NamedStruct: {
+        // Already named
+        LANG_ASSERT(0);
         break;
     }
     case TypeKind_Function: {
@@ -880,6 +931,7 @@ uint32_t Type::size_of(Compiler *compiler)
         size = this->distinct.sub_type.get(compiler).size_of(compiler);
         break;
     }
+    case TypeKind_NamedStruct:
     case TypeKind_Struct: {
         size = 0;
         for (TypeRef field_type_ref : this->struct_.field_types) {
@@ -957,6 +1009,7 @@ uint32_t Type::align_of(Compiler *compiler)
         alignment = this->distinct.sub_type.get(compiler).align_of(compiler);
         break;
     }
+    case TypeKind_NamedStruct:
     case TypeKind_Struct: {
         alignment = 0;
 

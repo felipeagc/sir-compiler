@@ -56,110 +56,143 @@ value_into_bool(CodegenContext *ctx, const Type &type, SIRInstRef inst_ref)
     return inst_ref;
 }
 
-static SIRType *
-get_ir_type(Compiler *compiler, SIRModule *module, const Type &type)
+static void
+translate_ir_type(Compiler *compiler, CodegenContext *ctx, TypeRef type_ref)
 {
-    (void)compiler;
+    SIRType *sir_type = ctx->type_values[type_ref];
+    if (sir_type) {
+        return;
+    }
 
+    Type type = type_ref.get(compiler);
     switch (type.kind) {
     case TypeKind_Unknown:
     case TypeKind_MAX:
     case TypeKind_Function:
-    case TypeKind_Type: return nullptr;
+    case TypeKind_Type: return;
 
     case TypeKind_UntypedInt: {
-        return SIRModuleGetI64Type(module);
+        sir_type = SIRModuleGetI64Type(ctx->module);
+        break;
     }
 
     case TypeKind_UntypedFloat: {
-        return SIRModuleGetF64Type(module);
+        sir_type = SIRModuleGetF64Type(ctx->module);
+        break;
     }
 
     case TypeKind_Void: {
-        return SIRModuleGetVoidType(module);
+        sir_type = SIRModuleGetVoidType(ctx->module);
+        break;
     }
     case TypeKind_Bool: {
-        return SIRModuleGetU8Type(module);
+        sir_type = SIRModuleGetU8Type(ctx->module);
+        break;
     }
     case TypeKind_Distinct: {
-        return get_ir_type(
-            compiler, module, type.distinct.sub_type.get(compiler));
+        translate_ir_type(compiler, ctx, type.distinct.sub_type);
+        sir_type = ctx->type_values[type.distinct.sub_type];
+        break;
     }
     case TypeKind_Int: {
         if (type.int_.is_signed) {
             switch (type.int_.bits) {
-            case 8: return SIRModuleGetI8Type(module);
-            case 16: return SIRModuleGetI16Type(module);
-            case 32: return SIRModuleGetI32Type(module);
-            case 64: return SIRModuleGetI64Type(module);
+            case 8: sir_type = SIRModuleGetI8Type(ctx->module); break;
+            case 16: sir_type = SIRModuleGetI16Type(ctx->module); break;
+            case 32: sir_type = SIRModuleGetI32Type(ctx->module); break;
+            case 64: sir_type = SIRModuleGetI64Type(ctx->module); break;
             }
         } else {
             switch (type.int_.bits) {
-            case 8: return SIRModuleGetU8Type(module);
-            case 16: return SIRModuleGetU16Type(module);
-            case 32: return SIRModuleGetU32Type(module);
-            case 64: return SIRModuleGetU64Type(module);
+            case 8: sir_type = SIRModuleGetU8Type(ctx->module); break;
+            case 16: sir_type = SIRModuleGetU16Type(ctx->module); break;
+            case 32: sir_type = SIRModuleGetU32Type(ctx->module); break;
+            case 64: sir_type = SIRModuleGetU64Type(ctx->module); break;
             }
         }
         break;
     }
     case TypeKind_Float: {
         switch (type.float_.bits) {
-        case 32: return SIRModuleGetF32Type(module);
-        case 64: return SIRModuleGetF64Type(module);
+        case 32: sir_type = SIRModuleGetF32Type(ctx->module); break;
+        case 64: sir_type = SIRModuleGetF64Type(ctx->module); break;
         }
         break;
     }
     case TypeKind_Pointer: {
-        SIRType *subtype =
-            get_ir_type(compiler, module, type.pointer.sub_type.get(compiler));
-        return SIRModuleCreatePointerType(module, subtype);
+        translate_ir_type(compiler, ctx, type.pointer.sub_type);
+        SIRType *subtype = ctx->type_values[type.pointer.sub_type];
+        sir_type = SIRModuleCreatePointerType(ctx->module, subtype);
+        break;
     }
     case TypeKind_Slice: {
+        translate_ir_type(compiler, ctx, compiler->usize_type);
+        TypeRef ptr_type = compiler->create_pointer_type(type.slice.sub_type);
+        translate_ir_type(compiler, ctx, ptr_type);
+
         SIRType *field_types[2] = {
-            get_ir_type(
-                compiler,
-                module,
-                compiler->create_pointer_type(type.slice.sub_type)
-                    .get(compiler)),
-            get_ir_type(compiler, module, compiler->u64_type.get(compiler)),
+            ctx->type_values[ptr_type],
+            ctx->type_values[compiler->usize_type],
         };
 
-        return SIRModuleCreateStructType(
-            module, field_types, LANG_CARRAY_LENGTH(field_types), false);
+        sir_type = SIRModuleCreateStructType(
+            ctx->module, field_types, LANG_CARRAY_LENGTH(field_types), false);
+        break;
     }
     case TypeKind_Array: {
-        SIRType *subtype =
-            get_ir_type(compiler, module, type.array.sub_type.get(compiler));
-        return SIRModuleCreateArrayType(module, subtype, type.array.size);
+        translate_ir_type(compiler, ctx, type.array.sub_type);
+        SIRType *subtype = ctx->type_values[type.array.sub_type];
+        sir_type =
+            SIRModuleCreateArrayType(ctx->module, subtype, type.array.size);
+        break;
     }
     case TypeKind_Tuple: {
         Slice<SIRType *> field_types =
             compiler->arena->alloc<SIRType *>(type.tuple.field_types.len);
 
         for (size_t i = 0; i < type.tuple.field_types.len; ++i) {
-            field_types[i] = get_ir_type(
-                compiler, module, type.tuple.field_types[i].get(compiler));
+            translate_ir_type(compiler, ctx, type.tuple.field_types[i]);
+            field_types[i] = ctx->type_values[type.tuple.field_types[i]];
         }
 
-        return SIRModuleCreateStructType(
-            module, field_types.ptr, field_types.len, false);
+        sir_type = SIRModuleCreateStructType(
+            ctx->module, field_types.ptr, field_types.len, false);
+        break;
     }
     case TypeKind_Struct: {
         Slice<SIRType *> field_types =
             compiler->arena->alloc<SIRType *>(type.struct_.field_types.len);
 
         for (size_t i = 0; i < type.struct_.field_types.len; ++i) {
-            field_types[i] = get_ir_type(
-                compiler, module, type.struct_.field_types[i].get(compiler));
+            translate_ir_type(compiler, ctx, type.struct_.field_types[i]);
+            field_types[i] = ctx->type_values[type.struct_.field_types[i]];
         }
 
-        return SIRModuleCreateStructType(
-            module, field_types.ptr, field_types.len, false);
+        sir_type = SIRModuleCreateStructType(
+            ctx->module, field_types.ptr, field_types.len, false);
+        break;
+    }
+    case TypeKind_NamedStruct: {
+        // TODO: get the correct name here, not @named_type(...)
+        sir_type = SIRModuleCreateNamedStructType(
+            ctx->module, type.str.ptr, type.str.len);
+        ctx->type_values[type_ref] = sir_type;
+
+        Slice<SIRType *> field_types =
+            compiler->arena->alloc<SIRType *>(type.struct_.field_types.len);
+
+        for (size_t i = 0; i < type.struct_.field_types.len; ++i) {
+            translate_ir_type(compiler, ctx, type.struct_.field_types[i]);
+            field_types[i] = ctx->type_values[type.struct_.field_types[i]];
+        }
+
+        SIRStructTypeSetBody(
+            ctx->module, sir_type, field_types.ptr, field_types.len, false);
+        break;
     }
     }
 
-    return NULL;
+    ctx->type_values[type_ref] = sir_type;
 }
 
 static CodegenValue
@@ -558,6 +591,7 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
         String accessed_field = ident_expr.ident.str;
 
         switch (accessed_type.kind) {
+        case TypeKind_NamedStruct:
         case TypeKind_Struct: {
             CodegenValue accessed_ref =
                 codegen_expr(compiler, ctx, expr.access.left_ref);
@@ -1376,8 +1410,10 @@ SIRInstRef codegen_isolated_expr_into_func(
     size_t prev_types_len = ctx->type_values.len;
     ctx->type_values.resize(compiler->types.len);
     for (size_t i = prev_types_len; i < compiler->types.len; ++i) {
-        ctx->type_values[i] =
-            get_ir_type(compiler, ctx->module, compiler->types[i]);
+        ctx->type_values[i] = {};
+    }
+    for (size_t i = prev_types_len; i < compiler->types.len; ++i) {
+        translate_ir_type(compiler, ctx, TypeRef{(uint32_t)i});
     }
 
     size_t prev_decls_len = ctx->decl_values.len;
@@ -1450,8 +1486,10 @@ void codegen_file(Compiler *compiler, CodegenContext *ctx, FileRef file_ref)
 
     ctx->type_values.resize(compiler->types.len);
     for (size_t i = 0; i < compiler->types.len; ++i) {
-        ctx->type_values[i] =
-            get_ir_type(compiler, ctx->module, compiler->types[i]);
+        ctx->type_values[i] = {};
+    }
+    for (size_t i = 0; i < compiler->types.len; ++i) {
+        translate_ir_type(compiler, ctx, TypeRef{(uint32_t)i});
     }
 
     ctx->decl_values.resize(compiler->decls.len);

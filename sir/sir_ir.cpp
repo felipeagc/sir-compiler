@@ -513,6 +513,8 @@ SIRModule *SIRModuleCreate(SIRTargetArch target_arch, SIREndianness endianness)
     SIRStringMap global_string_map =
         SIRStringMapCreate(&SIR_MALLOC_ALLOCATOR, 0);
     SIRStringMap type_map = SIRStringMapCreate(&SIR_MALLOC_ALLOCATOR, 0);
+    SIRStringMap named_struct_map =
+        SIRStringMapCreate(&SIR_MALLOC_ALLOCATOR, 0);
 
     insts.push_back({}); // 0th inst
 
@@ -526,6 +528,7 @@ SIRModule *SIRModuleCreate(SIRTargetArch target_arch, SIREndianness endianness)
         .function_map = function_map,
         .global_string_map = global_string_map,
         .type_map = type_map,
+        .named_struct_map = named_struct_map,
         .target_arch = target_arch,
         .endianness = endianness,
 
@@ -644,6 +647,7 @@ void SIRModuleDestroy(SIRModule *module)
     SIRStringMapDestroy(&module->function_map);
     SIRStringMapDestroy(&module->global_string_map);
     SIRStringMapDestroy(&module->type_map);
+    SIRStringMapDestroy(&module->named_struct_map);
     SIRArenaAllocatorDestroy(module->arena);
 
     SIRAllocator *parent_allocator = &SIR_MALLOC_ALLOCATOR;
@@ -776,6 +780,49 @@ SIRType *SIRModuleCreateStructType(
         (SIRType **)SIRAllocSliceClone(module->arena, fields, field_count);
     type->struct_.packed = packed;
     return SIRModuleGetCachedType(module, type);
+}
+
+SIRType *SIRModuleCreateNamedStructType(
+    SIRModule *module, const char *name, size_t name_len)
+{
+    SIRType *type = SIRAllocInit(module->arena, SIRType);
+    type->kind = SIRTypeKind_Struct;
+
+    SIRString chosen_name;
+    chosen_name.ptr =
+        (const char *)SIRAllocSliceClone(module->arena, name, name_len);
+    chosen_name.len = name_len;
+
+    uint32_t type_index = 0;
+    while (SIRStringMapGet(&module->named_struct_map, chosen_name, NULL)) {
+        type_index++;
+        chosen_name = SIRAllocSprintf(
+            module->arena, "%.*s.%u", (int)name_len, name, type_index);
+    }
+
+    SIRStringMapSet(&module->named_struct_map, chosen_name, (uintptr_t)type);
+
+    type->str = SIRAllocSprintf(
+        module->arena,
+        "@named_struct(%.*s)",
+        (int)chosen_name.len,
+        chosen_name.ptr);
+    return SIRModuleGetCachedType(module, type);
+}
+
+void SIRStructTypeSetBody(
+    SIRModule *module,
+    SIRType *struct_type,
+    SIRType **fields,
+    size_t field_count,
+    bool packed)
+{
+    SIR_ASSERT(struct_type->struct_.fields_len == 0);
+    SIR_ASSERT(struct_type->struct_.fields == NULL);
+    struct_type->struct_.fields_len = field_count;
+    struct_type->struct_.fields =
+        (SIRType **)SIRAllocSliceClone(module->arena, fields, field_count);
+    struct_type->struct_.packed = packed;
 }
 
 SIRType *SIRModuleGetCachedType(SIRModule *module, SIRType *type)

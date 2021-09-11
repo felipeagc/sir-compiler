@@ -10,6 +10,10 @@ SIRString SIRCallingConventionToString(SIRCallingConvention calling_convention);
 SIRString SIRLinkageToString(SIRLinkage linkage);
 
 struct SIRType {
+    SIRTypeKind kind;
+    uint32_t size = 0;
+    uint32_t alignment = 0;
+    SIRString str = {};
     union {
         struct {
             uint32_t bits;
@@ -31,11 +35,6 @@ struct SIRType {
             bool packed;
         } struct_;
     };
-    SIRTypeKind kind;
-
-    uint32_t size = 0;
-    uint32_t alignment = 0;
-    SIRString str = {};
 };
 
 SIRString SIRTypeToString(SIRModule *module, SIRType *type);
@@ -128,6 +127,7 @@ struct SIRModule {
     SIRStringMap function_map;
     SIRStringMap global_string_map;
     SIRStringMap type_map;
+    SIRStringMap named_struct_map;
     SIRTargetArch target_arch;
     SIREndianness endianness;
 

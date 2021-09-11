@@ -229,6 +229,7 @@ enum TypeKind {
     TypeKind_Int,
     TypeKind_Float,
     TypeKind_Struct,
+    TypeKind_NamedStruct,
     TypeKind_Tuple,
     TypeKind_Pointer,
     TypeKind_Array,
@@ -263,7 +264,6 @@ struct Type {
         } pointer;
         struct {
             TypeRef sub_type;
-            uint32_t index;
         } distinct;
         struct {
             TypeRef sub_type;
@@ -583,11 +583,10 @@ struct Compiler {
     Array<Error> errors;
     StringBuilder sb;
 
-    uint32_t distinct_type_counter;
-
     StringMap<bool> defines;
     Array<File> files;
     StringMap<TypeRef> type_map;
+    StringMap<TypeRef> named_type_map;
     Array<Type> types;
     Array<Decl> decls;
     Array<Stmt> stmts;
@@ -624,9 +623,13 @@ struct Compiler {
 
     TypeRef get_cached_type(Type &type);
     TypeRef create_pointer_type(TypeRef sub);
-    TypeRef create_distinct_type(TypeRef sub);
+    TypeRef create_distinct_type(const String &name);
+    void set_distinct_type_alias(TypeRef distinct_type, TypeRef sub);
     TypeRef
     create_struct_type(Slice<TypeRef> fields, Slice<String> field_names);
+    TypeRef create_named_struct_type(const String &name);
+    void set_named_struct_body(
+        TypeRef struct_type, Slice<TypeRef> fields, Slice<String> field_names);
     TypeRef create_tuple_type(Slice<TypeRef> fields);
     TypeRef create_array_type(TypeRef sub, size_t size);
     TypeRef create_slice_type(TypeRef sub);

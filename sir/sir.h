@@ -162,6 +162,14 @@ SIRType *
 SIRModuleCreateArrayType(SIRModule *module, SIRType *sub, uint64_t count);
 SIRType *SIRModuleCreateStructType(
     SIRModule *module, SIRType **fields, size_t field_count, bool packed);
+SIRType *SIRModuleCreateNamedStructType(
+    SIRModule *module, const char *name, size_t name_len);
+void SIRStructTypeSetBody(
+    SIRModule *module,
+    SIRType *struct_type,
+    SIRType **fields,
+    size_t field_count,
+    bool packed);
 
 SIRInstRef
 SIRModuleAddConstInt(SIRModule *module, SIRType *type, uint64_t value);
@@ -275,9 +283,7 @@ void SIRBuilderInsertBranch(
 SIRInstRef SIRBuilderInsertPhi(SIRBuilder *builder, SIRType *type);
 
 void SIRPhiAddIncoming(
-    SIRBuilder *builder,
-    SIRInstRef block_ref,
-    SIRInstRef value_ref);
+    SIRBuilder *builder, SIRInstRef block_ref, SIRInstRef value_ref);
 
 void SIRBuilderInsertReturnValue(SIRBuilder *builder, SIRInstRef inst_ref);
 void SIRBuilderInsertReturnVoid(SIRBuilder *builder);

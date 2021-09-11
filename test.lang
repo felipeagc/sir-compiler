@@ -114,10 +114,12 @@ fn export main() {
     //     printf("%d\n", a);
     //     printf("%d\n", b);
     // }
-    var p: P = undefined;
-    p.p = &p;
-    printf("%p\n", &p);
-    printf("%p\n", p.p);
+    // var p: P = undefined;
+    // p.p = &p;
+    // printf("%p\n", &p);
+    // printf("%p\n", p.p);
+
+    printf("%zu\n", @sizeof(P));
 
     var a = i32(1) + i32(2) + i32(3) + i32(4);
 }

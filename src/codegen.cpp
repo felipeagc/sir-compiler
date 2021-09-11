@@ -160,34 +160,34 @@ translate_ir_type(Compiler *compiler, CodegenContext *ctx, TypeRef type_ref)
         break;
     }
     case TypeKind_Struct: {
-        Slice<SIRType *> field_types =
-            compiler->arena->alloc<SIRType *>(type.struct_.field_types.len);
+        if (type.struct_->display_name.len) {
+            sir_type = SIRModuleCreateNamedStructType(
+                ctx->module, type.str.ptr, type.str.len);
+            ctx->type_values[type_ref] = sir_type;
 
-        for (size_t i = 0; i < type.struct_.field_types.len; ++i) {
-            translate_ir_type(compiler, ctx, type.struct_.field_types[i]);
-            field_types[i] = ctx->type_values[type.struct_.field_types[i]];
+            Slice<SIRType *> field_types =
+                compiler->arena->alloc<SIRType *>(type.struct_->field_types.len);
+
+            for (size_t i = 0; i < type.struct_->field_types.len; ++i) {
+                translate_ir_type(compiler, ctx, type.struct_->field_types[i]);
+                field_types[i] = ctx->type_values[type.struct_->field_types[i]];
+            }
+
+            SIRStructTypeSetBody(
+                ctx->module, sir_type, field_types.ptr, field_types.len, false);
+        } else {
+            Slice<SIRType *> field_types =
+                compiler->arena->alloc<SIRType *>(type.struct_->field_types.len);
+
+            for (size_t i = 0; i < type.struct_->field_types.len; ++i) {
+                translate_ir_type(compiler, ctx, type.struct_->field_types[i]);
+                field_types[i] = ctx->type_values[type.struct_->field_types[i]];
+            }
+
+            sir_type = SIRModuleCreateStructType(
+                ctx->module, field_types.ptr, field_types.len, false);
         }
 
-        sir_type = SIRModuleCreateStructType(
-            ctx->module, field_types.ptr, field_types.len, false);
-        break;
-    }
-    case TypeKind_NamedStruct: {
-        // TODO: get the correct name here, not @named_type(...)
-        sir_type = SIRModuleCreateNamedStructType(
-            ctx->module, type.str.ptr, type.str.len);
-        ctx->type_values[type_ref] = sir_type;
-
-        Slice<SIRType *> field_types =
-            compiler->arena->alloc<SIRType *>(type.struct_.field_types.len);
-
-        for (size_t i = 0; i < type.struct_.field_types.len; ++i) {
-            translate_ir_type(compiler, ctx, type.struct_.field_types[i]);
-            field_types[i] = ctx->type_values[type.struct_.field_types[i]];
-        }
-
-        SIRStructTypeSetBody(
-            ctx->module, sir_type, field_types.ptr, field_types.len, false);
         break;
     }
     }
@@ -591,13 +591,12 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
         String accessed_field = ident_expr.ident.str;
 
         switch (accessed_type.kind) {
-        case TypeKind_NamedStruct:
         case TypeKind_Struct: {
             CodegenValue accessed_ref =
                 codegen_expr(compiler, ctx, expr.access.left_ref);
 
             uint32_t field_index = 0;
-            if (!accessed_type.struct_.field_map.get(
+            if (!accessed_type.struct_->field_map.get(
                     accessed_field, &field_index)) {
                 LANG_ASSERT(0);
             }
@@ -614,7 +613,7 @@ codegen_expr(Compiler *compiler, CodegenContext *ctx, ExprRef expr_ref)
                         ctx->builder, accessed_ref.inst_ref, field_index)};
             }
 
-            TypeRef field_type = accessed_type.struct_.field_types[field_index];
+            TypeRef field_type = accessed_type.struct_->field_types[field_index];
             compiler->expr_types[expr_ref] = field_type;
 
             break;

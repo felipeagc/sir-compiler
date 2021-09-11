@@ -229,7 +229,6 @@ enum TypeKind {
     TypeKind_Int,
     TypeKind_Float,
     TypeKind_Struct,
-    TypeKind_NamedStruct,
     TypeKind_Tuple,
     TypeKind_Pointer,
     TypeKind_Array,
@@ -237,6 +236,13 @@ enum TypeKind {
     TypeKind_Function,
 
     TypeKind_MAX,
+};
+
+struct StructType {
+    Slice<TypeRef> field_types;
+    Slice<String> field_names;
+    StringMap<uint32_t> field_map;
+    String display_name;
 };
 
 struct Type {
@@ -251,11 +257,7 @@ struct Type {
         struct {
             uint32_t bits;
         } float_;
-        struct {
-            Slice<TypeRef> field_types;
-            Slice<String> field_names;
-            StringMap<uint32_t> field_map;
-        } struct_;
+        StructType *struct_;
         struct {
             Slice<TypeRef> field_types;
         } tuple;

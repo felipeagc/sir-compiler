@@ -252,7 +252,10 @@ static void analyze_expr(
         }
 
         compiler->expr_types[expr_ref] = compiler->type_type;
-        if (compiler->expr_as_types[expr_ref]) {
+        if (compiler->expr_as_types[expr_ref] &&
+            compiler->expr_as_types[expr_ref]
+                    .get(compiler)
+                    .struct_->display_name.len > 0) {
             // Named struct created previously
             compiler->set_named_struct_body(
                 compiler->expr_as_types[expr_ref],
@@ -626,10 +629,9 @@ static void analyze_expr(
         String accessed_field = ident_expr.ident.str;
 
         switch (accessed_type.kind) {
-        case TypeKind_NamedStruct:
         case TypeKind_Struct: {
             uint32_t field_index = 0;
-            if (!accessed_type.struct_.field_map.get(
+            if (!accessed_type.struct_->field_map.get(
                     accessed_field, &field_index)) {
                 compiler->add_error(
                     compiler->expr_locs[expr_ref],
@@ -641,7 +643,8 @@ static void analyze_expr(
                 break;
             }
 
-            TypeRef field_type = accessed_type.struct_.field_types[field_index];
+            TypeRef field_type =
+                accessed_type.struct_->field_types[field_index];
             compiler->expr_types[expr_ref] = field_type;
 
             break;

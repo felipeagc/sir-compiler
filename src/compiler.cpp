@@ -625,11 +625,12 @@ Compiler::create_struct_type(Slice<TypeRef> fields, Slice<String> field_names)
 {
     Type type = {};
     type.kind = TypeKind_Struct;
-    type.struct_.field_types = fields;
-    type.struct_.field_names = field_names;
-    type.struct_.field_map = StringMap<uint32_t>::create(this->arena, 32);
+    type.struct_ = this->arena->alloc_init<StructType>();
+    type.struct_->field_types = fields;
+    type.struct_->field_names = field_names;
+    type.struct_->field_map = StringMap<uint32_t>::create(this->arena, 32);
     for (size_t i = 0; i < field_names.len; ++i) {
-        type.struct_.field_map.set(field_names[i], i);
+        type.struct_->field_map.set(field_names[i], i);
     }
     return this->get_cached_type(type);
 }
@@ -637,7 +638,10 @@ Compiler::create_struct_type(Slice<TypeRef> fields, Slice<String> field_names)
 TypeRef Compiler::create_named_struct_type(const String &name)
 {
     Type type = {};
-    type.kind = TypeKind_NamedStruct;
+    type.kind = TypeKind_Struct;
+    type.struct_ = this->arena->alloc_init<StructType>();
+    type.struct_->display_name = name;
+    LANG_ASSERT(type.struct_->display_name.len > 0);
 
     String chosen_name = name;
     uint32_t type_index = 0;
@@ -658,11 +662,13 @@ void Compiler::set_named_struct_body(
     TypeRef struct_type, Slice<TypeRef> fields, Slice<String> field_names)
 {
     Type *type = &this->types[struct_type.id];
-    type->struct_.field_types = fields;
-    type->struct_.field_names = field_names;
-    type->struct_.field_map = StringMap<uint32_t>::create(this->arena, 32);
+    LANG_ASSERT(type->struct_);
+    LANG_ASSERT(type->struct_->display_name.len > 0);
+    type->struct_->field_types = fields;
+    type->struct_->field_names = field_names;
+    type->struct_->field_map = StringMap<uint32_t>::create(this->arena, 32);
     for (size_t i = 0; i < field_names.len; ++i) {
-        type->struct_.field_map.set(field_names[i], i);
+        type->struct_->field_map.set(field_names[i], i);
     }
 }
 
@@ -808,37 +814,37 @@ String Type::to_string(Compiler *compiler)
         break;
     }
     case TypeKind_Struct: {
-        StringBuilder sb =
-            StringBuilder::create(MallocAllocator::get_instance());
+        if (this->struct_->display_name.len) {
+            // Already named
+            LANG_ASSERT(0);
+        } else {
+            StringBuilder sb =
+                StringBuilder::create(MallocAllocator::get_instance());
+            sb.append("@struct(");
 
-        sb.append("@struct(");
+            for (size_t i = 0; i < this->struct_->field_types.len; ++i) {
+                auto field_type_ref = this->struct_->field_types[i];
+                auto field_name = this->struct_->field_names[i];
+                Type *field_type = &compiler->types[field_type_ref.id];
 
-        for (size_t i = 0; i < this->struct_.field_types.len; ++i) {
-            auto field_type_ref = this->struct_.field_types[i];
-            auto field_name = this->struct_.field_names[i];
-            Type *field_type = &compiler->types[field_type_ref.id];
+                if (i > 0) {
+                    sb.append(",");
+                }
 
-            if (i > 0) {
-                sb.append(",");
+                sb.append(field_name);
+                sb.append(":");
+
+                String field_str = field_type->to_string(compiler);
+                sb.append(field_str);
             }
 
-            sb.append(field_name);
-            sb.append(":");
+            sb.append(")");
 
-            String field_str = field_type->to_string(compiler);
-            sb.append(field_str);
+            this->str = sb.build_null_terminated(compiler->arena);
+
+            sb.destroy();
         }
 
-        sb.append(")");
-
-        this->str = sb.build_null_terminated(compiler->arena);
-
-        sb.destroy();
-        break;
-    }
-    case TypeKind_NamedStruct: {
-        // Already named
-        LANG_ASSERT(0);
         break;
     }
     case TypeKind_Function: {
@@ -931,10 +937,9 @@ uint32_t Type::size_of(Compiler *compiler)
         size = this->distinct.sub_type.get(compiler).size_of(compiler);
         break;
     }
-    case TypeKind_NamedStruct:
     case TypeKind_Struct: {
         size = 0;
-        for (TypeRef field_type_ref : this->struct_.field_types) {
+        for (TypeRef field_type_ref : this->struct_->field_types) {
             Type field_type = field_type_ref.get(compiler);
             uint32_t field_align = field_type.align_of(compiler);
             size = LANG_ROUND_UP(field_align, size); // Add padding
@@ -1009,11 +1014,10 @@ uint32_t Type::align_of(Compiler *compiler)
         alignment = this->distinct.sub_type.get(compiler).align_of(compiler);
         break;
     }
-    case TypeKind_NamedStruct:
     case TypeKind_Struct: {
         alignment = 0;
 
-        for (TypeRef field_type_ref : this->struct_.field_types) {
+        for (TypeRef field_type_ref : this->struct_->field_types) {
             Type field_type = field_type_ref.get(compiler);
             uint32_t field_align = field_type.align_of(compiler);
             if (field_align > alignment) {

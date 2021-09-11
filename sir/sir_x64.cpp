@@ -3043,7 +3043,7 @@ inst_info_printer(void *user_data, SIRInstRef inst_ref, SIRStringBuilder *sb)
         sb->sprintf("%s", REGISTER_NAMES[meta_value->reg.index]);
         break;
     }
-    case MetaValueKind_IRegisterMemoryPtr:
+    case MetaValueKind_IRegisterMemoryPtr: sb->append('*');
     case MetaValueKind_IRegisterMemory: {
         sb->append('[');
         sb->append(SIR_CSTR(REGISTER_NAMES[meta_value->regmem.base]));
@@ -3061,7 +3061,7 @@ inst_info_printer(void *user_data, SIRInstRef inst_ref, SIRStringBuilder *sb)
         sb->append(']');
         break;
     }
-    case MetaValueKind_GlobalPtr:
+    case MetaValueKind_GlobalPtr: sb->append('*');
     case MetaValueKind_Global: {
         sb->append('[');
         switch (meta_value->section_type) {

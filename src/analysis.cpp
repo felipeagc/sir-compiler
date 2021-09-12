@@ -1216,25 +1216,28 @@ analyze_stmt(Compiler *compiler, AnalyzerState *state, StmtRef stmt_ref)
             break;
         }
 
-        SIRInterpResult err_code = {};
-        size_t interp_value_size = 0;
-        bool *interp_value = (bool *)codegen_interp_expr(
-            compiler,
-            state->codegen_ctx,
-            stmt.comptime_if.cond_expr_ref,
-            &err_code,
-            &interp_value_size);
+        if (!stmt.comptime_if.has_evaluated) {
+            SIRInterpResult err_code = {};
+            size_t interp_value_size = 0;
+            bool *interp_value = (bool *)codegen_interp_expr(
+                compiler,
+                state->codegen_ctx,
+                stmt.comptime_if.cond_expr_ref,
+                &err_code,
+                &interp_value_size);
 
-        if (interp_value_size != sizeof(bool) ||
-            err_code != SIRInterpResult_Success) {
-            compiler->add_error(
-                compiler->expr_locs[stmt.comptime_if.cond_expr_ref],
-                "could not evaluate compile time expression: \"%s\"",
-                get_sir_interp_err_string(err_code));
-            break;
+            if (interp_value_size != sizeof(bool) ||
+                err_code != SIRInterpResult_Success) {
+                compiler->add_error(
+                    compiler->expr_locs[stmt.comptime_if.cond_expr_ref],
+                    "could not evaluate compile time expression: \"%s\"",
+                    get_sir_interp_err_string(err_code));
+                break;
+            }
+
+            stmt.comptime_if.cond_value = *interp_value;
+            stmt.comptime_if.has_evaluated = true;
         }
-
-        stmt.comptime_if.cond_value = *interp_value;
 
         if (stmt.comptime_if.cond_value) {
             analyze_stmt(compiler, state, stmt.comptime_if.true_stmt_ref);
@@ -1269,6 +1272,65 @@ analyze_stmt(Compiler *compiler, AnalyzerState *state, StmtRef stmt_ref)
     compiler->stmts[stmt_ref.id] = stmt;
 }
 
+static void register_top_level_decl(
+    Compiler *compiler, AnalyzerState *state, DeclRef decl_ref)
+{
+    ZoneScoped;
+    LANG_ASSERT(decl_ref.id > 0);
+    Decl decl = compiler->decls[decl_ref.id];
+    File *file = &compiler->files[state->file_ref.id];
+
+    switch (decl.kind) {
+    case DeclKind_ComptimeIf: {
+        TypeRef bool_type = compiler->bool_type;
+        analyze_expr(
+            compiler, state, decl.comptime_if.cond_expr_ref, bool_type);
+
+        if (compiler->expr_types[decl.comptime_if.cond_expr_ref].id == 0) {
+            break;
+        }
+
+        if (!decl.comptime_if.has_evaluated) {
+            SIRInterpResult err_code = {};
+            size_t interp_value_size = 0;
+            bool *interp_value = (bool *)codegen_interp_expr(
+                compiler,
+                state->codegen_ctx,
+                decl.comptime_if.cond_expr_ref,
+                &err_code,
+                &interp_value_size);
+
+            if (interp_value_size != sizeof(bool) ||
+                err_code != SIRInterpResult_Success) {
+                compiler->add_error(
+                    compiler->expr_locs[decl.comptime_if.cond_expr_ref],
+                    "could not evaluate compile time expression: \"%s\"",
+                    get_sir_interp_err_string(err_code));
+                break;
+            }
+
+            decl.comptime_if.cond_value = *interp_value;
+            decl.comptime_if.has_evaluated = true;
+        }
+
+        if (decl.comptime_if.cond_value) {
+            for (DeclRef sub_decl_ref : decl.comptime_if.true_decls) {
+                register_top_level_decl(compiler, state, sub_decl_ref);
+            }
+        } else {
+            for (DeclRef sub_decl_ref : decl.comptime_if.false_decls) {
+                register_top_level_decl(compiler, state, sub_decl_ref);
+            }
+        }
+        break;
+    }
+    default: {
+        file->scope->add(compiler, decl_ref);
+        break;
+    }
+    }
+}
+
 static void
 analyze_decl(Compiler *compiler, AnalyzerState *state, DeclRef decl_ref)
 {
@@ -1281,6 +1343,50 @@ analyze_decl(Compiler *compiler, AnalyzerState *state, DeclRef decl_ref)
     switch (decl.kind) {
     case DeclKind_Unknown: {
         LANG_ASSERT(0);
+        break;
+    }
+
+    case DeclKind_ComptimeIf: {
+        TypeRef bool_type = compiler->bool_type;
+        analyze_expr(
+            compiler, state, decl.comptime_if.cond_expr_ref, bool_type);
+
+        if (compiler->expr_types[decl.comptime_if.cond_expr_ref].id == 0) {
+            break;
+        }
+
+        if (!decl.comptime_if.has_evaluated) {
+            SIRInterpResult err_code = {};
+            size_t interp_value_size = 0;
+            bool *interp_value = (bool *)codegen_interp_expr(
+                compiler,
+                state->codegen_ctx,
+                decl.comptime_if.cond_expr_ref,
+                &err_code,
+                &interp_value_size);
+
+            if (interp_value_size != sizeof(bool) ||
+                err_code != SIRInterpResult_Success) {
+                compiler->add_error(
+                    compiler->expr_locs[decl.comptime_if.cond_expr_ref],
+                    "could not evaluate compile time expression: \"%s\"",
+                    get_sir_interp_err_string(err_code));
+                break;
+            }
+
+            decl.comptime_if.cond_value = *interp_value;
+            decl.comptime_if.has_evaluated = true;
+        }
+
+        if (decl.comptime_if.cond_value) {
+            for (DeclRef sub_decl_ref : decl.comptime_if.true_decls) {
+                analyze_decl(compiler, state, sub_decl_ref);
+            }
+        } else {
+            for (DeclRef sub_decl_ref : decl.comptime_if.false_decls) {
+                analyze_decl(compiler, state, sub_decl_ref);
+            }
+        }
         break;
     }
 
@@ -1505,7 +1611,8 @@ void analyze_file(Compiler *compiler, FileRef file_ref)
 
     // Register top level symbols
     for (DeclRef decl_ref : file.top_level_decls) {
-        file.scope->add(compiler, decl_ref);
+        register_top_level_decl(compiler, &state, decl_ref);
+        /* file.scope->add(compiler, decl_ref); */
     }
 
     for (DeclRef decl_ref : file.top_level_decls) {

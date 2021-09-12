@@ -526,6 +526,7 @@ struct Stmt {
             StmtRef true_stmt_ref;
             StmtRef false_stmt_ref;
             bool cond_value;
+            bool has_evaluated;
         } comptime_if;
         struct {
             ExprRef cond_expr_ref;
@@ -553,6 +554,7 @@ enum DeclKind : uint8_t {
     DeclKind_ImmutableLocalVarDecl,
     DeclKind_GlobalVarDecl,
     DeclKind_ConstDecl,
+    DeclKind_ComptimeIf,
 };
 
 struct FuncDecl {
@@ -576,6 +578,13 @@ struct Decl {
         struct {
             ExprRef type_expr;
         } type_decl;
+        struct {
+            ExprRef cond_expr_ref;
+            Array<DeclRef> true_decls;
+            Array<DeclRef> false_decls;
+            bool cond_value;
+            bool has_evaluated;
+        } comptime_if;
     };
     DeclKind kind;
 };

@@ -1214,6 +1214,19 @@ codegen_decl(Compiler *compiler, CodegenContext *ctx, DeclRef decl_ref)
         break;
     }
 
+    case DeclKind_ComptimeIf: {
+        if (decl.comptime_if.cond_value) {
+            for (DeclRef sub_decl_ref : decl.comptime_if.true_decls) {
+                codegen_decl(compiler, ctx, sub_decl_ref);
+            }
+        } else {
+            for (DeclRef sub_decl_ref : decl.comptime_if.false_decls) {
+                codegen_decl(compiler, ctx, sub_decl_ref);
+            }
+        }
+        break;
+    }
+
     case DeclKind_Function: {
         SIRInstRef prev_curr_func = SIRBuilderGetCurrentFunction(ctx->builder);
         SIRInstRef prev_curr_block = SIRBuilderGetCurrentBlock(ctx->builder);

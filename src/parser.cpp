@@ -1378,14 +1378,16 @@ parse_stmt(Compiler *compiler, ParserState *state, Location *stmt_loc)
         Location cond_expr_loc = {};
         Expr cond_expr = parse_expr(compiler, state, &cond_expr_loc);
 
-        stmt.comptime_if.cond_expr_ref = compiler->add_expr(cond_expr_loc, cond_expr);
+        stmt.comptime_if.cond_expr_ref =
+            compiler->add_expr(cond_expr_loc, cond_expr);
 
         state->consume_token(compiler, TokenKind_RParen);
 
         Location true_stmt_loc = {};
         Stmt true_stmt = parse_stmt(compiler, state, &true_stmt_loc);
 
-        stmt.comptime_if.true_stmt_ref = compiler->add_stmt(true_stmt_loc, true_stmt);
+        stmt.comptime_if.true_stmt_ref =
+            compiler->add_stmt(true_stmt_loc, true_stmt);
 
         next_token = state->peek_token();
         if (next_token.kind == TokenKind_Else) {
@@ -1612,6 +1614,56 @@ static void parse_top_level_decl(
 
     Token next_token = state->peek_token();
     switch (next_token.kind) {
+    case TokenKind_ComptimeIf: {
+        Token comptime_if_token = state->next_token();
+
+        Decl comptime_if_decl = {};
+        Location comptime_if_decl_loc = comptime_if_token.loc;
+        comptime_if_decl.kind = DeclKind_ComptimeIf;
+        comptime_if_decl.comptime_if = {};
+        comptime_if_decl.comptime_if.true_decls =
+            Array<DeclRef>::create(compiler->arena);
+        comptime_if_decl.comptime_if.false_decls =
+            Array<DeclRef>::create(compiler->arena);
+
+        state->consume_token(compiler, TokenKind_LParen);
+
+        Location cond_expr_loc = {};
+        Expr cond_expr = parse_expr(compiler, state, &cond_expr_loc);
+
+        comptime_if_decl.comptime_if.cond_expr_ref =
+            compiler->add_expr(cond_expr_loc, cond_expr);
+
+        state->consume_token(compiler, TokenKind_RParen);
+
+        state->consume_token(compiler, TokenKind_LCurly);
+
+        while (state->peek_token().kind != TokenKind_RCurly) {
+            parse_top_level_decl(
+                compiler, state, &comptime_if_decl.comptime_if.true_decls);
+        }
+
+        state->consume_token(compiler, TokenKind_RCurly);
+
+        next_token = state->peek_token();
+        if (next_token.kind == TokenKind_Else) {
+            state->consume_token(compiler, TokenKind_Else);
+
+            state->consume_token(compiler, TokenKind_LCurly);
+
+            while (state->peek_token().kind != TokenKind_RCurly) {
+                parse_top_level_decl(
+                    compiler, state, &comptime_if_decl.comptime_if.false_decls);
+            }
+
+            state->consume_token(compiler, TokenKind_RCurly);
+        }
+
+        DeclRef comptime_if_decl_ref =
+            compiler->add_decl("", comptime_if_decl_loc, comptime_if_decl);
+        top_level_decls->push_back(comptime_if_decl_ref);
+        break;
+    }
     case TokenKind_Fn: {
         Token func_token = state->next_token();
 

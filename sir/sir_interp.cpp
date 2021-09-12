@@ -224,6 +224,7 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
     }
     case SIRInstKind_ReturnValue: {
         value_addr = SIRInterpGetInstAddr(ctx, inst.op1);
+        SIR_ASSERT(value_addr);
         returned = true;
         break;
     }
@@ -269,9 +270,14 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
                     current_block_ref.id) {
                     ctx->value_addrs[phi_ref.id] = SIRInterpGetInstAddr(
                         ctx, next_inst.phi_incoming.value_ref);
+                    SIR_ASSERT(ctx->value_addrs[phi_ref.id]);
                     break;
                 }
             }
+        }
+
+        if (phi_ref.id) {
+            SIR_ASSERT(ctx->value_addrs[phi_ref.id]);
         }
 
         ctx->block_stack[ctx->block_stack.len - 1] = next_block_ref;
@@ -310,11 +316,16 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
             }
         }
 
+        if (phi_ref.id) {
+            SIR_ASSERT(SIRInterpGetInstAddr(ctx, phi_ref));
+        }
+
         ctx->block_stack[ctx->block_stack.len - 1] = next_block_ref;
         break;
     }
     case SIRInstKind_Phi: {
         // Phi is generated in jump/branch instructions
+        SIR_ASSERT(ctx->value_addrs[inst_ref.id]);
         break;
     }
     case SIRInstKind_FuncCall: {
@@ -856,7 +867,9 @@ bool SIRInterpInst(SIRInterpContext *ctx, SIRInstRef inst_ref)
     }
     }
 
-    ctx->value_addrs[inst_ref.id] = value_addr;
+    if (value_addr) {
+        ctx->value_addrs[inst_ref.id] = value_addr;
+    }
 
     return returned;
 }
@@ -867,6 +880,14 @@ SIRInterpFunction(SIRInterpContext *ctx, SIRInstRef func_ref, void *result)
     ZoneScoped;
 
     SIRModule *mod = ctx->mod;
+
+    /* { */
+    /*     size_t str_len = 0; */
+    /*     const char *mod_str = */
+    /*         (const char *)SIRModulePrintToString(ctx->mod, &str_len); */
+    /*     printf("%.*s\n", (int)str_len, mod_str); */
+    /*     free((char *)mod_str); */
+    /* } */
 
     ctx->stack_memory_used = 0;
     ctx->value_addrs.resize(ctx->mod->insts.len);

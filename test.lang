@@ -1,10 +1,10 @@
 fn extern vararg printf(arg: *u8);
 
-// #if (@defined("hello")) {
-//     type AAAA struct {
-//         a: i32,
-//     };
-// }
+#if (!@defined("hello")) {
+    type AAAA struct {
+        a: i32,
+    };
+}
 
 // fn print_int(x: u64) {
 // 	var n = x;
@@ -31,6 +31,8 @@ fn extern vararg printf(arg: *u8);
 //     s.d = 4;
 //     return s;
 // }
+
+type Dist distinct i32;
 
 type P struct {
     p: *P,
@@ -118,6 +120,8 @@ fn export main() {
     // p.p = &p;
     // printf("%p\n", &p);
     // printf("%p\n", p.p);
+
+    var aa: AAAA = undefined;
 
     printf("%zu\n", @sizeof(P));
 

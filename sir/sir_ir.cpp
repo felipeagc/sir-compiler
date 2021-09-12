@@ -397,8 +397,7 @@ static void print_instruction(
     }
     case SIRInstKind_PhiIncoming: {
         sb->sprintf(
-            "%%r%u = phi_incoming %%b%u %%r%u",
-            inst_ref.id,
+            "phi_incoming %%b%u %%r%u",
             inst.op1.id,
             inst.op2.id);
         break;

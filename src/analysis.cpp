@@ -622,7 +622,7 @@ static void analyze_expr(
 
         Type accessed_type =
             compiler->expr_types[expr.access.left_ref].get(compiler);
-        String type_name = accessed_type.to_string(compiler);
+        String type_name = accessed_type.to_pretty_string(compiler);
 
         Expr ident_expr = expr.access.accessed_ident_ref.get(compiler);
         LANG_ASSERT(ident_expr.kind == ExprKind_Identifier);
@@ -672,7 +672,7 @@ static void analyze_expr(
 
             if (!subtype_ref.get(compiler).is_runtime()) {
                 Type subtype = subtype_ref.get(compiler);
-                String type_string = subtype.to_string(compiler);
+                String type_string = subtype.to_pretty_string(compiler);
                 compiler->add_error(
                     compiler->expr_locs[expr_ref],
                     "cannot take address of variable of non-runtime type: "
@@ -705,7 +705,7 @@ static void analyze_expr(
 
             if (inner_type.kind != TypeKind_Pointer) {
                 String type_string =
-                    subtype_ref.get(compiler).to_string(compiler);
+                    subtype_ref.get(compiler).to_pretty_string(compiler);
                 compiler->add_error(
                     compiler->expr_locs[expr_ref],
                     "cannot dereference variable of type: '%.*s'",
@@ -728,7 +728,7 @@ static void analyze_expr(
 
             if (!inner_type.is_numeric()) {
                 String type_string =
-                    subtype_ref.get(compiler).to_string(compiler);
+                    subtype_ref.get(compiler).to_pretty_string(compiler);
                 compiler->add_error(
                     compiler->expr_locs[expr_ref],
                     "cannot negate variable of type: '%.*s'",
@@ -750,7 +750,7 @@ static void analyze_expr(
 
             if (inner_type.kind != TypeKind_Bool) {
                 String type_string =
-                    subtype_ref.get(compiler).to_string(compiler);
+                    subtype_ref.get(compiler).to_pretty_string(compiler);
                 compiler->add_error(
                     compiler->expr_locs[expr_ref],
                     "cannot use boolean 'not' on variable of type: '%.*s'",
@@ -772,7 +772,7 @@ static void analyze_expr(
 
             if (inner_type.kind != TypeKind_Int) {
                 String type_string =
-                    subtype_ref.get(compiler).to_string(compiler);
+                    subtype_ref.get(compiler).to_pretty_string(compiler);
                 compiler->add_error(
                     compiler->expr_locs[expr_ref],
                     "cannot use bitwise 'not' on variable of type: '%.*s'",
@@ -839,9 +839,9 @@ static void analyze_expr(
             TypeRef right_type_ref = compiler->expr_types[right_ref];
             if (left_type_ref.id != right_type_ref.id) {
                 String left_type_str =
-                    left_type_ref.get(compiler).to_string(compiler);
+                    left_type_ref.get(compiler).to_pretty_string(compiler);
                 String right_type_str =
-                    right_type_ref.get(compiler).to_string(compiler);
+                    right_type_ref.get(compiler).to_pretty_string(compiler);
                 compiler->add_error(
                     compiler->expr_locs[expr_ref],
                     "mismatched types for binary expression operands, got "
@@ -862,7 +862,7 @@ static void analyze_expr(
             }
 
             if (!type.is_runtime_numeric()) {
-                String type_string = type.to_string(compiler);
+                String type_string = type.to_pretty_string(compiler);
                 compiler->add_error(
                     compiler->expr_locs[expr_ref],
                     "binary expression expects runtime numeric types, "
@@ -919,9 +919,9 @@ static void analyze_expr(
             TypeRef right_type_ref = compiler->expr_types[right_ref];
             if (left_type_ref.id != right_type_ref.id) {
                 String left_type_str =
-                    left_type_ref.get(compiler).to_string(compiler);
+                    left_type_ref.get(compiler).to_pretty_string(compiler);
                 String right_type_str =
-                    right_type_ref.get(compiler).to_string(compiler);
+                    right_type_ref.get(compiler).to_pretty_string(compiler);
                 compiler->add_error(
                     compiler->expr_locs[expr_ref],
                     "mismatched types for binary expression operands, got "
@@ -942,7 +942,7 @@ static void analyze_expr(
             }
 
             if (!type.is_runtime_int()) {
-                String type_string = type.to_string(compiler);
+                String type_string = type.to_pretty_string(compiler);
                 compiler->add_error(
                     compiler->expr_locs[expr_ref],
                     "binary expression expects runtime integer types, "
@@ -1012,7 +1012,7 @@ static void analyze_expr(
 
             if (type.is_numeric()) {
                 if (!type.is_runtime_numeric()) {
-                    String type_string = type.to_string(compiler);
+                    String type_string = type.to_pretty_string(compiler);
                     compiler->add_error(
                         compiler->expr_locs[expr_ref],
                         "comparison expression expects runtime numeric types, "
@@ -1022,7 +1022,7 @@ static void analyze_expr(
                     break;
                 }
             } else if (!is_valid_bool_op) {
-                String type_string = type.to_string(compiler);
+                String type_string = type.to_pretty_string(compiler);
                 compiler->add_error(
                     compiler->expr_locs[expr_ref],
                     "invalid type for binary expression '%*.s'",
@@ -1046,7 +1046,7 @@ static void analyze_expr(
             Type left_type =
                 compiler->expr_types[left_ref].inner(compiler).get(compiler);
             if (!left_type.is_runtime_int()) {
-                String type_string = left_type.to_string(compiler);
+                String type_string = left_type.to_pretty_string(compiler);
                 compiler->add_error(
                     compiler->expr_locs[left_ref],
                     "bit shift expects runtime integer types, instead "
@@ -1059,7 +1059,7 @@ static void analyze_expr(
             Type right_type =
                 compiler->expr_types[right_ref].inner(compiler).get(compiler);
             if (!right_type.is_runtime_int()) {
-                String type_string = right_type.to_string(compiler);
+                String type_string = right_type.to_pretty_string(compiler);
                 compiler->add_error(
                     compiler->expr_locs[right_ref],
                     "bit shift expects runtime integer types, instead "
@@ -1101,8 +1101,8 @@ static void analyze_expr(
         Type expected_type = expected_type_ref.get(compiler);
         Type expr_type = compiler->expr_types[expr_ref].get(compiler);
 
-        String expected_type_str = expected_type.to_string(compiler);
-        String expr_type_str = expr_type.to_string(compiler);
+        String expected_type_str = expected_type.to_pretty_string(compiler);
+        String expr_type_str = expr_type.to_pretty_string(compiler);
 
         compiler->add_error(
             compiler->expr_locs[expr_ref],
@@ -1423,7 +1423,7 @@ analyze_decl(Compiler *compiler, AnalyzerState *state, DeclRef decl_ref)
 
         if (!var_type.get(compiler).is_runtime()) {
             Type decl_type = var_type.get(compiler);
-            String type_string = decl_type.to_string(compiler);
+            String type_string = decl_type.to_pretty_string(compiler);
             compiler->add_error(
                 compiler->decl_locs[decl_ref],
                 "cannot create variable of non-runtime type: "
@@ -1473,7 +1473,7 @@ analyze_decl(Compiler *compiler, AnalyzerState *state, DeclRef decl_ref)
 
         if (!var_type.get(compiler).is_runtime()) {
             Type decl_type = var_type.get(compiler);
-            String type_string = decl_type.to_string(compiler);
+            String type_string = decl_type.to_pretty_string(compiler);
             compiler->add_error(
                 compiler->decl_locs[decl_ref],
                 "cannot create variable of non-runtime type: "

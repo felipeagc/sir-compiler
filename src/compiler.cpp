@@ -575,7 +575,7 @@ void Compiler::compile(String path)
 
 TypeRef Compiler::get_cached_type(Type &type)
 {
-    String type_string = type.to_string(this);
+    String type_string = type.to_internal_string(this);
     TypeRef existing_type_ref = {};
     if (this->type_map.get(type_string, &existing_type_ref)) {
         return existing_type_ref;
@@ -599,6 +599,7 @@ TypeRef Compiler::create_distinct_type(const String &name)
 {
     Type type = {};
     type.kind = TypeKind_Distinct;
+    type.distinct.display_name = name;
 
     String chosen_name = name;
     uint32_t type_index = 0;
@@ -708,7 +709,7 @@ TypeRef Compiler::create_func_type(
     return this->get_cached_type(type);
 }
 
-String Type::to_string(Compiler *compiler)
+String Type::to_internal_string(Compiler *compiler)
 {
     if (this->str.len > 0) {
         return this->str;
@@ -766,7 +767,8 @@ String Type::to_string(Compiler *compiler)
     }
     case TypeKind_Pointer: {
         String sub_str =
-            compiler->types[this->pointer.sub_type.id].to_string(compiler);
+            compiler->types[this->pointer.sub_type.id].to_internal_string(
+                compiler);
         this->str = compiler->arena->sprintf(
             "@ptr(%.*s)", (int)sub_str.len, sub_str.ptr);
         break;
@@ -778,14 +780,16 @@ String Type::to_string(Compiler *compiler)
     }
     case TypeKind_Array: {
         String sub_str =
-            compiler->types[this->array.sub_type.id].to_string(compiler);
+            compiler->types[this->array.sub_type.id].to_internal_string(
+                compiler);
         this->str = compiler->arena->sprintf(
             "@arr(%.*s, %lu)", (int)sub_str.len, sub_str.ptr, this->array.size);
         break;
     }
     case TypeKind_Slice: {
         String sub_str =
-            compiler->types[this->slice.sub_type.id].to_string(compiler);
+            compiler->types[this->slice.sub_type.id].to_internal_string(
+                compiler);
         this->str = compiler->arena->sprintf(
             "@slice(%.*s)", (int)sub_str.len, sub_str.ptr);
         break;
@@ -802,7 +806,7 @@ String Type::to_string(Compiler *compiler)
 
             if (i > 0) sb.append(", ");
 
-            String field_str = field_type->to_string(compiler);
+            String field_str = field_type->to_internal_string(compiler);
             sb.append(field_str);
         }
 
@@ -834,7 +838,7 @@ String Type::to_string(Compiler *compiler)
                 sb.append(field_name);
                 sb.append(":");
 
-                String field_str = field_type->to_string(compiler);
+                String field_str = field_type->to_internal_string(compiler);
                 sb.append(field_str);
             }
 
@@ -858,7 +862,7 @@ String Type::to_string(Compiler *compiler)
         }
 
         Type *return_type = &compiler->types[this->func.return_type.id];
-        sb.append(return_type->to_string(compiler));
+        sb.append(return_type->to_internal_string(compiler));
 
         sb.append(",");
 
@@ -872,7 +876,7 @@ String Type::to_string(Compiler *compiler)
                 sb.append(",");
             }
 
-            String field_str = field_type->to_string(compiler);
+            String field_str = field_type->to_internal_string(compiler);
             sb.append(field_str);
         }
 
@@ -886,7 +890,155 @@ String Type::to_string(Compiler *compiler)
     }
     }
 
-    return str;
+    return this->str;
+}
+
+String Type::to_pretty_string(Compiler *compiler)
+{
+    switch (this->kind) {
+    case TypeKind_MAX: LANG_ASSERT(0); break;
+    case TypeKind_Unknown: return "unknown";
+    case TypeKind_Void: return "void";
+    case TypeKind_Type: return "type";
+    case TypeKind_Bool: return "bool";
+    case TypeKind_UntypedInt: return "untyped int";
+    case TypeKind_UntypedFloat: return "untyped float";
+    case TypeKind_Int: {
+        if (this->int_.is_size) {
+            if (this->int_.is_signed) {
+                return "isize";
+            } else {
+                return "usize";
+            }
+        } else {
+            if (this->int_.is_signed) {
+                return compiler->arena->sprintf("i%u", this->int_.bits);
+            } else {
+                return compiler->arena->sprintf("u%u", this->int_.bits);
+            }
+        }
+        break;
+    }
+    case TypeKind_Float: {
+        return compiler->arena->sprintf("f%u", this->float_.bits);
+    }
+    case TypeKind_Pointer: {
+        String sub_str =
+            compiler->types[this->pointer.sub_type.id].to_pretty_string(
+                compiler);
+        return compiler->arena->sprintf("*%.*s", (int)sub_str.len, sub_str.ptr);
+    }
+    case TypeKind_Distinct: {
+        return this->distinct.display_name;
+    }
+    case TypeKind_Array: {
+        String sub_str =
+            compiler->types[this->array.sub_type.id].to_pretty_string(compiler);
+        return compiler->arena->sprintf(
+            "[%lu]%.*s", this->array.size, (int)sub_str.len, sub_str.ptr);
+    }
+    case TypeKind_Slice: {
+        String sub_str =
+            compiler->types[this->slice.sub_type.id].to_pretty_string(compiler);
+        return compiler->arena->sprintf(
+            "[]%.*s", (int)sub_str.len, sub_str.ptr);
+    }
+    case TypeKind_Tuple: {
+        StringBuilder sb =
+            StringBuilder::create(MallocAllocator::get_instance());
+
+        sb.append("@tuple(");
+
+        for (size_t i = 0; i < this->tuple.field_types.len; ++i) {
+            auto field_type_ref = this->tuple.field_types[i];
+            Type *field_type = &compiler->types[field_type_ref.id];
+
+            if (i > 0) sb.append(", ");
+
+            String field_str = field_type->to_pretty_string(compiler);
+            sb.append(field_str);
+        }
+
+        sb.append(")");
+
+        String pretty_name = sb.build_null_terminated(compiler->arena);
+
+        sb.destroy();
+        return pretty_name;
+    }
+    case TypeKind_Struct: {
+        if (this->struct_->display_name.len) {
+            return this->struct_->display_name;
+        } else {
+            StringBuilder sb =
+                StringBuilder::create(MallocAllocator::get_instance());
+            sb.append("struct{");
+
+            for (size_t i = 0; i < this->struct_->field_types.len; ++i) {
+                auto field_type_ref = this->struct_->field_types[i];
+                auto field_name = this->struct_->field_names[i];
+                Type *field_type = &compiler->types[field_type_ref.id];
+
+                if (i > 0) {
+                    sb.append(",");
+                }
+
+                sb.append(field_name);
+                sb.append(":");
+
+                String field_str = field_type->to_pretty_string(compiler);
+                sb.append(field_str);
+            }
+
+            sb.append("}");
+
+            String pretty_str = sb.build_null_terminated(compiler->arena);
+
+            sb.destroy();
+            return pretty_str;
+        }
+
+        break;
+    }
+    case TypeKind_Function: {
+        StringBuilder sb =
+            StringBuilder::create(MallocAllocator::get_instance());
+
+        if (!this->func.vararg) {
+            sb.append("fn");
+        } else {
+            sb.append("fn vararg");
+        }
+
+        sb.append("(");
+
+        for (size_t i = 0; i < this->func.param_types.len; ++i) {
+            auto field_type_ref = this->func.param_types[i];
+            Type *field_type = &compiler->types[field_type_ref.id];
+
+            if (i > 0) {
+                sb.append(", ");
+            }
+
+            String field_str = field_type->to_pretty_string(compiler);
+            sb.append(field_str);
+        }
+
+        sb.append("): ");
+
+        Type *return_type = &compiler->types[this->func.return_type.id];
+        sb.append(return_type->to_pretty_string(compiler));
+
+        String pretty_name = sb.build_null_terminated(compiler->arena);
+
+        sb.destroy();
+
+        return pretty_name;
+    }
+    }
+
+    LANG_ASSERT(0);
+    return "";
 }
 
 uint32_t Type::size_of(Compiler *compiler)

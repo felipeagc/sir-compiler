@@ -266,6 +266,7 @@ struct Type {
         } pointer;
         struct {
             TypeRef sub_type;
+            String display_name;
         } distinct;
         struct {
             TypeRef sub_type;
@@ -281,7 +282,8 @@ struct Type {
         } func;
     };
 
-    String to_string(Compiler *compiler);
+    String to_internal_string(Compiler *compiler);
+    String to_pretty_string(Compiler *compiler);
     uint32_t align_of(Compiler *compiler);
     uint32_t size_of(Compiler *compiler);
 

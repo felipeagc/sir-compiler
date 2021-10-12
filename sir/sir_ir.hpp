@@ -160,7 +160,7 @@ SIRInst SIRModuleGetInst(SIRModule *module, SIRInstRef inst_ref)
 SIRType *SIRModuleGetCachedType(SIRModule *module, SIRType *type);
 
 typedef void(SIRAuxInstPrinter)(
-    void *user_data, SIRInstRef inst_ref, SIRStringBuilder *sb);
+    void *user_data, SIRInstRef inst_ref, size_t inst_pos, SIRStringBuilder *sb);
 
 char *SIRModulePrintToStringWithAux(
     SIRModule *module,

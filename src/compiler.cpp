@@ -176,6 +176,18 @@ Compiler Compiler::create()
         Array<String>::create(MallocAllocator::get_instance());
     decl_names.push_back({}); // 0th expr
 
+    Array<AnalysisStateFlags> expr_flags =
+        Array<AnalysisStateFlags>::create(MallocAllocator::get_instance());
+    expr_flags.push_back({}); // 0th expr
+
+    Array<AnalysisStateFlags> stmt_flags =
+        Array<AnalysisStateFlags>::create(MallocAllocator::get_instance());
+    stmt_flags.push_back({}); // 0th expr
+
+    Array<AnalysisStateFlags> decl_flags =
+        Array<AnalysisStateFlags>::create(MallocAllocator::get_instance());
+    decl_flags.push_back({}); // 0th expr
+
     keyword_map.set("extern", TokenKind_Extern);
     keyword_map.set("vararg", TokenKind_VarArg);
     keyword_map.set("export", TokenKind_Export);
@@ -248,6 +260,9 @@ Compiler Compiler::create()
 
         .expr_types = expr_types,
         .expr_as_types = expr_as_types,
+        .expr_flags = expr_flags,
+        .decl_flags = decl_flags,
+        .stmt_flags = stmt_flags,
 
         .void_type = {0},
         .type_type = {0},
@@ -418,6 +433,9 @@ void Compiler::destroy()
     this->decl_names.destroy();
     this->expr_types.destroy();
     this->expr_as_types.destroy();
+    this->expr_flags.destroy();
+    this->decl_flags.destroy();
+    this->stmt_flags.destroy();
     this->type_map.destroy();
     this->named_type_map.destroy();
     this->types.destroy();

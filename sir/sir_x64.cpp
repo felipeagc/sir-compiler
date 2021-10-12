@@ -273,11 +273,19 @@ struct MetaFunction {
     SIRSymbolRef symbol_ref{};
 };
 
+typedef struct Interval {
+    RegisterIndex reg;
+    uint32_t start;
+    uint32_t end;
+    uint32_t stack_offset;
+} Interval;
+
 struct X64AsmBuilder {
     SIRAsmBuilder vt;
     SIRModule *module;
     SIRObjectBuilder *obj_builder;
     SIRArray<MetaValue> meta_insts;
+    SIRArray<Interval> intervals;
     SIRInstRef current_block;
     SIRArray<SIRInstRef> current_func_params;
     SIRInstRef current_cond;
@@ -2663,6 +2671,138 @@ SIR_INLINE size_t get_func_call_stack_parameters_size(
     return stack_parameters_size;
 }
 
+static bool is_inst_reg_allocatable(SIRInstKind kind)
+{
+    switch (kind) {
+    case SIRInstKind_Unknown:
+    case SIRInstKind_ConstInt:
+    case SIRInstKind_ConstFloat:
+    case SIRInstKind_ConstBool:
+    case SIRInstKind_Block:
+    case SIRInstKind_Function:
+    case SIRInstKind_FunctionParameter:
+    case SIRInstKind_PushFunctionParameter:
+    case SIRInstKind_ReturnVoid:
+    case SIRInstKind_ReturnValue:
+    case SIRInstKind_Store:
+    case SIRInstKind_Jump:
+    case SIRInstKind_SetCond:
+    case SIRInstKind_Branch:
+    case SIRInstKind_PhiIncoming:
+    case SIRInstKind_Global:
+    case SIRInstKind_StackSlot: return false;
+    case SIRInstKind_Alias:
+    case SIRInstKind_Load:
+    case SIRInstKind_Phi:
+    case SIRInstKind_FuncCall:
+    case SIRInstKind_BitCast:
+    case SIRInstKind_ZExt:
+    case SIRInstKind_SExt:
+    case SIRInstKind_Trunc:
+    case SIRInstKind_FPTrunc:
+    case SIRInstKind_FPExt:
+    case SIRInstKind_SIToFP:
+    case SIRInstKind_UIToFP:
+    case SIRInstKind_FPToSI:
+    case SIRInstKind_FPToUI:
+    case SIRInstKind_FNeg:
+    case SIRInstKind_ArrayElemPtr:
+    case SIRInstKind_StructElemPtr:
+    case SIRInstKind_ExtractArrayElem:
+    case SIRInstKind_ExtractStructElem:
+    case SIRInstKind_Binop: return true;
+    }
+
+    return false;
+}
+
+static bool inst_has_operands(SIRInstKind kind)
+{
+    switch (kind) {
+    case SIRInstKind_Unknown:
+    case SIRInstKind_ConstInt:
+    case SIRInstKind_ConstFloat:
+    case SIRInstKind_ConstBool:
+    case SIRInstKind_Block:
+    case SIRInstKind_Function:
+    case SIRInstKind_FunctionParameter:
+    case SIRInstKind_ReturnVoid:
+    case SIRInstKind_Jump:
+    case SIRInstKind_Branch:
+    case SIRInstKind_Global:
+    case SIRInstKind_StackSlot: return false;
+    case SIRInstKind_PushFunctionParameter:
+    case SIRInstKind_SetCond:
+    case SIRInstKind_PhiIncoming:
+    case SIRInstKind_ReturnValue:
+    case SIRInstKind_Store:
+    case SIRInstKind_Alias:
+    case SIRInstKind_Load:
+    case SIRInstKind_Phi:
+    case SIRInstKind_FuncCall:
+    case SIRInstKind_BitCast:
+    case SIRInstKind_ZExt:
+    case SIRInstKind_SExt:
+    case SIRInstKind_Trunc:
+    case SIRInstKind_FPTrunc:
+    case SIRInstKind_FPExt:
+    case SIRInstKind_SIToFP:
+    case SIRInstKind_UIToFP:
+    case SIRInstKind_FPToSI:
+    case SIRInstKind_FPToUI:
+    case SIRInstKind_FNeg:
+    case SIRInstKind_ArrayElemPtr:
+    case SIRInstKind_StructElemPtr:
+    case SIRInstKind_ExtractArrayElem:
+    case SIRInstKind_ExtractStructElem:
+    case SIRInstKind_Binop: return true;
+    }
+
+    return false;
+}
+
+static void
+reg_alloc(X64AsmBuilder *builder, SIRFunction *func, MetaFunction *meta_func)
+{
+    (void)meta_func;
+
+    size_t inst_index = 0;
+    for (SIRInstRef block_ref : func->blocks) {
+        SIRInst block = SIRModuleGetInst(builder->module, block_ref);
+        for (size_t i = 0; i < block.block->inst_refs.len; ++i, ++inst_index) {
+            SIRInstRef inst_ref = block.block->inst_refs.ptr[i];
+            SIRInst inst = SIRModuleGetInst(builder->module, inst_ref);
+            SIRType *type = SIRModuleGetInstType(builder->module, inst_ref);
+
+            Interval *interval = &builder->intervals[inst_ref.id];
+
+            if (inst_has_operands(inst.kind)) {
+                if (inst.op1.id) {
+                    SIRInstKind op1_kind =
+                        SIRModuleGetInstKind(builder->module, inst.op1);
+                    if (is_inst_reg_allocatable(op1_kind)) {
+                        builder->intervals[inst.op1.id].end = inst_index;
+                    }
+                }
+                if (inst.op2.id) {
+                    SIRInstKind op2_kind =
+                        SIRModuleGetInstKind(builder->module, inst.op2);
+                    if (is_inst_reg_allocatable(op2_kind)) {
+                        builder->intervals[inst.op2.id].end = inst_index;
+                    }
+                }
+            }
+
+            if (!type) continue;
+
+            size_t type_size = SIRTypeSizeOf(builder->module, type);
+            if (type_size == 0) continue;
+
+            interval->start = inst_index;
+        }
+    }
+}
+
 static void reg_stack_alloc(
     X64AsmBuilder *builder, SIRFunction *func, MetaFunction *meta_func)
 {
@@ -2942,6 +3082,7 @@ static void generate_function(X64AsmBuilder *builder, SIRInstRef func_ref)
     }
 
     // Register allocation / variable spilling
+    reg_alloc(builder, func, meta_func);
     reg_stack_alloc(builder, func, meta_func);
 
     for (uint32_t i = 0; i < RegisterIndex_COUNT; ++i) {
@@ -3031,9 +3172,11 @@ static void generate_function(X64AsmBuilder *builder, SIRInstRef func_ref)
         function_size);
 }
 
-static void
-inst_info_printer(void *user_data, SIRInstRef inst_ref, SIRStringBuilder *sb)
+static void inst_info_printer(
+    void *user_data, SIRInstRef inst_ref, size_t inst_pos, SIRStringBuilder *sb)
 {
+    (void)inst_pos;
+
     X64AsmBuilder *builder = (X64AsmBuilder *)user_data;
 
     MetaValue *meta_value = &builder->meta_insts[inst_ref.id];
@@ -3082,6 +3225,25 @@ inst_info_printer(void *user_data, SIRInstRef inst_ref, SIRStringBuilder *sb)
     }
 }
 
+static void inst_interval_printer(
+    void *user_data, SIRInstRef inst_ref, size_t inst_pos, SIRStringBuilder *sb)
+{
+    X64AsmBuilder *builder = (X64AsmBuilder *)user_data;
+
+    sb->sprintf("#%zu", inst_pos);
+
+    SIRType *type = SIRModuleGetInstType(builder->module, inst_ref);
+    if (!type) return;
+
+    size_t type_size = SIRTypeSizeOf(builder->module, type);
+    if (type_size == 0) return;
+
+    Interval interval = builder->intervals[inst_ref.id];
+
+    sb->sprintf(": %s\t", REGISTER_NAMES[interval.reg]);
+    sb->sprintf("%u - %u", interval.start, interval.end);
+}
+
 static void generate(SIRAsmBuilder *asm_builder)
 {
     ZoneScoped;
@@ -3103,14 +3265,29 @@ static void generate(SIRAsmBuilder *asm_builder)
     }
 
 #if !NDEBUG
-    printf("===============================\n");
-    printf("|       X64 instr info:       |\n");
-    printf("===============================\n\n");
-    size_t str_len = 0;
-    char *module_str = SIRModulePrintToStringWithAux(
-        builder->module, &str_len, (void *)builder, inst_info_printer);
-    printf("%.*s", (int)str_len, module_str);
-    free(module_str);
+    {
+        printf("===============================\n");
+        printf("|       X64 instr info:       |\n");
+        printf("===============================\n\n");
+        size_t str_len = 0;
+        char *module_str = SIRModulePrintToStringWithAux(
+            builder->module, &str_len, (void *)builder, inst_info_printer);
+        printf("%.*s", (int)str_len, module_str);
+        free(module_str);
+    }
+#endif
+
+#if !NDEBUG
+    {
+        printf("===============================\n");
+        printf("|        Interval info:       |\n");
+        printf("===============================\n\n");
+        size_t str_len = 0;
+        char *module_str = SIRModulePrintToStringWithAux(
+            builder->module, &str_len, (void *)builder, inst_interval_printer);
+        printf("%.*s", (int)str_len, module_str);
+        free(module_str);
+    }
 #endif
 }
 
@@ -3118,6 +3295,7 @@ static void destroy(SIRAsmBuilder *asm_builder)
 {
     X64AsmBuilder *builder = (X64AsmBuilder *)asm_builder;
     builder->current_func_params.destroy();
+    builder->intervals.destroy();
     builder->meta_insts.destroy();
 }
 
@@ -3141,8 +3319,15 @@ SIRCreateX64Builder(SIRModule *module, SIRObjectBuilder *obj_builder)
         SIRArray<MetaValue>::create(&SIR_MALLOC_ALLOCATOR);
     asm_builder->meta_insts.resize(module->insts.len);
 
+    asm_builder->intervals = SIRArray<Interval>::create(&SIR_MALLOC_ALLOCATOR);
+    asm_builder->intervals.resize(module->insts.len);
+
     for (size_t i = 0; i < asm_builder->meta_insts.len; ++i) {
         asm_builder->meta_insts[i] = {};
+    }
+
+    for (size_t i = 0; i < asm_builder->meta_insts.len; ++i) {
+        asm_builder->intervals[i] = {};
     }
 
     SIZE_CLASSES[1] = SizeClass_1;

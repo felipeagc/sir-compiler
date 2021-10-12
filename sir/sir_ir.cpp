@@ -75,7 +75,8 @@ static void print_instruction(
     SIRInstRef inst_ref,
     SIRStringBuilder *sb,
     void *user_data,
-    SIRAuxInstPrinter *aux_printer)
+    SIRAuxInstPrinter *aux_printer,
+    size_t inst_pos)
 {
     ZoneScoped;
 
@@ -414,7 +415,7 @@ static void print_instruction(
         }
 
         sb->append(SIR_STR(" ; "));
-        aux_printer(user_data, inst_ref, sb);
+        aux_printer(user_data, inst_ref, inst_pos, sb);
     }
 
     sb->append(SIR_STR("\n"));
@@ -425,7 +426,8 @@ static void print_block(
     SIRInstRef block_ref,
     SIRStringBuilder *sb,
     void *user_data,
-    SIRAuxInstPrinter *aux_printer)
+    SIRAuxInstPrinter *aux_printer,
+    size_t *inst_pos)
 {
     ZoneScoped;
 
@@ -435,7 +437,8 @@ static void print_block(
 
     for (SIRInstRef inst_ref : block->block->inst_refs) {
         sb->append(SIR_STR("    "));
-        print_instruction(module, inst_ref, sb, user_data, aux_printer);
+        print_instruction(module, inst_ref, sb, user_data, aux_printer, *inst_pos);
+        (*inst_pos)++;
     }
 
     sb->append(SIR_STR("\n"));
@@ -492,8 +495,9 @@ static void print_function(
         sb->append(SIR_STR("\n"));
     }
 
+    size_t inst_pos = 0;
     for (SIRInstRef block_ref : func->blocks) {
-        print_block(module, block_ref, sb, user_data, aux_printer);
+        print_block(module, block_ref, sb, user_data, aux_printer, &inst_pos);
     }
 
     sb->append(SIR_STR("}\n\n"));
@@ -664,13 +668,13 @@ char *SIRModulePrintToStringWithAux(
     SIRStringBuilder sb = SIRStringBuilder::create(&SIR_MALLOC_ALLOCATOR);
 
     for (SIRInstRef const_ref : module->consts) {
-        print_instruction(module, const_ref, &sb, user_data, aux_printer);
+        print_instruction(module, const_ref, &sb, user_data, aux_printer, 0);
     }
 
     sb.append(SIR_STR("\n"));
 
     for (SIRInstRef global_ref : module->globals) {
-        print_instruction(module, global_ref, &sb, user_data, aux_printer);
+        print_instruction(module, global_ref, &sb, user_data, aux_printer, 0);
     }
 
     sb.append(SIR_STR("\n"));

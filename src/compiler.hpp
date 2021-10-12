@@ -589,6 +589,11 @@ struct Decl {
     DeclKind kind;
 };
 
+enum AnalysisStateFlags : uint8_t {
+    AnalysisStateFlags_Analyzed = 1 << 0,
+    AnalysisStateFlags_Error = 1 << 1,
+};
+
 struct Compiler {
     ArenaAllocator *arena;
     StringMap<TokenKind> keyword_map;
@@ -612,6 +617,9 @@ struct Compiler {
     Array<TypeRef> decl_as_types;
     Array<TypeRef> expr_types;
     Array<TypeRef> expr_as_types;
+    Array<AnalysisStateFlags> expr_flags;
+    Array<AnalysisStateFlags> decl_flags;
+    Array<AnalysisStateFlags> stmt_flags;
 
     TypeRef void_type;
     TypeRef type_type;
@@ -673,6 +681,7 @@ struct Compiler {
         this->expr_locs.push_back(loc);
         this->expr_types.push_back({0});
         this->expr_as_types.push_back({0});
+        this->expr_flags.push_back((AnalysisStateFlags)0);
         return ref;
     }
 
@@ -683,6 +692,7 @@ struct Compiler {
         StmtRef ref = {(uint32_t)this->stmts.len};
         this->stmts.push_back(stmt);
         this->stmt_locs.push_back(loc);
+        this->stmt_flags.push_back((AnalysisStateFlags)0);
         return ref;
     }
 
@@ -696,6 +706,7 @@ struct Compiler {
         this->decl_as_types.push_back({0});
         this->decl_names.push_back(name);
         this->decl_locs.push_back(loc);
+        this->decl_flags.push_back((AnalysisStateFlags)0);
         return ref;
     }
 
